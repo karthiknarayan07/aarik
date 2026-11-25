@@ -30,6 +30,7 @@ public final class FakePhotoStore: PhotoStore {
         var savedDuration: Double?
         var savedByteSize: Int64?
         var adjustSaved: (@Sendable (PhotoAsset) -> PhotoAsset)?
+        var afterSave: (@Sendable () -> Void)?
         var saves: [SaveRecord] = []
         var deletedIDs: [String] = []
         var operations: [Operation] = []
@@ -203,6 +204,12 @@ public final class FakePhotoStore: PhotoStore {
         set { state.withLock { $0.adjustSaved = newValue } }
     }
 
+    /// Runs after each save has added its asset, so a test can change the library while a job is still running.
+    public var afterSave: (@Sendable () -> Void)? {
+        get { state.withLock { $0.afterSave } }
+        set { state.withLock { $0.afterSave = newValue } }
+    }
+
     /// The saves served so far, in order.
     public var saves: [SaveRecord] { state.withLock { $0.saves } }
 
@@ -275,7 +282,13 @@ public final class FakePhotoStore: PhotoStore {
 
     public func saveVideo(_ request: PhotoSaveRequest) async throws -> String {
         let size = (try? request.file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
-        return try state.withLock { state in
+        let id = try addSavedAsset(request, size: size)
+        afterSave?()
+        return id
+    }
+
+    private func addSavedAsset(_ request: PhotoSaveRequest, size: Int64?) throws -> String {
+        try state.withLock { state in
             state.operations.append(.save)
             if let error = state.saveError { throw error }
             state.savedCount += 1

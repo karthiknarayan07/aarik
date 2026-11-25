@@ -126,7 +126,8 @@ public struct DownscaleRunner: JobRunner {
     /// Any way out that doesn't hand back the output has removed it. `source` is read in place, never changed.
     func convert(
         source: URL, byteSize: Int64, inventory: MetadataInventory, settings: DownscaleJobSettings,
-        outputFolder: () throws -> (url: URL, stop: () -> Void), progress: @escaping @Sendable (Double) -> Void
+        requireLossShown: Bool = false, outputFolder: () throws -> (url: URL, stop: () -> Void),
+        progress: @escaping @Sendable (Double) -> Void
     ) async throws -> ConversionResult {
         // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
         // that loses, which was shown before the job was added. Found only now (the add-time probe failed, or the
@@ -152,6 +153,12 @@ public struct DownscaleRunner: JobRunner {
                 inventory, predictedLost: settings.predictedLost, predictedLostKeys: settings.predictedLostKeys)
         {
             return .keptAsIs(Self.formatCantKeepDetails)
+        }
+
+        // A video whose details couldn't be listed when it was added (a Photos video isn't read until it runs) may
+        // only lose what the user was shown then.
+        if requireLossShown, let unshown = Self.unshownLoss(predicted, inventory: inventory, settings: settings) {
+            return .keptAsIs("Converting would lose \(unshown). Add it again to review what is lost.")
         }
 
         let folder = try outputFolder()
@@ -224,6 +231,22 @@ public struct DownscaleRunner: JobRunner {
             shown.contains(MetadataNames.plainName(of: item))
                 || MetadataNames.isoUserDataCode(forKey: item.key).map(shown.contains) == true
         }
+    }
+
+    /// The predicted losses that were not among the names shown when the job was added, as a sentence part, or
+    /// nil when all were shown. HDR items count as shown when "HDR details" was.
+    static func unshownLoss(
+        _ predicted: MetadataReport, inventory: MetadataInventory, settings: DownscaleJobSettings
+    ) -> String? {
+        let shown = Set(settings.predictedLost ?? [])
+        let auxiliary = MetadataNames.auxiliaryTracks(in: inventory.items)
+        let unshown = predicted.lost.filter { item in
+            if item.category == .hdr, shown.contains(PhotosLossCheck.hdrDetails) { return false }
+            return !shown.contains(MetadataNames.plainName(of: item, auxiliaryTracks: auxiliary))
+        }
+        guard !unshown.isEmpty else { return nil }
+        return MetadataNames.plainNames(of: unshown, context: inventory.items).map { $0.lowercased() }
+            .joined(separator: ", ")
     }
 
     static let formatCantKeepDetails = "Its file format can't keep all of its details"
@@ -383,7 +406,7 @@ public struct DownscaleRunner: JobRunner {
         return (attributes[.size] as? NSNumber)?.int64Value ?? 0
     }
 
-    private static func outputFolder(for destination: SaveDestination, source: URL) throws
+    static func outputFolder(for destination: SaveDestination, source: URL) throws
         -> (url: URL, stop: () -> Void)
     {
         guard case .folder(let bookmark) = destination else {

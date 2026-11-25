@@ -296,9 +296,17 @@ public actor JobQueue {
         let task = Task {
             try await runner.run(
                 job,
-                progress: { value in progressSink.yield(latest.withLock { $0.progress = value; return $0 }) },
+                progress: { value in
+                    progressSink.yield(
+                        latest.withLock {
+                            $0.progress = value; return $0
+                        })
+                },
                 phase: { name in
-                    progressSink.yield(latest.withLock { $0.phase = name; $0.progress = 0; return $0 })
+                    progressSink.yield(
+                        latest.withLock {
+                            $0.phase = name; $0.progress = 0; return $0
+                        })
                 })
         }
         current = (id, task)

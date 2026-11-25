@@ -50,6 +50,17 @@ public struct PhotoInputFetcher: Sendable {
         self.store = store
     }
 
+    /// The video's current metadata (whether it was edited, its duration and so on), without downloading anything.
+    ///
+    /// - Throws: `PhotoFetchError` only.
+    public func asset(id: String) async throws -> PhotoAsset {
+        do {
+            return try await store.asset(id: id)
+        } catch {
+            throw Self.map(error)
+        }
+    }
+
     /// Fetches `id` into `workFolder` (which must exist; see `WorkFolder.create(for:)`).
     ///
     /// - Throws: `PhotoFetchError` only.
