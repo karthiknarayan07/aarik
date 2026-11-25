@@ -12,12 +12,25 @@ struct MainApp: App {
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
         .commands {
+            UpdateCommands(updater: delegate.updater)
             SidebarCommands()
             InspectorCommands()
             LibraryCommands(model: delegate.model)
         }
         Settings {
-            SettingsView(model: delegate.model)
+            SettingsView(model: delegate.model, updater: delegate.updater)
+        }
+    }
+}
+
+/// App menu → Check for Updates…, below About.
+private struct UpdateCommands: Commands {
+    let updater: Updater
+
+    var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { updater.checkForUpdates() }
+                .disabled(!updater.canCheckForUpdates)
         }
     }
 }

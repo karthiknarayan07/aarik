@@ -1,9 +1,11 @@
 import AppKit
 
-/// Owns the model for the app's lifetime: starts the queue at launch and lets work settle before quitting.
+/// Owns the model and the updater for the app's lifetime: starts the queue at launch and lets work settle before
+/// quitting.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
+    let updater = Updater()
     private var isTerminating = false
     private var volumeObservers: [any NSObjectProtocol] = []
 

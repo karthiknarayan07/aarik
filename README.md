@@ -34,6 +34,12 @@ xattr -dr com.apple.quarantine /Applications/aarik.app
 
 Because the signature changes with each release, macOS may ask you to grant Photos access again after an update.
 
+## Updates
+
+The app checks for new versions in the background and offers to install them (App menu ▸ Check for Updates…). Updates
+are verified with an EdDSA signature before they are installed. Turn automatic checks off in Settings ▸ General.
+Builds you make yourself in Debug never check for updates.
+
 ## Build from source
 
 You need Xcode 27 (or any Xcode with the macOS 26 SDK and Swift 6) on Apple silicon.
@@ -46,7 +52,14 @@ scripts/make-dmg.sh                         # build a release DMG into build/dis
 
 ## Privacy
 
-The app makes no network connections. Your videos, their metadata and your Photos library never leave your Mac.
+Your videos, their metadata and your Photos library never leave your Mac. The only network connection the app makes is
+the update check, which downloads the update feed from this project's GitHub Pages site and sends nothing about you or
+your files beyond what any web request carries (Sparkle's optional system profile is off). Turn it off in Settings ▸
+General.
+
+## Releasing
+
+See [docs/RELEASING.md](docs/RELEASING.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

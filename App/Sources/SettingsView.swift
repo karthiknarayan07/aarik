@@ -6,10 +6,11 @@ import UniformTypeIdentifiers
 /// The Settings window: General and Output.
 struct SettingsView: View {
     let model: AppModel
+    let updater: Updater
 
     var body: some View {
         TabView {
-            Tab("General", systemImage: "gearshape") { GeneralSettings(model: model) }
+            Tab("General", systemImage: "gearshape") { GeneralSettings(model: model, updater: updater) }
             Tab("Output", systemImage: "square.and.arrow.down") { OutputSettings(model: model) }
         }
         .frame(width: 480)
@@ -19,6 +20,7 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     let model: AppModel
+    @Bindable var updater: Updater
     @AppStorage(AppSettings.Keys.preset) private var preset = Preset.balanced
     @AppStorage(AppSettings.Keys.autoStartQueue) private var autoStart = true
 
@@ -30,6 +32,18 @@ private struct GeneralSettings: View {
             Toggle(isOn: $autoStart) {
                 Text("Start the queue automatically")
                 Text("When off, the queue waits until you press Resume.")
+            }
+            Section("Updates") {
+                if updater.isConfigured {
+                    Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
+                    LabeledContent("Look for a new version now") {
+                        Button("Check Now") { updater.checkForUpdates() }
+                            .disabled(!updater.canCheckForUpdates)
+                    }
+                } else {
+                    Text("Updates are off in development builds.")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)

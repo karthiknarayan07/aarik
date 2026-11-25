@@ -4,3 +4,7 @@
 APP_DISPLAY_NAME = aarik
 APP_PRODUCT_NAME = aarik
 APP_BUNDLE_ID_PREFIX = io.github.karthiknarayan07
+
+// GitHub home of the project: Releases host the DMGs, GitHub Pages hosts the update feed.
+APP_GITHUB_OWNER = karthiknarayan07
+APP_GITHUB_REPO = aarik
