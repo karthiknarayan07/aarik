@@ -156,6 +156,7 @@ Every feature module provides one type conforming to a `Tool` protocol in `Aarik
 - Multiple files at once → one queue.
 - **Photos inputs use the edited version (owner decision).** If the user trimmed, filtered, or otherwise edited the video in Photos, the 1080p output must show those edits — the edits are baked into the new video. Unedited videos use the original. The report notes "from your edited version." Use Photos' own rendering of the current version so the result matches what the user sees.
 - iCloud-only originals ("Optimize Mac Storage"): ask Photos to download them, show download progress, allow cancel, clear error when offline.
+- **iPhone workflow = iCloud Photos (owner decision, 2026-11-25).** The owner uses iCloud Photos, so the iPhone's library *is* the Mac's Photos library; aarik works only through PhotoKit on the Mac and Replace syncs to the iPhone via iCloud. No USB/"connected iPhone" mode (macOS cannot write videos back into an iPhone's camera roll over a cable).
 - **Special iPhone formats (my calls):**
   - *Spatial video* (two-view HEVC): detected and **refused** with a clear message in v1 — never silently drop the second eye.
   - *Slo-mo*: frame rate is locked to the source (the frame-rate setting is disabled for these clips); the Photos speed ramp comes through via the edited-version rule above, and the report says so.
