@@ -262,6 +262,38 @@ import Testing
         #expect(store.assets.count == 4)
     }
 
+    private static func entryJSON(_ id: String, block: String) -> String {
+        """
+        {"assetID":"\(id)","jobID":"6F1B8A2C-1D3E-4F5A-9B7C-0E2D4F6A8B1C","replacedBy":"new-\(id)",\
+        "hasBaseline":true,"originalHadAdjustments":false,"blocked":"\(block)"}
+        """
+    }
+
+    @Test func aBlockWrittenByAnEarlierBuildStillReads() throws {
+        let (_, pending, url) = try writeLegacy(
+            #"{"pending":[\#(Self.entryJSON("A", block: "originalEdited"))],"saved":[]}"#)
+        defer { cleanUp(url) }
+
+        #expect(pending.all.map(\.blocked) == [.originalChanged])
+    }
+
+    @Test func anUnknownBlockReadsAsUncheckedAndKeepsTheWholeList() async throws {
+        let json =
+            #"{"pending":[\#(Self.entryJSON("A", block: "somethingNew")),"#
+            + #"\#(Self.entryJSON("B", block: "copyMissing"))],"saved":[]}"#
+        let (store, pending, url) = try writeLegacy(json)
+        defer { cleanUp(url) }
+
+        #expect(pending.all.map(\.assetID) == ["A", "B"])
+        #expect(pending.all.map(\.blocked) == [.unchecked, .copyMissing])
+        // Nothing was set aside or lost, and a later save keeps both entries.
+        pending.setBlock(nil, forAsset: "A")
+        #expect(PendingDeletions(fileURL: url).all.map(\.assetID) == ["A", "B"])
+        #expect(store.deletedIDs.isEmpty)
+        let aside = try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)
+        #expect(!aside.contains { $0.contains("corrupt") })
+    }
+
     @Test func anEntryWithNoCopyRecordedIsNeverSentToPhotos() async throws {
         let (store, pending, url) = library(["A"])
         defer { cleanUp(url) }

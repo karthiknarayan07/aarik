@@ -7,7 +7,7 @@ public enum PendingBlock: String, Codable, Sendable, Equatable, Hashable, CaseIt
     /// The shrunk copy is no longer in the library.
     case copyMissing
     /// The original changed (edited, trimmed, or its details changed) after it was shrunk.
-    case originalChanged
+    case originalChanged = "originalEdited"
     /// Photos access is limited and the original can't be seen.
     case limitedAccess
     /// Photos couldn't say.
@@ -68,7 +68,9 @@ public struct PendingDeletion: Codable, Sendable, Equatable, Hashable {
         originalModified = try container.decodeIfPresent(Date.self, forKey: .originalModified)
         originalHadAdjustments = try container.decodeIfPresent(Bool.self, forKey: .originalHadAdjustments) ?? false
         hasBaseline = try container.decodeIfPresent(Bool.self, forKey: .hasBaseline) ?? false
-        blocked = try container.decodeIfPresent(PendingBlock.self, forKey: .blocked)
+        blocked = try container.decodeIfPresent(String.self, forKey: .blocked).map {
+            PendingBlock(rawValue: $0) ?? .unchecked
+        }
     }
 }
 
