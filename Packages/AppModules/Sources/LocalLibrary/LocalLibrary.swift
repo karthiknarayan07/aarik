@@ -31,13 +31,26 @@ public final class LocalLibrary {
     @ObservationIgnored private var saver: Task<Void, Never>?
     @ObservationIgnored private var cancelledWorkers: [Task<Void, Never>] = []
     @ObservationIgnored private var cachedBadgeCounts: (revision: Int, counts: [MediaBadge: Int])?
+    @ObservationIgnored private let availability: AvailabilityCheck
+
+    /// Says which files exist (not in a Trash), by item id; a seam so tests can hold a check while items change.
+    typealias AvailabilityCheck = @Sendable ([(id: UUID, url: URL)]) async -> [UUID: Bool]
 
     /// Restores what the store remembers; files that are gone come back with `isAvailable == false`.
-    public init(store: BookmarkStore, scanner: LibraryScanner = LibraryScanner(), batchSize: Int = 50) {
+    public convenience init(store: BookmarkStore, scanner: LibraryScanner = LibraryScanner(), batchSize: Int = 50) {
+        self.init(
+            store: store, scanner: scanner, batchSize: batchSize, availability: { await Self.availability(of: $0) })
+    }
+
+    init(
+        store: BookmarkStore, scanner: LibraryScanner = LibraryScanner(), batchSize: Int = 50,
+        availability: @escaping AvailabilityCheck
+    ) {
         self.store = store
         self.persistence = LibraryPersistence(store: store)
         self.scanner = scanner
         self.batchSize = batchSize
+        self.availability = availability
         restore()
     }
 
@@ -111,12 +124,16 @@ public final class LocalLibrary {
     /// shown; a file on a disconnected drive is simply unavailable until the drive is back.
     public func refreshAvailability() async {
         let files = items.map { (id: $0.id, url: $0.url) }
-        let available = await Self.availability(of: files)
-        // Items may have changed meanwhile; only those still here are updated, in one change.
+        let checkedURLs = Dictionary(files.map { ($0.id, $0.url) }) { first, _ in first }
+        let available = await availability(files)
+        // Items may have changed meanwhile; only those still here at the path that was checked are updated (a
+        // Replace may have moved one to a new path), in one change.
         var updated = items
         var changed = false
         for index in updated.indices {
-            guard let isAvailable = available[updated[index].id], updated[index].isAvailable != isAvailable
+            let item = updated[index]
+            guard let isAvailable = available[item.id], checkedURLs[item.id] == item.url,
+                item.isAvailable != isAvailable
             else { continue }
             updated[index].isAvailable = isAvailable
             changed = true
@@ -126,6 +143,10 @@ public final class LocalLibrary {
 
     @concurrent
     private nonisolated static func availability(of files: [(id: UUID, url: URL)]) async -> [UUID: Bool] {
+        checkAvailability(of: files)
+    }
+
+    nonisolated static func checkAvailability(of files: [(id: UUID, url: URL)]) -> [UUID: Bool] {
         var result: [UUID: Bool] = [:]
         for file in files {
             let exists = FileManager.default.fileExists(atPath: file.url.path)

@@ -180,6 +180,52 @@ enum Fixtures {
         #expect(library.items.count == 2)
     }
 
+    /// Holds a check until the test opens it.
+    actor Gate {
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        private var isOpen = false
+
+        func wait() async {
+            if isOpen { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+
+        func open() {
+            isOpen = true
+            for waiter in waiters { waiter.resume() }
+            waiters.removeAll()
+        }
+    }
+
+    @Test func availabilityCheckedForAnOldPathDoesNotApplyToTheItemsNewPath() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.m4v")
+        let (started, startedContinuation) = AsyncStream.makeStream(of: Void.self)
+        let gate = Gate()
+        let library = LocalLibrary(
+            store: BookmarkStore(directory: try Fixtures.tempDirectory()),
+            availability: { files in
+                startedContinuation.yield()
+                await gate.wait()
+                return LocalLibrary.checkAvailability(of: files)
+            })
+        library.add([clip])
+        await Fixtures.settle(library)
+
+        // A refresh reads the item's path; before its answer comes back, a Replace moves the item to a new path.
+        let refresh = Task { await library.refreshAvailability() }
+        var iterator = started.makeAsyncIterator()
+        await iterator.next()
+        let replacement = folder.appending(path: "a.mov")
+        try FileManager.default.moveItem(at: clip, to: replacement)
+        await library.fileWasReplaced(at: clip, by: replacement)
+        await gate.open()
+        await refresh.value
+
+        #expect(library.items.first?.url.lastPathComponent == "a.mov")
+        #expect(library.items.first?.isAvailable == true)
+    }
+
     @Test func replacementOfAFileNotInTheLibraryChangesNothing() async throws {
         let folder = try Fixtures.tempDirectory()
         let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")
