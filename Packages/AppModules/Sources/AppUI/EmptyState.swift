@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// An empty or no-selection state: an SF Symbol, a short title and one line of text.
+/// An empty or no-selection state: an SF Symbol, a short title, one line of text, and at most one action.
 public struct EmptyState: View {
     public let title: String
     public let systemImage: String
     public let message: String
+    /// The action's button title; nil for no action.
+    public private(set) var actionTitle: String?
+    private var perform: (() -> Void)?
 
     public init(_ title: String, systemImage: String, message: String) {
         self.title = title
@@ -12,11 +15,27 @@ public struct EmptyState: View {
         self.message = message
     }
 
+    /// The same state with a button that runs `perform`, such as a way to where the user can start.
+    public func action(_ title: String, perform: @escaping () -> Void) -> EmptyState {
+        var state = self
+        state.actionTitle = title
+        state.perform = perform
+        return state
+    }
+
+    func performAction() {
+        perform?()
+    }
+
     public var body: some View {
         ContentUnavailableView {
             Label(title, systemImage: systemImage)
         } description: {
             Text(message)
+        } actions: {
+            if let actionTitle {
+                Button(actionTitle, action: performAction)
+            }
         }
     }
 }
