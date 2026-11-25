@@ -207,6 +207,20 @@ import Testing
         }
     }
 
+    /// A reader that stops early (here: cancelled once video is done, standing in for a read failure) makes every
+    /// passthrough output return nil, which looks like the end of the track. The run must fail, not write a
+    /// truncated file.
+    @Test(.timeLimit(.minutes(2))) func readerStoppingEarlyFailsAndRemovesOutput() async throws {
+        let source = try await FixtureFactory.makeClip(clip { $0.audioTailSeconds = 5 })
+        let output = outputURL(next: source)
+        var downscaler = VideoDownscaler()
+        downscaler.beforePassthroughDrain = { reader in reader.cancelReading() }
+        await #expect(throws: DownscaleError.self) {
+            try await downscaler.downscale(source: source, output: output, spec: smallSpec) { _ in }
+        }
+        #expect(!FileManager.default.fileExists(atPath: output.path))
+    }
+
     /// Regression: once video is finished, the passthrough drain must feed every track. Draining one track at a time
     /// hangs: with the timed-metadata track first, its input runs ahead of the audio and stays not ready while the
     /// audio is never fed. (With audio first, macOS 27.2 does not throttle audio against metadata, so no hang.)

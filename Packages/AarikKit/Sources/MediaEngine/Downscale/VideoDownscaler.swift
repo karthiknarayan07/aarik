@@ -9,6 +9,9 @@ public struct VideoDownscaler: Sendable {
     /// Test seam: runs with the output URL just before the writer starts, to inject a file appearing at the output
     /// path after the pre-check (another job writing the same name).
     var beforeStartWriting: (@Sendable (URL) -> Void)?
+    /// Test seam: runs with the reader once video is finished, before the remaining passthrough samples are drained,
+    /// to make the reader stop early (as a read failure would).
+    var beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?
 
     public init() {}
 
@@ -35,7 +38,7 @@ public struct VideoDownscaler: Sendable {
             asset: asset, videoTrack: videoTrack, output: output, spec: spec,
             isTenBit: inventory["video.bitDepth"]?.value != "8",
             preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, beforeStartWriting: beforeStartWriting,
-            progress: progress)
+            beforePassthroughDrain: beforePassthroughDrain, progress: progress)
         do {
             try await job.run()
             try FileAttributes.copy(from: source, to: output)
@@ -71,6 +74,7 @@ private final class DownscaleJob {
     private let progress: @Sendable (Double) -> Void
     private let output: URL
     private let beforeStartWriting: (@Sendable (URL) -> Void)?
+    private let beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?
     /// Decode and scale format: 10-bit for a 10-bit source, 8-bit for an 8-bit one.
     private let pixelFormat: OSType
 
@@ -85,10 +89,11 @@ private final class DownscaleJob {
     init(
         asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, spec: DownscaleSpec, isTenBit: Bool,
         preservesDolbyVision: Bool, beforeStartWriting: (@Sendable (URL) -> Void)?,
-        progress: @escaping @Sendable (Double) -> Void
+        beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?, progress: @escaping @Sendable (Double) -> Void
     ) async throws {
         self.output = output
         self.beforeStartWriting = beforeStartWriting
+        self.beforePassthroughDrain = beforePassthroughDrain
         let pixelFormat =
             isTenBit
             ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
@@ -161,7 +166,9 @@ private final class DownscaleJob {
             pending = (try scaler.scale(frame), time)
             try pumpPassthrough(until: time + Self.passthroughLead)
         }
-        if reader.status == .failed { throw readerError() }
+        // nil from `copyNextSampleBuffer()` means the end of the track or that the reader stopped; only the status
+        // tells them apart.
+        guard reader.status == .reading || reader.status == .completed else { throw readerError() }
         try Task.checkCancellation()
 
         try await submitPending(nextTime: lastSourceEnd)
@@ -169,6 +176,7 @@ private final class DownscaleJob {
         try await appendEncoded()
         guard let videoInput else { throw DownscaleError.unsupportedSource("no video frames") }
         videoInput.markAsFinished()
+        beforePassthroughDrain?(reader)
         // Feed every unfinished track on each pass: the writer interleaves its inputs, so one track can stay not
         // ready until another catches up. Draining one track at a time can hang.
         while passthrough.contains(where: { !$0.isFinished }) {
@@ -177,6 +185,8 @@ private final class DownscaleJob {
             if try !pumpPassthrough(until: nil) { try await Task.sleep(for: .milliseconds(1)) }
         }
         try Task.checkCancellation()
+        // Every output has returned nil; anything but `.completed` means some track was cut short.
+        guard reader.status == .completed else { throw readerError() }
         await writer.finishWriting()
         guard writer.status == .completed else { throw writerError() }
     }
