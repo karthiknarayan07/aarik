@@ -1,3 +1,4 @@
+import AppCore
 import AppKit
 import AppUI
 import DownscaleVideo
@@ -20,13 +21,54 @@ extension AppModel {
     }
 
     /// Converts `urls` in the background: no questions, no window. Skipped files and the result come in one
-    /// notification.
-    func runQuickly(_ urls: [URL], overrides: QuickRunOverrides? = nil) {
+    /// notification. A run from the menu bar also reports itself in the popover (`quickRunStatus`).
+    func runQuickly(_ urls: [URL], overrides: QuickRunOverrides? = nil, origin: QuickRunOrigin = .background) {
         notifier.requestAuthorizationOnce()
+        if origin == .statusItem { quickRunStatus = QuickRunStatus(phase: .checking(files: urls.count)) }
         Task {
-            let receipt = await quickRun.run(urls: urls, overrides: overrides)
+            let receipt = await quickRun.run(urls: urls, overrides: overrides, origin: origin)
+            if origin == .statusItem { show(receipt) }
             if !receipt.queuedJobIDs.isEmpty, AppSettings.autoStartQueue(defaults) { isQueuePaused = false }
         }
+    }
+
+    /// Files dropped on the menu bar item or its popover. Only their names were looked at so far; the files are
+    /// checked here, off the main thread, before the run starts.
+    func runFromMenuBar(_ urls: [URL]) {
+        quickRunStatus = QuickRunStatus(phase: .checking(files: urls.count))
+        Task {
+            let movies = await Task.detached(priority: .userInitiated) { MovieDropFilter.movies(in: urls) }.value
+            guard !movies.isEmpty else {
+                quickRunStatus = QuickRunStatus(phase: .finished(QuickRunTally(converted: 0, skipped: 0, failed: 0)))
+                return
+            }
+            runQuickly(movies, origin: .statusItem)
+        }
+    }
+
+    /// What the popover says once the run's files are sorted into queued and skipped. A finished run may already
+    /// have said so (every file skipped), and a newer run's status is left alone.
+    private func show(_ receipt: QuickRunReceipt) {
+        if let current = quickRunStatus {
+            if let id = current.runID, id != receipt.runID { return }
+            if current.runID == receipt.runID, !current.isActive { return }
+        }
+        if receipt.queuedJobIDs.isEmpty {
+            quickRunStatus = QuickRunStatus(
+                runID: receipt.runID,
+                phase: .finished(QuickRunTally(converted: 0, skipped: receipt.skipped.count, failed: 0)))
+        } else {
+            quickRunStatus = QuickRunStatus(
+                runID: receipt.runID, phase: .running(videos: receipt.queuedJobIDs.count),
+                jobIDs: Set(receipt.queuedJobIDs))
+        }
+    }
+
+    /// A run whose jobs were all removed by hand never gets a notice; its status would say "Shrinking" forever.
+    func clearStaleQuickRunStatus(jobs: [Job]) {
+        guard let status = quickRunStatus, status.isActive, !status.jobIDs.isEmpty else { return }
+        let present = Set(jobs.map(\.id))
+        if status.jobIDs.isDisjoint(with: present) { quickRunStatus = nil }
     }
 
     /// Dock drop and Open With: with the window on screen the files join Local Files and nothing is queued;
@@ -66,9 +108,14 @@ struct QuickRunNotifier: QuickRunNotifying {
 
 extension AppModel {
     func postQuickRunNotice(_ notice: QuickRunNotice) {
-        guard NotificationPolicy.shouldPost(appIsActive: NSApp.isActive, windowOnScreen: isMainWindowVisible) else {
-            return
+        if notice.origin == .statusItem, quickRunStatus == nil || quickRunStatus?.runID == notice.runID {
+            quickRunStatus = QuickRunStatus(runID: notice.runID, phase: .finished(notice.tally))
         }
+        guard
+            NotificationPolicy.shouldPost(
+                origin: notice.origin, appIsActive: NSApp.isActive, windowOnScreen: isMainWindowVisible,
+                popoverVisible: isStatusPopoverVisible)
+        else { return }
         notifier.post(
             title: notice.title, body: notice.body, category: QuickRunNotice.category,
             userInfo: [QuickRunNotice.runIDKey: notice.runID.uuidString])

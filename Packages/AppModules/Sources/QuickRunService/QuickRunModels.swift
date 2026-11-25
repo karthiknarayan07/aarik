@@ -56,6 +56,27 @@ public struct QuickRunReceipt: Sendable, Equatable {
     }
 }
 
+/// Where a quick run was started from.
+public enum QuickRunOrigin: String, Codable, Sendable {
+    /// Dock drop, Open With, Services, Shortcuts: nothing on screen reports the run but its notification.
+    case background
+    /// The menu bar item or its popover, which shows the run's status itself while it is open.
+    case statusItem
+}
+
+/// How a finished run ended, in files.
+public struct QuickRunTally: Sendable, Equatable {
+    public let converted: Int
+    public let skipped: Int
+    public let failed: Int
+
+    public init(converted: Int, skipped: Int, failed: Int) {
+        self.converted = converted
+        self.skipped = skipped
+        self.failed = failed
+    }
+}
+
 /// The notification a finished run posts.
 public struct QuickRunNotice: Sendable, Equatable {
     public static let category = "QUICK_RUN_DONE"
@@ -67,11 +88,18 @@ public struct QuickRunNotice: Sendable, Equatable {
     public let runID: UUID
     public let title: String
     public let body: String
+    public let origin: QuickRunOrigin
+    public let tally: QuickRunTally
 
-    public init(runID: UUID, title: String, body: String) {
+    public init(
+        runID: UUID, title: String, body: String, origin: QuickRunOrigin = .background,
+        tally: QuickRunTally = QuickRunTally(converted: 0, skipped: 0, failed: 0)
+    ) {
         self.runID = runID
         self.title = title
         self.body = body
+        self.origin = origin
+        self.tally = tally
     }
 }
 
