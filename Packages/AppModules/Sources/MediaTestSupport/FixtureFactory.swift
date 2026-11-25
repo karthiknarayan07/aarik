@@ -44,6 +44,8 @@ public struct ClipOptions: Sendable {
     public var videoBitRate: Int?
     public var finderTags: [String] = []
     public var extendedAttributes: [String: Data] = [:]
+    /// The container: `.mov` (default), `.mp4` or `.m4v`; the file gets the matching extension.
+    public var fileType: AVFileType = .mov
 
     public init() {}
 }
@@ -60,13 +62,20 @@ public enum FixtureFactory {
     public static let timedMetadataIdentifier = "mdta/com.example.fixture.timed"
     private static let sampleRate = 48_000
 
-    /// Writes a new .mov into a fresh temporary directory and returns its URL.
+    /// Writes a new clip (`fixture.mov`, or `.mp4` / `.m4v` per `options.fileType`) into a fresh temporary
+    /// directory and returns its URL.
     public static func makeClip(_ options: ClipOptions = .init()) async throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appending(path: "fixture.mov")
+        let ext =
+            switch options.fileType {
+            case .mp4: "mp4"
+            case .m4v: "m4v"
+            default: "mov"
+            }
+        let url = dir.appending(path: "fixture.\(ext)")
 
-        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let writer = try AVAssetWriter(outputURL: url, fileType: options.fileType)
         let hlg = options.hdr == .hlg
 
         var compression: [String: Any] = [

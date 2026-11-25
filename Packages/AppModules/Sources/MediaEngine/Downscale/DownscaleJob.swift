@@ -41,7 +41,8 @@ final class DownscaleJob {
     private var reported = 0.0
 
     init(
-        asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, spec: DownscaleSpec, isTenBit: Bool,
+        asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, fileType: AVFileType, spec: DownscaleSpec,
+        isTenBit: Bool,
         preservesDolbyVision: Bool, beforeStartWriting: (@Sendable (URL) -> Void)?,
         beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?, progress: @escaping @Sendable (Double) -> Void
     ) async throws {
@@ -102,7 +103,7 @@ final class DownscaleJob {
         }
         reader.add(videoOutput)
 
-        writer = try AVAssetWriter(outputURL: output, fileType: .mov)
+        writer = try AVAssetWriter(outputURL: output, fileType: fileType)
         writer.metadata = try await asset.load(.metadata)
         videoTrackID = videoTrack.trackID
         videoMetadata = try await videoTrack.load(.metadata)

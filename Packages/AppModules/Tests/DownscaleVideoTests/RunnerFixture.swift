@@ -1,3 +1,4 @@
+import AVFoundation
 import AppCore
 import Foundation
 import MediaEngine
@@ -11,7 +12,11 @@ enum RunnerFixture {
     static let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 2_000_000)
 
     /// 2560x1440 so a 1080 short side really shrinks it; small and fast. Lives in its own temporary directory.
-    static func source(name: String = "x.mov") async throws -> URL {
+    /// `fileType` picks the container (the name's extension is the caller's), `timedMetadata` adds a timed
+    /// metadata track.
+    static func source(
+        name: String = "x.mov", fileType: AVFileType = .mov, timedMetadata: Bool = false
+    ) async throws -> URL {
         var options = ClipOptions()
         options.width = 2560
         options.height = 1440
@@ -19,7 +24,18 @@ enum RunnerFixture {
         options.hdr = .sdr
         // A bit rate well above the 2 Mbps the tests encode at, so the planner sees a saving over 10%.
         options.videoBitRate = 20_000_000
+        options.fileType = fileType
+        options.includeTimedMetadataTrack = timedMetadata
         return try await renamed(FixtureFactory.makeClip(options), to: name)
+    }
+
+    /// The major brand in a file's `ftyp` box (`qt  ` for QuickTime, `mp42` or `isom` for MPEG-4).
+    static func majorBrand(_ url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let head = try handle.read(upToCount: 12) ?? Data()
+        guard head.count == 12, String(decoding: head[4..<8], as: UTF8.self) == "ftyp" else { return "" }
+        return String(decoding: head[8..<12], as: UTF8.self)
     }
 
     /// 640x360 at a low bit rate: below a 1080 short side, so a 1080p downscale finds it already small.

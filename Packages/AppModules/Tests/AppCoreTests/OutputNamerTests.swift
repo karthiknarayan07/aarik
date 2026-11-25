@@ -62,3 +62,16 @@ private func makeTempDirectory() throws -> URL {
     try Data().write(to: dir.appendingPathComponent("IMG 1 2.mov"))
     #expect(OutputNamer.url(keepingNameOf: source, in: dir) == dir.appendingPathComponent("IMG 1 3.mov"))
 }
+
+@Test func namerUsesAnotherExtensionWhenTheContainerChanges() throws {
+    let dir = try makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let source = URL(fileURLWithPath: "/x/IMG_1.m4v")
+    #expect(
+        OutputNamer.url(for: source, label: "1080p", in: dir, pathExtension: "mov")
+            == dir.appendingPathComponent("IMG_1 (1080p).mov"))
+    try Data().write(to: dir.appendingPathComponent("IMG_1 (1080p).mov"))
+    #expect(
+        OutputNamer.url(for: source, label: "1080p", in: dir, pathExtension: "mov")
+            == dir.appendingPathComponent("IMG_1 (1080p) 2.mov"))
+}

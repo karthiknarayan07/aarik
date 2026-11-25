@@ -9,6 +9,13 @@ public enum PlanDecision: Sendable, Equatable {
 
 public enum DownscalePlanner {
     static let spatialReason = "Spatial video isn't supported yet — it would lose one eye"
+    /// A clip at this frame rate or above is slo-mo: its frame rate is always kept (spec 8.1).
+    public static let sloMoFrameRate = 100.0
+
+    /// True for a slo-mo clip, whose frame rate a conversion never lowers.
+    public static func locksFrameRate(_ inventory: MetadataInventory) -> Bool {
+        SourceProfile(inventory: inventory, byteSize: 0).isSloMo
+    }
 
     public static func decide(source: URL, inventory: MetadataInventory, byteSize: Int64, preset: Preset)
         -> PlanDecision
@@ -22,8 +29,13 @@ public enum DownscalePlanner {
         decide(source: SourceProfile(inventory: inventory, byteSize: byteSize), inventory: inventory, spec: spec)
     }
 
-    /// Decides with an already-read source profile, so the inventory is parsed once per decision.
-    static func decide(source: SourceProfile, inventory: MetadataInventory, spec: DownscaleSpec) -> PlanDecision {
+    /// Decides with an already-read source profile, so the inventory is parsed once per decision. The spec in a
+    /// `.convert` decision is the one to encode and verify with: `spec`, minus its frame-rate cap for slo-mo.
+    static func decide(source: SourceProfile, inventory: MetadataInventory, spec requested: DownscaleSpec)
+        -> PlanDecision
+    {
+        var spec = requested
+        if source.isSloMo { spec.maxFrameRate = nil }
         let byteSize = source.byteSize
         if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: spatialReason) }
         guard source.durationSeconds > 0 else { return .keptAsIs(reason: "Couldn't read the video's length") }

@@ -60,28 +60,36 @@ public struct DownscaleRunner: JobRunner {
     public func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
         let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
         let source = try Self.resolveSource(job)
-        let byteSize = try Self.fileSize(source)
+        // What the original is now; a Replace goes ahead only if it is still the same file at the end.
+        let identity = try FileIdentity(of: source)
+        let byteSize = identity.size
         let inventory = try await MediaInspector().inventory(of: source)
 
-        // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule.
-        let spec = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
+        // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
+        // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
+        let requested = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
+        let spec: DownscaleSpec
         let predicted: MetadataReport
-        switch DownscalePlanner.decide(inventory: inventory, byteSize: byteSize, spec: spec) {
+        switch DownscalePlanner.decide(inventory: inventory, byteSize: byteSize, spec: requested) {
         case .keptAsIs(let reason): return .keptAsIs(reason: reason)
-        case .convert(_, _, let report): predicted = report
+        case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
         }
 
         let folder = try Self.outputFolder(for: settings.saveTo, source: source)
         defer { folder.stop() }
         let label = Self.label(for: spec, settings: settings)
+        let pathExtension = try await OutputContainer.pathExtension(forSource: source)
 
         let output: URL
         do {
             output = try await encode(
-                source: source, spec: spec, label: label, directory: folder.url, progress: progress)
+                source: source, spec: spec, label: label, directory: folder.url, pathExtension: pathExtension,
+                progress: progress)
         } catch DownscaleError.sourceAlreadySmall {
             return .keptAsIs(reason: "Already small")
         }
+        // Cancelled once the output exists: remove it (it is ours) and leave the original alone.
+        try Self.stopIfCancelled(removing: output)
 
         // The estimate can overstate the saving (heavy audio counted as video). If the real output is not at least
         // 10% smaller, remove our own output and keep the original untouched.
@@ -92,6 +100,7 @@ public struct DownscaleRunner: JobRunner {
         }
 
         let outputInventory = try await inspect(output)
+        try Self.stopIfCancelled(removing: output)
         let report = MetadataDiff.report(source: inventory, output: outputInventory)
         var warnings = Self.warnings(report, predicted: predicted, spec: spec)
 
@@ -104,10 +113,10 @@ public struct DownscaleRunner: JobRunner {
             if !warnings.isEmpty {
                 warnings.append(Self.keptBecause("the copy couldn't be verified"))
             } else {
-                let result = replace(source, byteSize: byteSize, with: output)
+                let result = replace(source, identity: identity, with: output)
                 finalURL = result.url
-                replaced = result.keptBecause == nil
-                if let reason = result.keptBecause { warnings.append(Self.keptBecause(reason)) }
+                replaced = result.warning == nil
+                if let warning = result.warning { warnings.append(warning) }
             }
         }
         return .completed(
@@ -118,24 +127,47 @@ public struct DownscaleRunner: JobRunner {
 
     // MARK: - Replace
 
-    /// Backs the original up when asked to, trashes it, and gives the output the original's name if it is still
-    /// free. Returns where the output ends up, and why the original was kept when it was.
-    private func replace(_ source: URL, byteSize: Int64, with output: URL) -> (url: URL, keptBecause: String?) {
+    /// Backs the original up when asked to, trashes it, and gives the output the original's name (with the
+    /// output's extension, when the container changed) if that is still free. The original must still be the
+    /// file the conversion read. Returns where the output ends up, and the warning saying why the original was
+    /// kept when it was.
+    private func replace(_ source: URL, identity: FileIdentity, with output: URL) -> (url: URL, warning: String?) {
+        guard identity.matches(source) else { return (output, Self.originalChanged) }
         if let backup = originalsBackup() {
             do {
-                _ = try backUp(source, byteSize: byteSize, into: backup.folder)
+                _ = try backUp(source, byteSize: identity.size, into: backup.folder)
             } catch {
-                return (output, error.keptBecause)
+                return (output, Self.keptBecause(error.keptBecause))
             }
         }
-        guard (try? trash(source)) != nil else { return (output, "it couldn't be moved to the Trash") }
+        guard identity.matches(source) else { return (output, Self.originalChanged) }
+        guard (try? trash(source)) != nil else {
+            return (output, Self.keptBecause("it couldn't be moved to the Trash"))
+        }
         // Take the original's name if it is still free, else keep the output's own name.
-        if (try? AtomicOutput.moveWithoutReplacing(output, to: source)) != nil { return (source, nil) }
+        let target = Self.replacementURL(for: source, output: output)
+        if (try? AtomicOutput.moveWithoutReplacing(output, to: target)) != nil { return (target, nil) }
         return (output, nil)
     }
 
+    /// The original's path, with the output's extension when the output is in another container
+    /// (`IMG_1.mp4` replaced by a QuickTime file becomes `IMG_1.mov`).
+    static func replacementURL(for source: URL, output: URL) -> URL {
+        guard source.pathExtension.lowercased() != output.pathExtension.lowercased() else { return source }
+        return source.deletingPathExtension().appendingPathExtension(output.pathExtension)
+    }
+
+    static let originalChanged = "The original changed during conversion"
+
     private static func keptBecause(_ reason: String) -> String {
         "The original was kept because \(reason)"
+    }
+
+    /// Throws `CancellationError` when the task was cancelled, after removing `output` (the runner's own file).
+    private static func stopIfCancelled(removing output: URL) throws {
+        guard Task.isCancelled else { return }
+        try? FileManager.default.removeItem(at: output)
+        throw CancellationError()
     }
 
     // MARK: - Encoding
@@ -143,11 +175,11 @@ public struct DownscaleRunner: JobRunner {
     /// Names the output at write time, clears this job's stale partials, and encodes. A name taken between naming
     /// and commit moves on to the next name, up to `maxNamingAttempts`; nothing is overwritten.
     private func encode(
-        source: URL, spec: DownscaleSpec, label: String, directory: URL,
+        source: URL, spec: DownscaleSpec, label: String, directory: URL, pathExtension: String,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         for _ in 0..<Self.maxNamingAttempts {
-            let output = OutputNamer.url(for: source, label: label, in: directory)
+            let output = OutputNamer.url(for: source, label: label, in: directory, pathExtension: pathExtension)
             Self.removeStalePartials(of: output)
             do {
                 try await VideoDownscaler().downscale(
@@ -207,7 +239,7 @@ public struct DownscaleRunner: JobRunner {
         if !job.sourceBookmark.isEmpty {
             var stale = false
             if let resolved = try? URL(
-                resolvingBookmarkData: job.sourceBookmark, options: [], relativeTo: nil,
+                resolvingBookmarkData: job.sourceBookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
                 bookmarkDataIsStale: &stale)
             {
                 candidate = resolved
@@ -240,10 +272,11 @@ public struct DownscaleRunner: JobRunner {
         var stale = false
         let url =
             (try? URL(
-                resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil,
-                bookmarkDataIsStale: &stale))
+                resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutMounting, .withoutUI],
+                relativeTo: nil, bookmarkDataIsStale: &stale))
             ?? (try? URL(
-                resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale))
+                resolvingBookmarkData: bookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
+                bookmarkDataIsStale: &stale))
         guard let url else { throw DownscaleRunnerError.outputFolderUnavailable }
         let scoped = url.startAccessingSecurityScopedResource()
         var isDirectory: ObjCBool = false

@@ -19,7 +19,8 @@ public struct VideoDownscaler: Sendable {
 
     public init() {}
 
-    /// Writes a new `.mov` at `output`. Throws `outputExists` if `output` exists, `sourceAlreadySmall` if the source
+    /// Writes a new file at `output`, in the container its extension names (`OutputContainer.fileType(for:)`:
+    /// MPEG-4 for `.mp4` / `.m4v`, QuickTime otherwise). Throws `outputExists` if `output` exists, `sourceAlreadySmall` if the source
     /// short side is at most a non-nil `spec.targetShortSide`, and `unsupportedSource` for spatial video, all before
     /// writing. Output goes to a hidden partial file that is renamed to `output` only when complete (`outputExists`
     /// if `output` appeared meanwhile). On any failure or cancellation only the partial is deleted.
@@ -42,7 +43,8 @@ public struct VideoDownscaler: Sendable {
         let partial = AtomicOutput.partialURL(for: output)
 
         let job = try await DownscaleJob(
-            asset: asset, videoTrack: videoTrack, output: partial, spec: spec,
+            asset: asset, videoTrack: videoTrack, output: partial, fileType: OutputContainer.fileType(for: output),
+            spec: spec,
             isTenBit: Self.encodesTenBit(bitDepth: inventory["video.bitDepth"]?.value),
             preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, beforeStartWriting: beforeStartWriting,
             beforePassthroughDrain: beforePassthroughDrain, progress: progress)
