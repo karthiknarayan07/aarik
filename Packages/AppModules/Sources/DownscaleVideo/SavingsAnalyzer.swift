@@ -22,6 +22,21 @@ public struct SavingsBucket: Sendable, Equatable, Identifiable {
     /// The available videos, which "Add These to the Queue" adds.
     public let itemIDs: [UUID]
 
+    public init(
+        id: String, quality: QualityBucket, year: Int, library: OverviewSummary.Library, excludesShrunk: Bool,
+        count: Int, bytes: Int64, couldFree: Int64, itemIDs: [UUID]
+    ) {
+        self.id = id
+        self.quality = quality
+        self.year = year
+        self.library = library
+        self.excludesShrunk = excludesShrunk
+        self.count = count
+        self.bytes = bytes
+        self.couldFree = couldFree
+        self.itemIDs = itemIDs
+    }
+
     public var sourceName: String { library == .photos ? "Photos" : "Local Files" }
 
     /// "4K60 from 2024"

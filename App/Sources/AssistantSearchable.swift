@@ -25,7 +25,7 @@ private struct AssistantSearchable: ViewModifier {
 
     private var tokens: Binding<[FilterToken]> {
         Binding(
-            get: { search.isVisible ? search.tokens : [] },
+            get: { search.showsFilters ? search.tokens : [] },
             set: { search.tokensChanged(to: $0, browser: browser, sidebarBadge: sidebarBadge) })
     }
 
@@ -48,7 +48,7 @@ private struct AssistantSearchable: ViewModifier {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                if search.isVisible, !search.note.isEmpty {
+                if search.showsFilters, !search.note.isEmpty {
                     Text(search.note)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -58,7 +58,7 @@ private struct AssistantSearchable: ViewModifier {
                         .accessibilityLabel(search.note)
                 }
             }
-            .onChange(of: search.isVisible, initial: true) {
+            .onChange(of: search.showsFilters, initial: true) {
                 search.availabilityChanged(browser: browser, sidebarBadge: sidebarBadge)
             }
     }
