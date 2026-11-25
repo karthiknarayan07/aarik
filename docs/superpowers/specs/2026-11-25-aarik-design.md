@@ -69,7 +69,7 @@ Why it exists (all of these, per the owner):
 - Cross-platform (Tauri/Electron + FFmpeg) — rejected: weaker Dolby Vision handling contradicts the core promise; less native feel.
 
 ### 6.2 Codebase structure
-- **A. Thin app shell + local Swift package `AarikKit` with one module per feature (chosen).** Compiler-enforced boundaries; app, Finder extension, and Shortcuts share the same feature code; no extra tooling; tiny Xcode project means few merge conflicts.
+- **A. Thin app shell + local Swift package `AppModules` with one module per feature (chosen).** Compiler-enforced boundaries; app, Finder extension, and Shortcuts share the same feature code; no extra tooling; tiny Xcode project means few merge conflicts.
 - B. Tuist-generated workspace — rejected: strongest structure, but every contributor must learn a generator; overkill for one maintainer.
 - C. Single target, folders by convention — rejected: boundaries erode; extensions can't cleanly reuse code.
 
@@ -86,25 +86,26 @@ Why it exists (all of these, per the owner):
 ### 7.1 Repository layout
 
 ```
-aarik/
+<repo>/
+├─ Config/Brand.xcconfig        # the ONLY place the product name / bundle ID live (see §7.1a)
 ├─ App/                         # macOS app target (thin)
-│  ├─ AarikApp.swift            # @main, scenes: main window, MenuBarExtra, Settings
+│  ├─ MainApp.swift             # @main, scenes: main window, MenuBarExtra, Settings
 │  ├─ ToolRegistry.swift        # the ONE place features are listed
 │  └─ Resources/                # Assets, Info.plist, entitlements
 ├─ Extensions/
-│  ├─ FinderAction/             # right-click "Downscale with aarik" etc.
+│  ├─ FinderAction/             # right-click "Downscale with <app name>" etc.
 │  └─ (Intents live in features, surfaced via App Intents)
-├─ Packages/AarikKit/           # local Swift package
+├─ Packages/AppModules/         # local Swift package
 │  ├─ Package.swift
 │  ├─ Sources/
-│  │  ├─ AarikCore/             # Tool contract, job queue, inputs/outputs, metadata model, verification
-│  │  ├─ AarikUI/               # shared SwiftUI components (drop zone, queue list, kept/lost badge, inspector)
+│  │  ├─ AppCore/             # Tool contract, job queue, inputs/outputs, metadata model, verification
+│  │  ├─ AppUI/               # shared SwiftUI components (drop zone, queue list, kept/lost badge, inspector)
 │  │  ├─ MediaEngine/           # AVFoundation/VideoToolbox plumbing shared by video & image tools
 │  │  ├─ PhotosBridge/          # PhotoKit import/export/replace
 │  │  └─ Features/
 │  │     └─ DownscaleVideo/     # settings, planner, runner, views, intents
 │  └─ Tests/
-│     ├─ AarikCoreTests/
+│     ├─ AppCoreTests/
 │     ├─ MediaEngineTests/
 │     └─ DownscaleVideoTests/
 ├─ Fixtures/                    # small sample media (see §10)
@@ -117,22 +118,30 @@ aarik/
 └─ README.md
 ```
 
-Dependency rule (enforced by `Package.swift`): `Features/*` → `AarikUI`, `MediaEngine`, `PhotosBridge` → `AarikCore`. Features never import each other. The app and extensions import features only through `ToolRegistry`.
+Dependency rule (enforced by `Package.swift`): `Features/*` → `AppUI`, `MediaEngine`, `PhotosBridge` → `AppCore`. Features never import each other. The app and extensions import features only through `ToolRegistry`.
+
+### 7.1a Brand-neutral code (owner decision, 2026-11-25)
+
+"aarik" is a working brand; the final name may change. Code must never carry the brand:
+- Packages, modules, targets, types, files, test identifiers and env vars use generic names (`AppModules`, `AppCore`, `AppUI`, `MediaEngine`, `devtool`, `com.example.fixture.*`, `REAL_CLIP_GATE`).
+- The product name, display name, bundle ID prefix and app-group / extension IDs are defined once in `Config/Brand.xcconfig` (e.g. `APP_DISPLAY_NAME`, `APP_BUNDLE_ID_PREFIX`) and referenced everywhere else via build settings; user-facing strings that mention the name read it from the bundle (`CFBundleDisplayName`), never a literal.
+- The brand may appear only in: `Config/Brand.xcconfig`, `README.md`, `docs/`, app icon / assets, and the GitHub repo name.
+- Renaming the app = edit `Brand.xcconfig`, assets, README/docs (and optionally the repo); no Swift code changes.
 
 ### 7.2 The Tool contract (sketch — exact API is the builder's call)
 
-Every feature module provides one type conforming to a `Tool` protocol in `AarikCore`, describing:
+Every feature module provides one type conforming to a `Tool` protocol in `AppCore`, describing:
 
 - **Descriptor:** stable ID, display name, SF Symbol, sidebar category (Video / Image / PDF / Documents), accepted input types (`UTType`s).
 - **Settings:** a `Codable`, `Sendable` value with defaults; persisted per tool.
 - **Plan:** given inputs + settings, produce one job per input, each carrying a **MetadataReport** (kept / changed / lost) *before* anything runs.
 - **Run:** execute a job with progress and cancellation, producing an output.
-- **View:** the tool's settings UI, embedded in a standard tool screen that `AarikUI` provides (drop zone, queue, report badges, inspector, Convert button) so every tool looks consistent.
+- **View:** the tool's settings UI, embedded in a standard tool screen that `AppUI` provides (drop zone, queue, report badges, inspector, Convert button) so every tool looks consistent.
 - **Intents:** App Intents so the tool appears in Shortcuts and the Finder action.
 
 `ToolRegistry` in the app lists the tools; the sidebar, menu bar drop target, Finder action, and Shortcuts are all generated from it. **Adding a tool = new folder under `Features/`, conform to `Tool`, add one line to `ToolRegistry`.**
 
-### 7.3 Shared services in `AarikCore`
+### 7.3 Shared services in `AppCore`
 
 - **Job queue:** an actor that runs jobs one at a time by default (the hardware encoder is the bottleneck), supports cancel, reports progress, posts a user notification on completion when the app isn't frontmost, and keeps the Mac from sleeping during a run.
 - **Inputs/outputs:** a file input (security-scoped URL) and a Photos input (asset identifier) behind one abstraction; output destinations: next to original, chosen folder, back to Photos as new item, or Replace.

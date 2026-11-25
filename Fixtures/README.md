@@ -47,16 +47,16 @@ Rename each file to the name in the table.
 1. Run the tests (tests whose clip is missing are skipped):
 
    ```
-   cd Packages/AarikKit && swift test --filter RealClipGateTests
+   cd Packages/AppModules && swift test --filter RealClipGateTests
    ```
 
-   For the gate run itself, set `AARIK_GATE=1` so a missing clip fails instead of being skipped:
+   For the gate run itself, set `REAL_CLIP_GATE=1` so a missing clip fails instead of being skipped:
 
    ```
-   cd Packages/AarikKit && AARIK_GATE=1 swift test --filter RealClipGateTests
+   cd Packages/AppModules && REAL_CLIP_GATE=1 swift test --filter RealClipGateTests
    ```
 
-   Each test prints the path of its output file. Outputs are left in place, in a new `aarik-gate-…` folder in the
+   Each test prints the path of its output file. Outputs are left in place, in a new `real-clip-gate-…` folder in the
    temporary folder, so you can check them in the next steps. The `cinematicReportsLosses` test also prints what
    was kept, changed and lost, which goes into the decision record.
 

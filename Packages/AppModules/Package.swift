@@ -2,21 +2,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "AarikKit",
+    name: "AppModules",
     platforms: [.macOS(.v26)],
     products: [
-        .library(name: "AarikCore", targets: ["AarikCore"]),
+        .library(name: "AppCore", targets: ["AppCore"]),
         .library(name: "MediaEngine", targets: ["MediaEngine"]),
-        .executable(name: "aarik-dev", targets: ["aarik-dev"]),
+        .executable(name: "devtool", targets: ["devtool"]),
     ],
     targets: [
         .target(
-            name: "AarikCore",
+            name: "AppCore",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
             name: "MediaEngine",
-            dependencies: ["AarikCore"],
+            dependencies: ["AppCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -25,13 +25,13 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
-            name: "aarik-dev",
+            name: "devtool",
             dependencies: ["MediaEngine", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
-            name: "AarikCoreTests",
-            dependencies: ["AarikCore"],
+            name: "AppCoreTests",
+            dependencies: ["AppCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

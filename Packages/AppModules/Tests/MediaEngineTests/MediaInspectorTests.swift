@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import CoreMedia
 import Foundation
 import MediaTestSupport
@@ -52,11 +52,11 @@ import Testing
         let url = try await FixtureFactory.makeClip(
             smallClip {
                 $0.finderTags = ["Red", "Blue"]
-                $0.extendedAttributes = ["com.aarik.test": Data("x".utf8)]
+                $0.extendedAttributes = ["com.example.fixture": Data("x".utf8)]
             })
         let inventory = try await MediaInspector().inventory(of: url)
         #expect(inventory["fs.tags"]?.value == "Blue,Red")
-        let xattr = try #require(inventory["fs.xattr.com.aarik.test"])
+        let xattr = try #require(inventory["fs.xattr.com.example.fixture"])
         // SHA-256 of "x"
         #expect(xattr.value == "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881")
         #expect(inventory["fs.creationDate"] != nil)
@@ -65,7 +65,7 @@ import Testing
     @Test func inventoriesTimedMetadataTrack() async throws {
         let url = try await FixtureFactory.makeClip(smallClip { $0.includeTimedMetadataTrack = true })
         let inventory = try await MediaInspector().inventory(of: url)
-        let timed = try #require(inventory["timed.mdta/com.aarik.test.timed"])
+        let timed = try #require(inventory["timed.mdta/com.example.fixture.timed"])
         #expect(timed.value == "present")
         #expect(timed.category == .timedMetadata)
     }
@@ -75,7 +75,7 @@ import Testing
         let inventory = try await MediaInspector().inventory(of: url)
         #expect(inventory["video.duration"]?.value == "1000")
         #expect(inventory["audio.0.duration"]?.value == "1000")
-        #expect(inventory["timed.mdta/com.aarik.test.timed.duration"]?.value == "1000")
+        #expect(inventory["timed.mdta/com.example.fixture.timed.duration"]?.value == "1000")
         #expect(inventory["audio.0.enabled"]?.value == "true")
         #expect(inventory["audio.0.alternateGroup"]?.value == "none")
         #expect(inventory["audio.0.fallback"]?.value == "none")
@@ -143,7 +143,7 @@ import Testing
         let source = try await FixtureFactory.makeClip(
             smallClip {
                 $0.finderTags = ["Green"]
-                $0.extendedAttributes = ["com.aarik.copy": Data("payload".utf8)]
+                $0.extendedAttributes = ["com.example.fixture.copy": Data("payload".utf8)]
             })
         let created = Date(timeIntervalSince1970: 1_600_000_000)
         try FileManager.default.setAttributes([.creationDate: created], ofItemAtPath: source.path)
@@ -157,8 +157,8 @@ import Testing
         #expect(values.creationDate == created)
         let sourceItems = try FileAttributes.read(source)
         let destinationItems = try FileAttributes.read(destination)
-        let sourceXattr = try #require(sourceItems.first { $0.key == "fs.xattr.com.aarik.copy" })
-        #expect(destinationItems.first { $0.key == "fs.xattr.com.aarik.copy" }?.value == sourceXattr.value)
+        let sourceXattr = try #require(sourceItems.first { $0.key == "fs.xattr.com.example.fixture.copy" })
+        #expect(destinationItems.first { $0.key == "fs.xattr.com.example.fixture.copy" }?.value == sourceXattr.value)
         #expect(destinationItems.first { $0.key == "fs.tags" }?.value == "Green")
     }
 
@@ -167,7 +167,9 @@ import Testing
         let source = try await FixtureFactory.makeClip(
             smallClip {
                 $0.finderTags = ["Green"]
-                $0.extendedAttributes = ["com.apple.macl": Data("acl".utf8), "com.aarik.keep": Data("k".utf8)]
+                $0.extendedAttributes = [
+                    "com.apple.macl": Data("acl".utf8), "com.example.fixture.keep": Data("k".utf8),
+                ]
             })
         #expect(getxattr(source.path, "com.apple.macl", nil, 0, 0, 0) == 3)
         for name in ["com.apple.macl", "com.apple.rootless"] {
@@ -176,7 +178,7 @@ import Testing
 
         let sourceItems = try FileAttributes.read(source)
         #expect(!sourceItems.contains { $0.key == "fs.xattr.com.apple.macl" })
-        #expect(sourceItems.contains { $0.key == "fs.xattr.com.aarik.keep" })
+        #expect(sourceItems.contains { $0.key == "fs.xattr.com.example.fixture.keep" })
 
         let created = Date(timeIntervalSince1970: 1_600_000_000)
         try FileManager.default.setAttributes([.creationDate: created], ofItemAtPath: source.path)
@@ -188,6 +190,6 @@ import Testing
         let values = try destination.resourceValues(forKeys: [.tagNamesKey, .creationDateKey])
         #expect(values.tagNames == ["Green"])
         #expect(values.creationDate == created)
-        #expect(try FileAttributes.read(destination).contains { $0.key == "fs.xattr.com.aarik.keep" })
+        #expect(try FileAttributes.read(destination).contains { $0.key == "fs.xattr.com.example.fixture.keep" })
     }
 }

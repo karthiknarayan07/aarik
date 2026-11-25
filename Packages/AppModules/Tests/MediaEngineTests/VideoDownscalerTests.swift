@@ -1,5 +1,5 @@
 import AVFoundation
-import AarikCore
+import AppCore
 import CoreMedia
 import Foundation
 import MediaTestSupport
@@ -47,7 +47,7 @@ import Testing
         ]
         options.includeTimedMetadataTrack = true
         options.finderTags = ["Red"]
-        options.extendedAttributes = ["com.aarik.test": Data("x".utf8)]
+        options.extendedAttributes = ["com.example.fixture": Data("x".utf8)]
         let source = try await FixtureFactory.makeClip(options)
 
         let output = try await downscale(source, spec: DownscaleSpec())
@@ -100,10 +100,10 @@ import Testing
     @Test(.timeLimit(.minutes(2))) func videoTrackMetadataAndLanguageSurvive() async throws {
         let (source, output, outputURL) = try await roundTrip(
             clip {
-                $0.videoTrackMetadata = ["com.aarik.test.track": "track value"]
+                $0.videoTrackMetadata = ["com.example.fixture.track": "track value"]
                 $0.videoLanguage = "eng"
             })
-        let key = "trackmeta.0.com.aarik.test.track"
+        let key = "trackmeta.0.com.example.fixture.track"
         #expect(source[key]?.value == "track value")
         #expect(output[key]?.value == "track value")
         let track = try #require(try await AVURLAsset(url: outputURL).loadTracks(withMediaType: .video).first)
@@ -292,6 +292,6 @@ import Testing
         let audio = try await duration(of: output, .audio)
         #expect(abs(audio - (video + 10)) <= 0.05, "audio \(audio) vs video \(video)")
         let inventory = try await MediaInspector().inventory(of: output)
-        #expect(inventory["timed.mdta/com.aarik.test.timed"]?.value == "present")
+        #expect(inventory["timed.mdta/com.example.fixture.timed"]?.value == "present")
     }
 }

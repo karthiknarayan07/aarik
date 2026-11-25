@@ -1,5 +1,5 @@
 import AVFoundation
-import AarikCore
+import AppCore
 import CryptoKit
 import Foundation
 

@@ -23,7 +23,7 @@ public struct ClipOptions: Sendable {
     public var audioTailSeconds = 0.0
     /// Adds the timed-metadata track before the audio track (default: audio first).
     public var timedMetadataBeforeAudio = false
-    /// one mebx track, identifier `mdta/com.aarik.test.timed`, one group per second of the clip (and audio tail)
+    /// one mebx track, identifier `mdta/com.example.fixture.timed`, one group per second of the clip (and audio tail)
     public var includeTimedMetadataTrack = false
     /// 0 or 90 → preferredTransform
     public var rotationDegrees = 0
@@ -52,7 +52,7 @@ public enum FixtureError: Error, Sendable {
 }
 
 public enum FixtureFactory {
-    public static let timedMetadataIdentifier = "mdta/com.aarik.test.timed"
+    public static let timedMetadataIdentifier = "mdta/com.example.fixture.timed"
     private static let sampleRate = 48_000
 
     /// Writes a new .mov into a fresh temporary directory and returns its URL.
@@ -274,7 +274,7 @@ public enum FixtureFactory {
         let item = AVMutableMetadataItem()
         item.identifier = AVMetadataIdentifier(rawValue: timedMetadataIdentifier)
         item.dataType = kCMMetadataBaseDataType_UTF8 as String
-        item.value = "aarik-timed-\(index)" as NSString
+        item.value = "fixture-timed-\(index)" as NSString
         let start = Double(index)
         let end = min(start + 1, totalSeconds)
         let range = CMTimeRange(

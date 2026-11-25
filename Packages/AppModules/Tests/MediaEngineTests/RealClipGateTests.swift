@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import CoreGraphics
 import Foundation
 import MediaTestSupport
@@ -7,10 +7,10 @@ import Testing
 @testable import MediaEngine
 
 /// The Dolby Vision release gate (spec 8.3a) on real iPhone clips. Every test is skipped until the matching clip is
-/// in `Fixtures/iphone/` (see `Fixtures/README.md`). With `AARIK_GATE=1` a missing clip fails instead.
+/// in `Fixtures/iphone/` (see `Fixtures/README.md`). With `REAL_CLIP_GATE=1` a missing clip fails instead.
 @Suite struct RealClipGateTests {
-    /// `AARIK_GATE=1`: the gate run proper, where every clip must be present.
-    static let isGateRun = ProcessInfo.processInfo.environment["AARIK_GATE"] == "1"
+    /// `REAL_CLIP_GATE=1`: the gate run proper, where every clip must be present.
+    static let isGateRun = ProcessInfo.processInfo.environment["REAL_CLIP_GATE"] == "1"
 
     static func runs(_ fixture: RealFixture) -> Bool {
         isGateRun || RealFixtures.url(fixture) != nil
@@ -27,11 +27,11 @@ import Testing
     private func clip(_ fixture: RealFixture) throws -> URL {
         try #require(
             RealFixtures.url(fixture),
-            "missing Fixtures/iphone/\(fixture.rawValue); AARIK_GATE=1 needs every clip (see Fixtures/README.md)")
+            "missing Fixtures/iphone/\(fixture.rawValue); REAL_CLIP_GATE=1 needs every clip (see Fixtures/README.md)")
     }
 
     private func outputURL() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "aarik-gate-\(UUID().uuidString)")
+        let directory = FileManager.default.temporaryDirectory.appending(path: "real-clip-gate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appending(path: "output.mov")
     }

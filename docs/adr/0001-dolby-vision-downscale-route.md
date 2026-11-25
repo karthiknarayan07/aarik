@@ -76,7 +76,7 @@ Preconditions: clips in `Fixtures/iphone/` (see `Fixtures/README.md`).
 
 PASS requires all of:
 
-1. `AARIK_GATE=1 swift test --filter RealClipGateTests` is green, so no clip is skipped (DV clips are 4K and come
+1. `REAL_CLIP_GATE=1 swift test --filter RealClipGateTests` is green, so no clip is skipped (DV clips are 4K and come
    out 1920x1080 with DV profile 8 / compat 4 kept and only the level changed; nothing lost; nothing else changed
    beyond the dimensions; iPhone `qt.` metadata, including the location, identical; spatial audio tracks, their
    enabled state, groups and fallbacks identical; slo-mo frame rate kept; Live Photo identifier kept; SDR stays

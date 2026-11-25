@@ -68,7 +68,7 @@ import Testing
         options.height = 360
         options.rotationDegrees = 90
         options.finderTags = ["Red"]
-        options.extendedAttributes = ["com.aarik.test": Data("x".utf8)]
+        options.extendedAttributes = ["com.example.fixture": Data("x".utf8)]
         options.includeTimedMetadataTrack = true
         let url = try await FixtureFactory.makeClip(options)
 
@@ -80,10 +80,10 @@ import Testing
 
         let tags = try url.resourceValues(forKeys: [.tagNamesKey]).tagNames
         #expect(tags == ["Red"])
-        let size = getxattr(url.path, "com.aarik.test", nil, 0, 0, 0)
+        let size = getxattr(url.path, "com.example.fixture", nil, 0, 0, 0)
         #expect(size == 1)
         var buf = [UInt8](repeating: 0, count: 1)
-        #expect(getxattr(url.path, "com.aarik.test", &buf, 1, 0, 0) == 1)
+        #expect(getxattr(url.path, "com.example.fixture", &buf, 1, 0, 0) == 1)
         #expect(buf == Array("x".utf8))
     }
 

@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import Foundation
 import MediaEngine
 import MediaTestSupport
@@ -7,9 +7,9 @@ import MediaTestSupport
 
 let usage = """
     usage:
-      aarik-dev fixture <out> [--sdr]
-      aarik-dev inspect <file>
-      aarik-dev downscale <in> <out> [--short-side N] [--max-fps F] [--bitrate B]
+      devtool fixture <out> [--sdr]
+      devtool inspect <file>
+      devtool downscale <in> <out> [--short-side N] [--max-fps F] [--bitrate B]
     """
 
 func printError(_ message: String) {
