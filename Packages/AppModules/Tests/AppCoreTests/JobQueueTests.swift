@@ -1,0 +1,320 @@
+import Foundation
+import Testing
+
+@testable import AppCore
+
+// MARK: - Helpers
+
+private func makeStore() throws -> (JobStore, URL) {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("JobQueueTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return (JobStore(directory: dir), dir)
+}
+
+private func makeJob(tool: String = "fake", name: String = "a") -> Job {
+    Job(
+        toolID: tool, source: URL(fileURLWithPath: "/tmp/\(name).mov"),
+        sourceBookmark: Data(), settings: Data())
+}
+
+private struct Boom: LocalizedError {
+    var errorDescription: String? { "boom happened" }
+}
+
+private struct Plain: Error {}
+
+private func completed(_ name: String = "out") -> JobState {
+    .completed(
+        JobOutcome(
+            output: URL(fileURLWithPath: "/tmp/\(name).mov"), bytesBefore: 10, bytesAfter: 5,
+            report: MetadataReport(), replacedOriginal: false))
+}
+
+/// A runner whose jobs finish only when the test says so. No timing involved.
+private actor ScriptedRunner: JobRunner {
+    private var log: [String] = []
+    private var active = 0
+    private(set) var maxActive = 0
+    private var pending: [UUID: CheckedContinuation<JobState, any Error>] = [:]
+    private var early: [UUID: Result<JobState, any Error>] = [:]
+    private let startedContinuation: AsyncStream<UUID>.Continuation
+    nonisolated let started: AsyncStream<UUID>
+
+    init() {
+        (started, startedContinuation) = AsyncStream.makeStream(of: UUID.self)
+    }
+
+    var events: [String] { log }
+
+    func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
+        log.append("start \(job.source.deletingPathExtension().lastPathComponent)")
+        active += 1
+        maxActive = max(maxActive, active)
+        startedContinuation.yield(job.id)
+        defer { active -= 1 }
+        do {
+            let state: JobState = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    if let result = early.removeValue(forKey: job.id) {
+                        continuation.resume(with: result)
+                    } else {
+                        pending[job.id] = continuation
+                    }
+                }
+            } onCancel: {
+                Task { await self.finish(job.id, .failure(CancellationError())) }
+            }
+            log.append("end \(job.source.deletingPathExtension().lastPathComponent)")
+            return state
+        } catch {
+            log.append("abort \(job.source.deletingPathExtension().lastPathComponent)")
+            throw error
+        }
+    }
+
+    func finish(_ id: UUID, _ result: Result<JobState, any Error>) {
+        if let continuation = pending.removeValue(forKey: id) {
+            continuation.resume(with: result)
+        } else {
+            early[id] = result
+        }
+    }
+}
+
+/// Reads the queue's update stream until `predicate` holds.
+private func waitUntil(
+    _ queue: JobQueue, _ predicate: @Sendable ([Job]) -> Bool
+) async {
+    for await jobs in await queue.updates() where predicate(jobs) { return }
+}
+
+// MARK: - Tests
+
+@Test func runsSeriallyInOrder() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let jobs = ["a", "b", "c"].map { makeJob(name: $0) }
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue(jobs)
+    for job in jobs {
+        let startedID = await starts.next()
+        #expect(startedID == job.id)
+        await runner.finish(job.id, .success(completed()))
+    }
+    await waitUntil(queue) { $0.allSatisfy { if case .completed = $0.state { true } else { false } } }
+
+    #expect(
+        await runner.events == ["start a", "end a", "start b", "end b", "start c", "end c"])
+    #expect(await runner.maxActive == 1)
+}
+
+@Test func pauseFinishesCurrent() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let first = makeJob(name: "a")
+    let second = makeJob(name: "b")
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([first, second])
+    _ = await starts.next()
+    await queue.pause()
+    #expect(await queue.isPaused())
+    await runner.finish(first.id, .success(completed()))
+    await waitUntil(queue) { jobs in
+        if case .completed = jobs[0].state { return true } else { return false }
+    }
+
+    let snapshot = await queue.jobs
+    #expect(snapshot[1].state == .queued)
+    #expect(await runner.events == ["start a", "end a"])
+
+    await queue.resume()
+    #expect(await queue.isPaused() == false)
+    let startedID = await starts.next()
+    #expect(startedID == second.id)
+    await runner.finish(second.id, .success(completed()))
+    await waitUntil(queue) { $0.allSatisfy { if case .completed = $0.state { true } else { false } } }
+}
+
+@Test func failureBecomesFailedWithReason() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let localized = makeJob(name: "a")
+    let plain = makeJob(name: "b")
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([localized, plain])
+    _ = await starts.next()
+    await runner.finish(localized.id, .failure(Boom()))
+    _ = await starts.next()
+    await runner.finish(plain.id, .failure(Plain()))
+    await waitUntil(queue) { $0.allSatisfy { if case .failed = $0.state { true } else { false } } }
+
+    let jobs = await queue.jobs
+    #expect(jobs[0].state == .failed(reason: "boom happened"))
+    #expect(jobs[1].state == .failed(reason: String(describing: Plain())))
+}
+
+@Test func unknownToolFails() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let queue = JobQueue(store: store, runners: [:])
+    await queue.enqueue([makeJob(tool: "nope")])
+    await waitUntil(queue) { $0.first?.state == .failed(reason: "No tool can run this job") }
+}
+
+@Test func retryRequeues() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let job = makeJob()
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([job])
+    _ = await starts.next()
+    await runner.finish(job.id, .failure(Boom()))
+    await waitUntil(queue) { $0.first?.state == .failed(reason: "boom happened") }
+
+    await queue.retry(job.id)
+    _ = await starts.next()
+    await runner.finish(job.id, .success(completed()))
+    await waitUntil(queue) { jobs in
+        if case .completed = jobs[0].state { return true } else { return false }
+    }
+}
+
+@Test func retryOnlyAppliesToFailedAndRetryAllFailedRequeuesEach() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let queue = JobQueue(store: store, runners: [:])
+    let a = makeJob(tool: "nope", name: "a")
+    let b = makeJob(tool: "nope", name: "b")
+    await queue.pause()
+    await queue.enqueue([a, b])
+    await queue.retry(a.id)  // queued, not failed: no-op
+    #expect(await queue.jobs.map(\.state) == [.queued, .queued])
+
+    await queue.resume()
+    await waitUntil(queue) { $0.allSatisfy { $0.state == .failed(reason: "No tool can run this job") } }
+    await queue.pause()
+    await queue.retryAllFailed()
+    #expect(await queue.jobs.map(\.state) == [.queued, .queued])
+}
+
+@Test func removeSkipsRunningJobs() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let running = makeJob(name: "a")
+    let waiting = makeJob(name: "b")
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([running, waiting])
+    _ = await starts.next()
+    await queue.remove(running.id)
+    #expect(await queue.jobs.count == 2)
+    await queue.remove(waiting.id)
+    #expect(await queue.jobs.map(\.id) == [running.id])
+
+    await runner.finish(running.id, .success(completed()))
+    await queue.shutdown()
+}
+
+@Test func runningJobRecoveredAsQueued() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    var stuck = makeJob()
+    stuck.state = .running(progress: 0.4)
+    try store.save([stuck])
+
+    let queue = JobQueue(store: store, runners: [:])
+    #expect(await queue.jobs.map(\.state) == [.queued])
+    #expect(store.load().map(\.state) == [.queued])
+}
+
+@Test func jobsPersistAcrossQueues() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let queue = JobQueue(store: store, runners: [:])
+    await queue.pause()
+    let job = makeJob()
+    await queue.enqueue([job])
+
+    let reopened = JobQueue(store: store, runners: [:])
+    #expect(await reopened.jobs == [job])
+}
+
+@Test func shutdownCancelsRunningJobAndRequeuesIt() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let job = makeJob()
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([job])
+    _ = await starts.next()
+    await queue.shutdown()
+
+    #expect(await queue.jobs.map(\.state) == [.queued])
+    #expect(store.load().map(\.state) == [.queued])
+    #expect(await runner.events.last == "abort a")
+}
+
+@Test func updatesYieldCurrentThenChangesToEverySubscriber() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let queue = JobQueue(store: store, runners: [:])
+    await queue.pause()
+    var one = await queue.updates().makeAsyncIterator()
+    var two = await queue.updates().makeAsyncIterator()
+    #expect(await one.next() == [])
+    #expect(await two.next() == [])
+
+    let job = makeJob()
+    await queue.enqueue([job])
+    #expect(await one.next() == [job])
+    #expect(await two.next() == [job])
+
+    await queue.shutdown()
+    #expect(await one.next() == nil)
+    #expect(await two.next() == nil)
+}
+
+@Test func progressIsReportedWhileRunning() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let reporter = ProgressRunner()
+    let queue = JobQueue(store: store, runners: ["fake": reporter])
+    await queue.enqueue([makeJob()])
+    await waitUntil(queue) { $0.first?.state == .running(progress: 0.5) }
+    await reporter.release()
+    await queue.shutdown()
+}
+
+private actor ProgressRunner: JobRunner {
+    private var gate: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
+        progress(0.5)
+        if !released { await withCheckedContinuation { gate = $0 } }
+        return .keptAsIs(reason: "done")
+    }
+
+    func release() {
+        released = true
+        gate?.resume()
+        gate = nil
+    }
+}
