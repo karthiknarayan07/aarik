@@ -9,17 +9,42 @@ import Testing
 enum Samples {
     static func asset(
         id: String = "6F1B8A2C-1D3E-4F5A-9B7C-0E2D4F6A8B1C/L0/001", width: Double = 1920, height: Double = 1080,
-        subtypes: PhotoSubtypes = [], hasAdjustments: Bool = false, byteSize: Int64? = 12_345_678
+        subtypes: PhotoSubtypes = [], hasAdjustments: Bool = false, byteSize: Int64? = 12_345_678,
+        modified: Date? = nil
     ) -> PhotoAsset {
         PhotoAsset(
             id: id, creationDate: Date(timeIntervalSince1970: 1_750_000_000),
             location: PhotoLocation(latitude: 48.85, longitude: 2.35, altitude: 35),
             pixelSize: CGSize(width: width, height: height), duration: 12.5, hasAdjustments: hasAdjustments,
-            subtypes: subtypes, originalFileName: "IMG_4211.MOV", originalByteSize: byteSize, isLocallyAvailable: true)
+            subtypes: subtypes, originalFileName: "IMG_4211.MOV", originalByteSize: byteSize, isLocallyAvailable: true,
+            modificationDate: modified)
     }
 }
 
 @Suite struct PhotoItemBuilderTests {
+    @Test func itemCarriesTheModificationDate() {
+        let date = Date(timeIntervalSince1970: 1_760_000_000)
+        #expect(PhotoItemBuilder.build(Samples.asset(modified: date)).modifiedDate == date)
+        #expect(PhotoItemBuilder.build(Samples.asset()).modifiedDate == nil)
+    }
+
+    @Test func thumbnailKeyChangesWhenTheVideoIsEdited() {
+        let before = Samples.asset(modified: Date(timeIntervalSince1970: 1_760_000_000))
+        let after = Samples.asset(modified: Date(timeIntervalSince1970: 1_760_000_500))
+        let keyBefore = PhotoItemBuilder.thumbnailKey(for: PhotoItemBuilder.build(before))
+        let keyAfter = PhotoItemBuilder.thumbnailKey(for: PhotoItemBuilder.build(after))
+        #expect(keyBefore != keyAfter)
+        #expect(keyBefore == PhotoItemBuilder.thumbnailKey(for: PhotoItemBuilder.build(before)))
+        #expect(keyBefore?.contains(before.id) == true)
+    }
+
+    @Test func thumbnailKeyIsNilForAFile() {
+        let item = LibraryItem(
+            id: UUID(), url: URL(filePath: "/tmp/a.mov"), byteSize: 1, duration: 1, pixelSize: .zero, frameRate: 0,
+            captureDate: nil, badges: [], isAvailable: true, inventory: MetadataInventory())
+        #expect(PhotoItemBuilder.thumbnailKey(for: item) == nil)
+    }
+
     @Test func plainVideoHasNoBadges() {
         #expect(PhotoItemBuilder.build(Samples.asset()).badges.isEmpty)
     }

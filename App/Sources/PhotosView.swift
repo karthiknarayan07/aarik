@@ -90,8 +90,15 @@ private struct PhotosGridView: View {
         let photos = model.photos
         Group {
             if photos.items.isEmpty {
-                PhotosEmpty(isLoading: !photos.hasLoaded, error: photos.loadError) {
-                    Task { await photos.start() }
+                VStack(spacing: 0) {
+                    // The notes explain an empty grid too: limited access hides videos, and Full Disk Access
+                    // is about filters.
+                    if photos.hasLoaded {
+                        PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
+                    }
+                    PhotosEmpty(isLoading: !photos.hasLoaded, error: photos.loadError) {
+                        Task { await photos.start() }
+                    }
                 }
             } else {
                 VStack(spacing: 0) {

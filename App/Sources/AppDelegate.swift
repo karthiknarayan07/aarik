@@ -1,4 +1,5 @@
 import AppKit
+import PhotosLibrary
 
 /// Owns the model and the updater for the app's lifetime: starts the queue at launch and lets work settle before
 /// quitting.
@@ -10,7 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var volumeObservers: [any NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { await model.start() }
+        // Photos input left behind by a crash or quit is cleared before the queue starts, so a job can't create
+        // its folder while the sweep runs.
+        let workFolder = WorkFolder.standard()
+        Task {
+            await Task.detached(priority: .utility) { workFolder.sweep() }.value
+            await model.start()
+        }
         #if DEBUG
             if PhotosSpike.isRequested { PhotosSpike.start() }
         #endif

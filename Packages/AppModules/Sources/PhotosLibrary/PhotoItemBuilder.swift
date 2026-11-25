@@ -28,7 +28,15 @@ public enum PhotoItemBuilder {
             byteSize: asset.originalByteSize ?? 0,
             duration: asset.duration, pixelSize: asset.pixelSize, frameRate: entry?.fps ?? 0,
             captureDate: asset.creationDate, badges: badges(asset).union(rangeBadges(entry?.hdrType)),
-            isAvailable: true, inventory: inventory)
+            isAvailable: true, inventory: inventory, modifiedDate: asset.modificationDate)
+    }
+
+    /// The thumbnail cache key for a Photos item, or nil for a file. It includes the modification date, so a video
+    /// edited in Photos gets a fresh poster instead of the cached old one.
+    public static func thumbnailKey(for item: LibraryItem) -> String? {
+        guard let identifier = item.photosIdentifier else { return nil }
+        let modified = item.modifiedDate.map { String($0.timeIntervalSince1970) } ?? "unknown"
+        return "photos:\(identifier):\(modified)"
     }
 
     /// Photos' `ZHDRTYPE` for a video: 0 is SDR and any other value is HDR. No value in the index could be told
