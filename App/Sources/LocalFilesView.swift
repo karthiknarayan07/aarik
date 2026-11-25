@@ -46,7 +46,7 @@ struct LocalFilesView: View {
                         MediaGrid(sections: sections, selection: $browser.selection, onSpace: model.toggleQuickLook) {
                             item, isSelected in
                             LibraryTile(
-                                item: item, isSelected: isSelected, thumbnails: model.thumbnails,
+                                item: item, isSelected: isSelected, thumbnails: model.thumbnailSource,
                                 presetOverride: model.presetOverrides.shownOverride(
                                     for: item.id, default: model.preset)?.displayName
                             )
@@ -55,7 +55,9 @@ struct LocalFilesView: View {
                         .onDeleteCommand { model.removeSelectionFromLibrary() }
                     }
                     Divider()
-                    LibraryStatusLine(model: model)
+                    LibraryStatusLine(
+                        browser: model.browser, isScanning: model.library.isScanning, scanningLabel: "Scanning…",
+                        error: model.library.persistenceError)
                 }
             }
         }
@@ -116,7 +118,7 @@ private struct TileMenu: View {
             .disabled(!model.canAddToQueue(clicked: item))
         Divider()
         Button("Show in Finder", systemImage: "folder") {
-            let urls = model.contextTargets(clicked: item).filter(\.isAvailable).map(\.url)
+            let urls = model.contextTargets(clicked: item).filter(\.isAvailable).compactMap(\.fileURL)
             NSWorkspace.shared.activateFileViewerSelecting(urls)
         }
         .disabled(!item.isAvailable)
@@ -143,12 +145,16 @@ private struct NoMatchingVideos: View {
     }
 }
 
-private struct LibraryStatusLine: View {
-    let model: AppModel
+/// Count and size of what's shown, the selection, and a progress or error note; shared by both libraries.
+struct LibraryStatusLine: View {
+    let browser: LibraryBrowser
+    let isScanning: Bool
+    let scanningLabel: String
+    let error: String?
 
     var body: some View {
-        let snapshot = model.browser.snapshot
-        let selected = model.selectedItems
+        let snapshot = browser.snapshot
+        let selected = browser.selectedItems
         HStack(spacing: 6) {
             Text(summary(count: snapshot.items.count, bytes: snapshot.totalBytes))
             if !selected.isEmpty {
@@ -156,11 +162,11 @@ private struct LibraryStatusLine: View {
                 Text("\(selected.count) selected, \(ByteFormat.string(selected.reduce(0) { $0 + $1.byteSize }))")
             }
             Spacer()
-            if model.library.isScanning {
+            if isScanning {
                 ProgressView().controlSize(.small)
-                Text("Scanning…")
+                Text(scanningLabel)
             }
-            if let error = model.library.persistenceError {
+            if let error {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
         }

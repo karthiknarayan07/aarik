@@ -13,6 +13,8 @@ public final class FakePhotoStore: PhotoStore {
         var albums: [String: [String]] = [:]
         var thumbnails: [String: CGImage] = [:]
         var videosError: PhotoStoreError?
+        var videosCalls = 0
+        var beforeVideos: (@Sendable () async -> Void)?
         var subscribers: [UUID: AsyncStream<Void>.Continuation] = [:]
     }
 
@@ -62,6 +64,15 @@ public final class FakePhotoStore: PhotoStore {
         set { state.withLock { $0.videosError = newValue } }
     }
 
+    /// How many times `videos()` was called.
+    public var videosCallCount: Int { state.withLock { $0.videosCalls } }
+
+    /// Runs at the start of every `videos()` call, so a test can hold a fetch while the library "changes".
+    public var beforeVideos: (@Sendable () async -> Void)? {
+        get { state.withLock { $0.beforeVideos } }
+        set { state.withLock { $0.beforeVideos = newValue } }
+    }
+
     /// Number of open `changes()` streams.
     public var subscriberCount: Int { state.withLock { $0.subscribers.count } }
 
@@ -84,6 +95,11 @@ public final class FakePhotoStore: PhotoStore {
     }
 
     public func videos() async throws -> [PhotoAsset] {
+        let hook = state.withLock { state in
+            state.videosCalls += 1
+            return state.beforeVideos
+        }
+        await hook?()
         let (assets, authorization, error) = state.withLock { ($0.assets, $0.authorization, $0.videosError) }
         guard authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
         if let error { throw error }

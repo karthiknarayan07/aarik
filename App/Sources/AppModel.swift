@@ -4,6 +4,7 @@ import DownscaleVideo
 import Foundation
 import LocalLibrary
 import Observation
+import PhotosLibrary
 
 /// The composition root: the library, the job queue, and the window's shared state.
 @MainActor
@@ -49,8 +50,13 @@ final class AppModel {
     let library: LocalLibrary
     /// Grouping, sort, search, filter and selection for the grid, with cached sections and savings.
     let browser: LibraryBrowser
+    /// The user's Photos videos, loaded when the Videos page first opens (never at launch).
+    let photos: PhotosLibrary
+    /// The Videos page's own grouping, sort, search, filters and selection.
+    let photosBrowser: LibraryBrowser
     let queue: JobQueue
     let thumbnails = ThumbnailCache()
+    let thumbnailSource: ThumbnailSource
     let tools: [ToolEntry] = ToolRegistry.tools
     let comingSoonTools: [ToolEntry] = ToolRegistry.comingSoon
 
@@ -65,7 +71,10 @@ final class AppModel {
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
 
-    init(directory: URL = AppModel.supportDirectory(), defaults: UserDefaults = .standard) {
+    init(
+        directory: URL = AppModel.supportDirectory(), defaults: UserDefaults = .standard,
+        photoStore: any PhotoStore = PhotoKitStore()
+    ) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         self.defaults = defaults
         self.preset =
@@ -74,7 +83,11 @@ final class AppModel {
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         let library = LocalLibrary(directory: directory)
         self.library = library
-        self.browser = LibraryBrowser(library: library)
+        self.browser = LibraryBrowser(collection: library)
+        let photos = PhotosLibrary(store: photoStore)
+        self.photos = photos
+        self.photosBrowser = LibraryBrowser(collection: photos)
+        self.thumbnailSource = ThumbnailSource(cache: thumbnails, photos: photoStore)
         // The runner asks for the backup folder at each Replace, so the setting applies without rebuilding the queue.
         let runner = DownscaleRunner(originalsBackup: AppSettings.originalsBackupProvider(defaults))
         // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause.
@@ -96,6 +109,15 @@ final class AppModel {
         return info.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? info.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? ProcessInfo.processInfo.processName
+    }
+
+    /// Overview's "Allow access to Photos…": asks for access (the system prompt), then opens Videos, which shows
+    /// the videos, or why there are none when access was refused.
+    func allowPhotos() {
+        Task {
+            await photos.requestAccess()
+            selection = .photosVideos
+        }
     }
 
     /// Adds files or folders dropped or picked by the user. Only reads them.

@@ -28,7 +28,9 @@ enum LibraryGrouper {
                     return (lhs.captureDate ?? .distantPast) > (rhs.captureDate ?? .distantPast)
                 }
             }
-            return lhs.url.path < rhs.url.path
+            return (lhs.fileURL?.path ?? lhs.name, lhs.id.uuidString) < (
+                rhs.fileURL?.path ?? rhs.name, rhs.id.uuidString
+            )
         }
         if kept.isEmpty { return [] }
         if grouping == .none { return [ItemGroup(id: "all", title: "All videos", items: kept)] }

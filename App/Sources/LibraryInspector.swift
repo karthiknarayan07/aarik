@@ -8,6 +8,14 @@ struct LibraryInspector: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        if model.isPhotosPage {
+            PhotosInspector(model: model)
+        } else {
+            localInspector
+        }
+    }
+
+    @ViewBuilder private var localInspector: some View {
         let items = model.selection?.showsLibrary == true ? model.selectedItems : []
         if items.isEmpty {
             EmptyState(
@@ -17,7 +25,7 @@ struct LibraryInspector: View {
             Form {
                 if items.count == 1 {
                     Section {
-                        ItemSummaryHeader(item: items[0], thumbnails: model.thumbnails)
+                        ItemSummaryHeader(item: items[0], thumbnails: model.thumbnailSource)
                     }
                 }
                 DownscaleInspector(
@@ -60,18 +68,18 @@ private struct QueueButton: View {
 }
 
 /// Poster, name, details and badges for one video.
-private struct ItemSummaryHeader: View {
+struct ItemSummaryHeader: View {
     let item: VideoItem
-    let thumbnails: ThumbnailCache
+    let thumbnails: ThumbnailSource
     @State private var image: CGImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             poster
-            Text(item.url.lastPathComponent)
+            Text(item.name)
                 .font(.headline)
                 .textSelection(.enabled)
-                .help(item.url.path)
+                .help(item.fileURL?.path ?? item.name)
             Text(ItemDescription.details(item))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -96,7 +104,7 @@ private struct ItemSummaryHeader: View {
         .task(id: item) {
             image = nil
             guard item.isAvailable else { return }
-            image = await thumbnails.thumbnail(for: item.url, maxPixel: 640)
+            image = await thumbnails.image(for: item, maxPixel: 640)
         }
     }
 

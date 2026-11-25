@@ -10,7 +10,8 @@ struct SidebarView: View {
         List(selection: $model.selection) {
             Section("Library") {
                 DestinationRow(destination: .overview)
-                DestinationRow(destination: .photosVideos)
+                DestinationRow(
+                    destination: .photosVideos, count: model.photos.hasLoaded ? model.photos.items.count : nil)
                 DestinationRow(destination: .localFiles, count: model.library.items.count)
             }
             if !badgeCounts.isEmpty {

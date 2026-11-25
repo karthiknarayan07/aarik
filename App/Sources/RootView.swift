@@ -21,8 +21,8 @@ struct RootView: View {
         }
     }
 
-    /// The inspector belongs to the library grid; the Activity lists don't show it.
-    private var showsLibrary: Bool { model.selection?.showsLibrary == true }
+    /// The inspector belongs to the library grids; the Activity lists don't show it.
+    private var showsLibrary: Bool { model.selection?.showsLibrary == true || model.isPhotosPage }
 
     private var inspectorShown: Binding<Bool> {
         Binding {
@@ -91,13 +91,14 @@ private struct DetailView: View {
         Group {
             switch model.selection {
             case .localFiles, .mediaType: LocalFilesView(model: model)
+            case .photosVideos: PhotosView(model: model)
             case .queue: QueueView(model: model)
             case .completed: CompletedView(model: model)
             case .keptAsIs: KeptAsIsView(model: model)
             case .failed: FailedView(model: model)
             case .overview:
-                // Until the Photos dashboard exists, Overview welcomes and points to adding files.
-                WelcomeView(allowPhotos: nil) {
+                // Until the Photos dashboard exists, Overview welcomes and points to Photos or to adding files.
+                WelcomeView(allowPhotos: { model.allowPhotos() }) {
                     model.selection = .localFiles
                     model.isImporterPresented = true
                 }

@@ -11,8 +11,17 @@ extension AppModel {
         return nil
     }
 
+    /// Whether the Videos (Photos) page is showing. The queue, Quick Look and Remove only ever act on Local Files,
+    /// so `selectedItems` is empty there.
+    var isPhotosPage: Bool { selection == .photosVideos }
+
     /// The grid's sections, built once per change of the library or the query (never per selection change).
-    var sections: [MediaSection<LibraryItem>] {
+    var sections: [MediaSection<LibraryItem>] { Self.sections(of: browser) }
+
+    /// The Videos page's sections.
+    var photoSections: [MediaSection<LibraryItem>] { Self.sections(of: photosBrowser) }
+
+    private static func sections(of browser: LibraryBrowser) -> [MediaSection<LibraryItem>] {
         let grouping = browser.grouping
         return browser.cached("sections") { snapshot in
             snapshot.groups.map { group in
@@ -35,8 +44,12 @@ extension AppModel {
         }
     }
 
-    /// Visible selected items, in grid order; a search or filter that hides an item also deselects it here.
-    var selectedItems: [LibraryItem] { browser.selectedItems }
+    /// Visible selected Local Files items, in grid order; a search or filter that hides an item also deselects it
+    /// here. Empty on the Videos page, so nothing there reaches the file-based queue, Quick Look or Remove.
+    var selectedItems: [LibraryItem] { isPhotosPage ? [] : browser.selectedItems }
+
+    /// Visible selected Photos videos, in grid order.
+    var selectedPhotoItems: [LibraryItem] { photosBrowser.selectedItems }
 
     /// The preset `item` converts with: its own from the inspector, else the header's.
     func effectivePreset(for item: LibraryItem) -> Preset {
@@ -61,10 +74,10 @@ extension AppModel {
 
     /// Space toggles Quick Look for the selection.
     func toggleQuickLook() {
-        quickLookURL = quickLookURL == nil ? selectedItems.first?.url : nil
+        quickLookURL = quickLookURL == nil ? selectedItems.first?.fileURL : nil
     }
 
-    var quickLookURLs: [URL] { selectedItems.map(\.url) }
+    var quickLookURLs: [URL] { selectedItems.compactMap(\.fileURL) }
 }
 
 private struct SavingsKey: Hashable {
@@ -124,13 +137,13 @@ extension AppModel {
     /// Context menu: Quick Look, for the selection or the clicked tile (Space does the same for the selection).
     func quickLook(clicked item: LibraryItem) {
         selectContextTargets(clicked: item)
-        quickLookURL = item.url
+        quickLookURL = item.fileURL
     }
 
     private func removeFromLibrary(_ ids: Set<UUID>) {
         library.remove(ids)
         presetOverrides.remove(ids)
         browser.selection.subtract(ids)
-        if let url = quickLookURL, !library.items.contains(where: { $0.url == url }) { quickLookURL = nil }
+        if let url = quickLookURL, !library.items.contains(where: { $0.fileURL == url }) { quickLookURL = nil }
     }
 }

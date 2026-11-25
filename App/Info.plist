@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>$(PRODUCT_NAME) reads your Photos library to find large videos. It only changes Photos when you choose to convert a video.</string>
 	<key>SUFeedURL</key>
 	<string>$(APP_UPDATE_FEED_URL)</string>
 	<key>SUPublicEDKey</key>

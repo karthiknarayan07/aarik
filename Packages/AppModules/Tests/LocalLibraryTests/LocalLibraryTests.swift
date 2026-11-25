@@ -60,7 +60,7 @@ enum Fixtures {
         await Fixtures.settle(library)
 
         #expect(library.items.count == 2)
-        #expect(Set(library.items.map(\.url.lastPathComponent)) == ["a.mov", "b.mov"])
+        #expect(Set(library.items.map(\.name)) == ["a.mov", "b.mov"])
         #expect(!library.isScanning)
     }
 
@@ -91,8 +91,8 @@ enum Fixtures {
         library.add([hlg, sdr])
         await Fixtures.settle(library)
 
-        let hlgItem = try #require(library.items.first { $0.url.standardizedFileURL == hlg.standardizedFileURL })
-        let sdrItem = try #require(library.items.first { $0.url.standardizedFileURL == sdr.standardizedFileURL })
+        let hlgItem = try #require(library.items.first { $0.fileURL!.standardizedFileURL == hlg.standardizedFileURL })
+        let sdrItem = try #require(library.items.first { $0.fileURL!.standardizedFileURL == sdr.standardizedFileURL })
         #expect(hlgItem.badges == [.dolbyVision, .hdr])
         #expect(sdrItem.badges == [.sdr])
         #expect(sdrItem.pixelSize == CGSize(width: 1280, height: 720))
@@ -197,7 +197,7 @@ enum Fixtures {
         await library.fileWasReplaced(at: clip, by: replacement)
 
         #expect(library.items.map(\.id) == [id])
-        #expect(library.items.first?.url.lastPathComponent == "a.mov")
+        #expect(library.items.first?.name == "a.mov")
         // The old path is free again: adding a file there makes a new entry.
         try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.m4v")
         library.add([clip])
@@ -247,7 +247,7 @@ enum Fixtures {
         await gate.open()
         await refresh.value
 
-        #expect(library.items.first?.url.lastPathComponent == "a.mov")
+        #expect(library.items.first?.name == "a.mov")
         #expect(library.items.first?.isAvailable == true)
     }
 
@@ -320,11 +320,11 @@ enum Fixtures {
         try store.save(entries)
 
         let library = LocalLibrary(store: store)
-        #expect(library.items.first { $0.url.lastPathComponent == "a.mov" }?.byteSize == 12_345)
+        #expect(library.items.first { $0.name == "a.mov" }?.byteSize == 12_345)
         await library.refreshAvailability()
         await Fixtures.settle(library)
 
-        #expect(library.items.first { $0.url.lastPathComponent == "a.mov" }?.byteSize == (try Self.size(stale)))
+        #expect(library.items.first { $0.name == "a.mov" }?.byteSize == (try Self.size(stale)))
         let saved = try store.load()
         #expect(saved.count == 2)
         #expect(saved.allSatisfy { $0.modifiedAt != nil })
@@ -385,7 +385,7 @@ enum Fixtures {
         await Fixtures.settle(library)
 
         #expect(library.items.map(\.id) == [id])
-        #expect(library.items.first?.url.lastPathComponent == "renamed.mov")
+        #expect(library.items.first?.name == "renamed.mov")
         #expect(library.items.first?.isAvailable == true)
         let entry = try #require(try store.load().first)
         #expect(URL(filePath: entry.path).lastPathComponent == "renamed.mov")
@@ -412,8 +412,8 @@ enum Fixtures {
         await Fixtures.settle(library)
 
         #expect(library.items.map(\.id) == [id])
-        #expect(library.items.first?.url.lastPathComponent == "a.mov")
-        #expect(library.items.first?.url.deletingLastPathComponent().lastPathComponent == folder.lastPathComponent)
+        #expect(library.items.first?.name == "a.mov")
+        #expect(library.items.first?.fileURL?.deletingLastPathComponent().lastPathComponent == folder.lastPathComponent)
         #expect(library.items.first?.isAvailable == false)
     }
 
@@ -426,7 +426,7 @@ enum Fixtures {
         let library = LocalLibrary(directory: try Fixtures.tempDirectory())
         library.add([a, b])
         await Fixtures.settle(library)
-        let itemA = try #require(library.items.first { $0.url.lastPathComponent == "a.mov" })
+        let itemA = try #require(library.items.first { $0.name == "a.mov" })
 
         // B's file goes elsewhere, and A's file takes B's name: A's bookmark now resolves to B's path.
         try FileManager.default.moveItem(at: b, to: folder.appending(path: "d.mov"))
@@ -435,9 +435,9 @@ enum Fixtures {
         await Fixtures.settle(library)
 
         let after = try #require(library.items.first { $0.id == itemA.id })
-        #expect(after.url.lastPathComponent == "a.mov")
+        #expect(after.name == "a.mov")
         #expect(!after.isAvailable)
-        #expect(Set(library.items.map { $0.url.lastPathComponent }) == ["a.mov", "b.mov"])
+        #expect(Set(library.items.map { $0.name }) == ["a.mov", "b.mov"])
     }
 
     /// Moved in Finder after it was queued: the run followed the bookmark to the new path, but the item is still at
@@ -456,7 +456,7 @@ enum Fixtures {
         await library.fileWasReplaced(at: [moved, clip], by: moved)
 
         #expect(library.items.map(\.id) == [id])
-        #expect(library.items.first?.url.lastPathComponent == "moved.mov")
+        #expect(library.items.first?.name == "moved.mov")
         #expect(library.items.first?.inventory["video.dimensions"]?.value == "320x180")
     }
 
@@ -483,13 +483,13 @@ enum Fixtures {
         let library = LocalLibrary(directory: directory)
         library.add([folder])
         await Fixtures.settle(library)
-        let removed = try #require(library.items.first { $0.url.lastPathComponent == "a.mov" })
+        let removed = try #require(library.items.first { $0.name == "a.mov" })
         library.remove([removed.id])
         await Fixtures.settle(library)
-        #expect(library.items.map(\.url.lastPathComponent) == ["b.mov"])
-        #expect(LocalLibrary(directory: directory).items.map(\.url.lastPathComponent) == ["b.mov"])
+        #expect(library.items.map(\.name) == ["b.mov"])
+        #expect(LocalLibrary(directory: directory).items.map(\.name) == ["b.mov"])
         // Only the library entry goes; both files stay on disk.
-        #expect(FileManager.default.fileExists(atPath: removed.url.path))
+        #expect(FileManager.default.fileExists(atPath: removed.fileURL?.path ?? ""))
         #expect(FileManager.default.fileExists(atPath: folder.appending(path: "b.mov").path))
     }
 
@@ -603,7 +603,7 @@ enum Fixtures {
         let known = LibraryScanner.pathKey(folder.appending(path: "c001.mov"))
         let names = Locked<[String]>([])
         await LibraryScanner().scan([folder], excluding: [known]) { batch in
-            names.withLock { $0 += batch.map(\.item.url.lastPathComponent) }
+            names.withLock { $0 += batch.map(\.item.name) }
         }
         #expect(names.withLock { $0 } == ["c000.mov", "c002.mov"])
     }
@@ -732,7 +732,7 @@ enum Fixtures {
     }
 
     private func names(_ group: ItemGroup) -> [String] {
-        group.items.map { $0.url.deletingPathExtension().lastPathComponent }
+        group.items.map { URL(filePath: $0.name).deletingPathExtension().lastPathComponent }
     }
 
     @Test func groupsByMonthBiggestFirst() {
@@ -770,7 +770,8 @@ enum Fixtures {
         missing.isAvailable = false
         #expect(a != missing)
         let replaced = LibraryItem(
-            id: a.id, url: a.url, byteSize: 2, duration: a.duration, pixelSize: a.pixelSize, frameRate: a.frameRate,
+            id: a.id, source: a.source, name: a.name, byteSize: 2, duration: a.duration, pixelSize: a.pixelSize,
+            frameRate: a.frameRate,
             captureDate: a.captureDate, badges: a.badges, isAvailable: a.isAvailable, inventory: a.inventory)
         #expect(a != replaced)
         #expect(a.hashValue == replaced.hashValue)

@@ -12,6 +12,7 @@
 		A10000000000000000000103 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000203 /* AppUI */; };
 		A10000000000000000000104 /* LocalLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000204 /* LocalLibrary */; };
 		A10000000000000000000105 /* DownscaleVideo in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000205 /* DownscaleVideo */; };
+		A10000000000000000000107 /* PhotosLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000207 /* PhotosLibrary */; };
 		A10000000000000000000106 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000206 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -45,6 +46,7 @@
 				A10000000000000000000103 /* AppUI in Frameworks */,
 				A10000000000000000000104 /* LocalLibrary in Frameworks */,
 				A10000000000000000000105 /* DownscaleVideo in Frameworks */,
+				A10000000000000000000107 /* PhotosLibrary in Frameworks */,
 				A10000000000000000000106 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -107,6 +109,7 @@
 				A10000000000000000000203 /* AppUI */,
 				A10000000000000000000204 /* LocalLibrary */,
 				A10000000000000000000205 /* DownscaleVideo */,
+				A10000000000000000000207 /* PhotosLibrary */,
 				A10000000000000000000206 /* Sparkle */,
 			);
 			productName = App;
@@ -259,6 +262,10 @@
 		A10000000000000000000205 /* DownscaleVideo */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DownscaleVideo;
+		};
+		A10000000000000000000207 /* PhotosLibrary */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PhotosLibrary;
 		};
 		A10000000000000000000206 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

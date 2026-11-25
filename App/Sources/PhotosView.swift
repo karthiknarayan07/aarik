@@ -1,0 +1,300 @@
+import AppKit
+import AppUI
+import LocalLibrary
+import PhotosLibrary
+import SwiftUI
+
+/// Where System Settings opens for the two permissions this page can ask about.
+enum PrivacySettings {
+    static let photos = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Photos")!
+    static let fullDiskAccess = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
+
+    @MainActor static func open(_ url: URL) {
+        NSWorkspace.shared.open(url)
+    }
+}
+
+/// The Videos page: the access prompt, the denied state, or the user's Photos videos in the same grid and
+/// inspector as Local Files.
+struct PhotosView: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        let photos = model.photos
+        Group {
+            if !photos.isAuthorizationKnown {
+                ProgressView()
+            } else {
+                switch photos.authorization {
+                case .notDetermined:
+                    PhotosAccessPrompt { Task { await photos.requestAccess() } }
+                case .denied, .restricted:
+                    PhotosAccessDenied(isRestricted: photos.authorization == .restricted)
+                case .limited, .authorized:
+                    PhotosGridView(model: model)
+                }
+            }
+        }
+        .navigationTitle(SidebarDestination.photosVideos.title)
+        .task { await photos.start() }
+        // Access or Full Disk Access may have been changed in System Settings while the app was in the background.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task {
+                await photos.start()
+                if photos.indexStatus == .noAccess { await photos.reloadIndex() }
+            }
+        }
+    }
+}
+
+private struct PhotosAccessPrompt: View {
+    let allow: () -> Void
+
+    var body: some View {
+        WelcomeState(
+            "See your Photos videos", systemImage: "photo.on.rectangle",
+            lines: [
+                "\(AppModel.displayName) reads your video list on this Mac and changes nothing in Photos until you convert a video."
+            ]
+        ) {
+            Button("Allow access to Photos…", action: allow)
+                .buttonStyle(.borderedProminent)
+        }
+    }
+}
+
+private struct PhotosAccessDenied: View {
+    let isRestricted: Bool
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Photos access is off", systemImage: "lock")
+        } description: {
+            Text(
+                isRestricted
+                    ? "Access to Photos is restricted on this Mac, so its videos can't be shown."
+                    : "Allow access to Photos in System Settings to see your videos here.")
+        } actions: {
+            if !isRestricted {
+                Button("Open Photos settings") { PrivacySettings.open(PrivacySettings.photos) }
+            }
+        }
+    }
+}
+
+private struct PhotosGridView: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        @Bindable var browser = model.photosBrowser
+        let photos = model.photos
+        Group {
+            if photos.items.isEmpty {
+                PhotosEmpty(isLoading: !photos.hasLoaded, error: photos.loadError) {
+                    Task { await photos.start() }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    PhotosHeader(totalBytes: browser.snapshot.totalBytes, count: browser.snapshot.items.count)
+                    PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
+                    Divider()
+                    QualityFilterBar(browser: browser)
+                    Divider()
+                    grid(browser)
+                    Divider()
+                    LibraryStatusLine(
+                        browser: browser, isScanning: photos.isScanning, scanningLabel: "Reading…",
+                        error: photos.loadError)
+                }
+            }
+        }
+        .navigationSubtitle(filteredSummary)
+        .toolbar { GridToolbar(browser: browser) }
+        .searchable(text: $browser.search, placement: .toolbar, prompt: "Search by name")
+    }
+
+    @ViewBuilder private func grid(_ browser: LibraryBrowser) -> some View {
+        @Bindable var browser = browser
+        let sections = model.photoSections
+        if sections.isEmpty {
+            Group {
+                if browser.quality.isActive && browser.search.isEmpty {
+                    ContentUnavailableView {
+                        Label("No matching videos", systemImage: "line.3.horizontal.decrease.circle")
+                    } description: {
+                        Text("No videos here match these filters.")
+                    } actions: {
+                        Button("Clear filters") { browser.quality = QualityFilter() }
+                    }
+                } else {
+                    ContentUnavailableView.search(text: browser.search)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            MediaGrid(sections: sections, selection: $browser.selection, onSpace: {}) { item, isSelected in
+                LibraryTile(item: item, isSelected: isSelected, thumbnails: model.thumbnailSource)
+                    .contextMenu { PhotoTileMenu() }
+            }
+        }
+    }
+
+    /// What the quality filters leave, for example "218 videos · 29.8 GB"; empty when none is set.
+    private var filteredSummary: String {
+        let browser = model.photosBrowser
+        guard browser.quality.isActive, !model.photos.items.isEmpty else { return "" }
+        let snapshot = browser.snapshot
+        return VideoCount.summary(count: snapshot.items.count, bytes: snapshot.totalBytes)
+    }
+}
+
+/// Nothing to show yet: loading, a failed read, or a library without videos.
+private struct PhotosEmpty: View {
+    let isLoading: Bool
+    let error: String?
+    let retry: () -> Void
+
+    var body: some View {
+        if let error {
+            ContentUnavailableView {
+                Label("Couldn't read Photos", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Try again", action: retry)
+            }
+        } else if isLoading {
+            ProgressView("Reading your Photos videos…")
+        } else {
+            EmptyState(
+                "No videos in Photos", systemImage: "photo.on.rectangle",
+                message: "Videos you record or import show up here.")
+        }
+    }
+}
+
+/// How much the videos take now. Nothing is estimated for Photos yet.
+private struct PhotosHeader: View {
+    let totalBytes: Int64
+    let count: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(totalBytes > 0 ? "\(ByteFormat.string(totalBytes)) in videos" : "Your Photos videos")
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            Text(
+                "\(count == 1 ? "1 video" : "\(count) videos") · Nothing in Photos changes until you convert a video"
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Small notes that never block the grid: limited access, and what Full Disk Access would add.
+private struct PhotosNotes: View {
+    let authorization: PhotoAuthorization
+    let indexStatus: PhotosIndexStatus?
+
+    var body: some View {
+        if authorization == .limited {
+            note(
+                "You gave access to some of your photos only, so other videos aren't listed.",
+                button: "Open Photos settings", url: PrivacySettings.photos)
+        }
+        switch indexStatus {
+        case .noAccess:
+            note(
+                "Frame rate and codec filters need Full Disk Access. Everything else works without it.",
+                button: "Open Full Disk Access", url: PrivacySettings.fullDiskAccess)
+        case .notFound, .unreadable:
+            note("Frame rate and codec aren't available for this Photos library.", button: nil, url: nil)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func note(_ text: String, button: String?, url: URL?) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle").foregroundStyle(.secondary).accessibilityHidden(true)
+            Text(text).foregroundStyle(.secondary)
+            if let button, let url {
+                Button(button) { PrivacySettings.open(url) }
+                    .buttonStyle(.link)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A tile's context menu on the Videos page; converting Photos videos isn't built yet.
+private struct PhotoTileMenu: View {
+    var body: some View {
+        Button("Add to queue", systemImage: "plus") {}
+            .disabled(true)
+            .help("Coming next")
+    }
+}
+
+/// The inspector for the Videos page: what the selected videos are, and the conversion controls, switched off
+/// until Photos videos can be queued.
+struct PhotosInspector: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        let items = model.selectedPhotoItems
+        if items.isEmpty {
+            EmptyState(
+                "No selection", systemImage: "rectangle.dashed",
+                message: "Select videos to see their details.")
+        } else {
+            Form {
+                if items.count == 1 {
+                    Section { ItemSummaryHeader(item: items[0], thumbnails: model.thumbnailSource) }
+                } else {
+                    Section {
+                        Text(
+                            "\(items.count) videos · \(ByteFormat.string(items.reduce(0) { $0 + $1.byteSize }))"
+                        )
+                        .font(.headline)
+                    }
+                }
+                Section("Convert") {
+                    Picker("Save to", selection: .constant(0)) {
+                        Text("Photos, as a new video").tag(0)
+                    }
+                    Toggle("Replace the original", isOn: .constant(false))
+                }
+                .disabled(true)
+                .help("Coming next")
+            }
+            .formStyle(.grouped)
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 4) {
+                    Button {
+                    } label: {
+                        Label("Add to queue", systemImage: "plus").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(true)
+                    .help("Coming next")
+                    Text("Converting Photos videos is coming next.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(12)
+                .background(.bar)
+            }
+        }
+    }
+}

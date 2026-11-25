@@ -7,7 +7,7 @@ import SwiftUI
 struct LibraryTile: View {
     let item: VideoItem
     let isSelected: Bool
-    let thumbnails: ThumbnailCache
+    let thumbnails: ThumbnailSource
     /// A preset chosen in the inspector for this video alone, when it isn't the header's.
     var presetOverride: String?
     @State private var image: CGImage?
@@ -21,9 +21,9 @@ struct LibraryTile: View {
         // Keyed on the whole item: a re-read in place (same path, new file) or a move loads the new poster.
         .task(id: item) {
             guard item.isAvailable else { return }
-            image = await thumbnails.thumbnail(for: item.url, maxPixel: 320)
+            image = await thumbnails.image(for: item, maxPixel: 320)
         }
-        .help(item.url.lastPathComponent)
+        .help(item.name)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             [ItemDescription.accessibilityLabel(for: item), presetOverride.map { "\($0) preset" }]
@@ -59,7 +59,7 @@ enum ItemDescription {
     }
 
     static func accessibilityLabel(for item: VideoItem) -> String {
-        var parts = [item.url.lastPathComponent, ByteFormat.string(item.byteSize)]
+        var parts = [item.name, ByteFormat.string(item.byteSize)]
         parts += MediaBadge.ordered(item.badges).map(\.displayName)
         parts += [date(item), duration(item)].compactMap { $0 }
         if !item.isAvailable { parts.append("missing") }

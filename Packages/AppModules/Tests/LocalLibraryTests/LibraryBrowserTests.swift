@@ -25,11 +25,11 @@ import Testing
     }
 
     private func id(_ name: String, in browser: LibraryBrowser) throws -> UUID {
-        try #require(browser.library.items.first { $0.url.lastPathComponent == name }).id
+        try #require(browser.collection.items.first { $0.name == name }).id
     }
 
     @Test func selectionChangesDoNotRebuildSectionsOrSavings() throws {
-        let browser = LibraryBrowser(library: try makeLibrary())
+        let browser = LibraryBrowser(collection: try makeLibrary())
         var savingsComputes = 0
         func savings(_ key: String = "balanced") -> Int64 {
             browser.cached(key) { snapshot in
@@ -60,7 +60,7 @@ import Testing
 
         // A real input change rebuilds both.
         browser.search = "alp"
-        #expect(browser.snapshot.items.map(\.url.lastPathComponent) == ["alpha.mov"])
+        #expect(browser.snapshot.items.map(\.name) == ["alpha.mov"])
         #expect(savings() == 50)
         #expect(browser.snapshotBuilds == 2)
         #expect(savingsComputes == 3)
@@ -68,7 +68,7 @@ import Testing
 
     @Test func libraryAndQueryChangesRebuild() throws {
         let library = try makeLibrary()
-        let browser = LibraryBrowser(library: library)
+        let browser = LibraryBrowser(collection: library)
         _ = browser.snapshot
         browser.grouping = .none
         _ = browser.snapshot
@@ -84,7 +84,7 @@ import Testing
     }
 
     @Test func hiddenSelectedItemsAreNeverSelected() throws {
-        let browser = LibraryBrowser(library: try makeLibrary())
+        let browser = LibraryBrowser(collection: try makeLibrary())
         let alpha = try id("alpha.mov", in: browser)
         let beta = try id("beta.mov", in: browser)
         browser.selection = [alpha, beta]
@@ -120,7 +120,7 @@ import Testing
     }
 
     @Test func qualityFilterNarrowsTotalsAndRebuildsDerivedValues() throws {
-        let browser = LibraryBrowser(library: try makeMixedLibrary())
+        let browser = LibraryBrowser(collection: try makeMixedLibrary())
         var computes = 0
         func savings() -> Int64 {
             browser.cached("balanced") { snapshot in
@@ -136,7 +136,7 @@ import Testing
 
         // The filter is part of the query: the snapshot and the cached savings follow it.
         browser.quality.qualities = [.fullHD(.fps30)]
-        #expect(browser.snapshot.items.map(\.url.lastPathComponent) == ["gamma.mov", "beta.mov"])
+        #expect(browser.snapshot.items.map(\.name) == ["gamma.mov", "beta.mov"])
         #expect(browser.snapshot.totalBytes == 500)
         #expect(savings() == 250)
         #expect(computes == 2)
@@ -153,7 +153,7 @@ import Testing
 
         // AND with search and the media-type filter.
         browser.search = "beta"
-        #expect(browser.snapshot.items.map(\.url.lastPathComponent) == ["beta.mov"])
+        #expect(browser.snapshot.items.map(\.name) == ["beta.mov"])
         browser.search = ""
         browser.filter = .k4
         #expect(browser.snapshot.items.isEmpty)
@@ -167,7 +167,7 @@ import Testing
     }
 
     @Test func qualityFilterHidesSelectedItems() throws {
-        let browser = LibraryBrowser(library: try makeMixedLibrary())
+        let browser = LibraryBrowser(collection: try makeMixedLibrary())
         let alpha = try id("alpha.mov", in: browser)
         let beta = try id("beta.mov", in: browser)
         browser.selection = [alpha, beta]
