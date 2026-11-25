@@ -19,11 +19,13 @@ public enum DownscaleRunnerError: Error, LocalizedError, Equatable {
 public struct DownscaleRunner: JobRunner {
     /// Moves a file to the Trash and returns where it went.
     public typealias Trasher = @Sendable (URL) throws -> URL
+    typealias Sizer = @Sendable (URL) throws -> Int64
     typealias Inspector = @Sendable (URL) async throws -> MetadataInventory
 
     private static let maxNamingAttempts = 3
     private let trash: Trasher
     private let inspect: Inspector
+    private let sizeOf: Sizer
 
     public init() {
         self.init(trash: Self.trashItem)
@@ -33,8 +35,10 @@ public struct DownscaleRunner: JobRunner {
     /// output's metadata (a test can make the output look unfaithful).
     init(
         trash: @escaping Trasher,
-        inspect: @escaping Inspector = { try await MediaInspector().inventory(of: $0) }
+        inspect: @escaping Inspector = { try await MediaInspector().inventory(of: $0) },
+        sizeOf: @escaping Sizer = { try DownscaleRunner.fileSize($0) }
     ) {
+        self.sizeOf = sizeOf
         self.trash = trash
         self.inspect = inspect
     }
@@ -71,6 +75,14 @@ public struct DownscaleRunner: JobRunner {
             return .keptAsIs(reason: "Already small")
         }
 
+        // The estimate can overstate the saving (heavy audio counted as video). If the real output is not at least
+        // 10% smaller, remove our own output and keep the original untouched.
+        let outputSize = try sizeOf(output)
+        if outputSize >= byteSize * 9 / 10 {
+            try? FileManager.default.removeItem(at: output)
+            return .keptAsIs(reason: "Would save less than 10%")
+        }
+
         let outputInventory = try await inspect(output)
         let report = MetadataDiff.report(source: inventory, output: outputInventory)
         let verified = Self.isVerified(report, predicted: predicted, spec: spec)
@@ -86,7 +98,7 @@ public struct DownscaleRunner: JobRunner {
         }
         return .completed(
             JobOutcome(
-                output: finalURL, bytesBefore: byteSize, bytesAfter: try Self.fileSize(finalURL),
+                output: finalURL, bytesBefore: byteSize, bytesAfter: outputSize,
                 report: report, replacedOriginal: replaced))
     }
 
@@ -163,7 +175,7 @@ public struct DownscaleRunner: JobRunner {
         return url.standardizedFileURL.pathComponents.contains(".Trashes")
     }
 
-    private static func fileSize(_ url: URL) throws -> Int64 {
+    static func fileSize(_ url: URL) throws -> Int64 {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         return (attributes[.size] as? NSNumber)?.int64Value ?? 0
     }

@@ -236,7 +236,8 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let called = Mutex(false)
-        // The output reads back with a changed bit depth and no audio: unverified either way.
+        // The output reads back with a bit depth that differs from the 8-bit source, audio intact: only the
+        // unexpected change makes it unverified.
         let runner = DownscaleRunner(
             trash: { url in
                 called.withLock { $0 = true }
@@ -244,9 +245,9 @@ import Testing
             },
             inspect: { url in
                 var inventory = try await MediaInspector().inventory(of: url)
-                inventory.items = inventory.items.filter { !$0.key.hasPrefix("audio.") }.map {
+                inventory.items = inventory.items.map {
                     $0.key == "video.bitDepth"
-                        ? MetadataItem(key: $0.key, category: $0.category, displayName: $0.displayName, value: "8")
+                        ? MetadataItem(key: $0.key, category: $0.category, displayName: $0.displayName, value: "10")
                         : $0
                 }
                 return inventory
@@ -264,7 +265,8 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: source.path))
         #expect(FileManager.default.fileExists(atPath: outcome.output.path))
         #expect(outcome.output != source)
-        #expect(!outcome.report.lost.isEmpty)
+        #expect(outcome.report.lost.isEmpty)
+        #expect(outcome.report.changed.contains { $0.key == "video.bitDepth" })
     }
 
     @Test(.timeLimit(.minutes(2))) func failedTrashKeepsBothFiles() async throws {
@@ -272,7 +274,11 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         struct Refused: Error {}
-        let runner = DownscaleRunner(trash: { _ in throw Refused() })
+        let called = Mutex(false)
+        let runner = DownscaleRunner(trash: { _ in
+            called.withLock { $0 = true }
+            throw Refused()
+        })
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try job(source, settings)) { _ in }
@@ -281,6 +287,7 @@ import Testing
             Issue.record("expected completed, got \(state)")
             return
         }
+        #expect(called.withLock { $0 })
         #expect(!outcome.replacedOriginal)
         #expect(FileManager.default.fileExists(atPath: source.path))
         #expect(outcome.output.lastPathComponent == "x (1080p).mov")
@@ -298,5 +305,28 @@ import Testing
         let state = try await DownscaleRunner().run(try job(source, settings)) { _ in }
 
         #expect(state == .keptAsIs(reason: "Would save less than 10%"))
+    }
+
+    @Test(.timeLimit(.minutes(2))) func outputNotSmallEnoughIsRemovedAndKeptAsIs() async throws {
+        let source = try await makeSource()
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let called = Mutex(false)
+        // Make the finished output look as big as the original.
+        let runner = DownscaleRunner(
+            trash: { url in
+                called.withLock { $0 = true }
+                return url
+            },
+            sizeOf: { url in try DownscaleRunner.fileSize(url.lastPathComponent.hasPrefix("x (") ? source : url) })
+        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+
+        let state = try await runner.run(try job(source, settings)) { _ in }
+
+        #expect(state == .keptAsIs(reason: "Would save less than 10%"))
+        #expect(!called.withLock { $0 })
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        #expect(names == [source.lastPathComponent])
     }
 }
