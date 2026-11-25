@@ -21,7 +21,10 @@ struct LocalFilesView: View {
                 }
             } else {
                 VStack(spacing: 0) {
-                    SavingsHeader(couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes) {
+                    SavingsHeader(
+                        couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
+                        availableCount: browser.snapshot.items.count(where: \.isAvailable)
+                    ) {
                         PresetPicker("Quality preset", selection: $model.preset, options: Preset.allCases) {
                             $0.displayName
                         }

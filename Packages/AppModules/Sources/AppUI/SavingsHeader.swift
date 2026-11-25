@@ -5,6 +5,8 @@ import SwiftUI
 struct SavingsSummary: Equatable {
     let couldFree: Int64
     let totalBytes: Int64
+    /// How many of the shown videos are available (not missing).
+    let availableCount: Int
 
     var showsBar: Bool { couldFree > 0 }
 
@@ -17,9 +19,10 @@ struct SavingsSummary: Equatable {
 
     var detail: String {
         guard showsBar else {
-            return totalBytes > 0
-                ? "These videos are already small or wouldn't get meaningfully smaller"
-                : "No videos to convert here"
+            guard totalBytes > 0 else { return "No videos to convert here" }
+            return availableCount == 0
+                ? "None of these videos are available right now."
+                : "These videos are already small or wouldn't get meaningfully smaller"
         }
         return "\(ByteFormat.string(totalBytes)) now → about \(ByteFormat.string(afterBytes)) after · "
             + "Nothing changes until you add to the queue"
@@ -38,8 +41,8 @@ public struct SavingsHeader<Accessory: View>: View {
     let summary: SavingsSummary
     let accessory: Accessory
 
-    public init(couldFree: Int64, totalBytes: Int64, @ViewBuilder accessory: () -> Accessory) {
-        self.summary = SavingsSummary(couldFree: couldFree, totalBytes: totalBytes)
+    public init(couldFree: Int64, totalBytes: Int64, availableCount: Int, @ViewBuilder accessory: () -> Accessory) {
+        self.summary = SavingsSummary(couldFree: couldFree, totalBytes: totalBytes, availableCount: availableCount)
         self.accessory = accessory()
     }
 
