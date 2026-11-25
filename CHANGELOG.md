@@ -9,6 +9,9 @@ First public release.
 
 ### Added
 
+- **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
+  waiting jobs (a paused queue doesn't hold it).
+
 - **Downscale Video:** shrinks 4K iPhone video to 1080p (or 1440p or 720p) in HEVC or H.264, keeping Dolby Vision HDR,
   location, capture date, camera make and model and other metadata. Anything that would be lost is shown before the
   video is queued, and you decide.

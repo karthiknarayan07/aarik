@@ -6,11 +6,15 @@ public struct FetchedInput: Sendable, Equatable {
     /// True when the file is Photos' rendering of the edited version; false for the original resource.
     public let isEditedVersion: Bool
     public let bytes: Int64
+    /// The video as Photos described it when the fetch began, before anything was downloaded: the baseline for
+    /// "did it change meanwhile" (a download can take many minutes) and the source of the copy's date and location.
+    public let asset: PhotoAsset
 
-    public init(url: URL, isEditedVersion: Bool, bytes: Int64) {
+    public init(url: URL, isEditedVersion: Bool, bytes: Int64, asset: PhotoAsset) {
         self.url = url
         self.isEditedVersion = isEditedVersion
         self.bytes = bytes
+        self.asset = asset
     }
 }
 
@@ -50,11 +54,38 @@ public struct PhotoInputFetcher: Sendable {
         self.store = store
     }
 
+    /// The video's current metadata (whether it was edited, its duration and so on), without downloading anything.
+    ///
+    /// - Throws: `PhotoFetchError` only.
+    public func asset(id: String) async throws -> PhotoAsset {
+        do {
+            return try await store.asset(id: id)
+        } catch {
+            throw Self.map(error)
+        }
+    }
+
     /// Fetches `id` into `workFolder` (which must exist; see `WorkFolder.create(for:)`).
     ///
     /// - Throws: `PhotoFetchError` only.
     public func fetch(
         id: String, into workFolder: URL, progress: @escaping @Sendable (FetchProgress) -> Void = { _ in }
+    ) async throws -> FetchedInput {
+        try await fetch(id: id, into: workFolder, originalOnly: false, progress: progress)
+    }
+
+    /// Fetches the original resource of `id` even when the video was edited, for a copy of the original kept
+    /// before a Replace. Its file keeps the original's name, so it sits beside the edited version's export.
+    ///
+    /// - Throws: `PhotoFetchError` only.
+    public func fetchOriginal(
+        id: String, into workFolder: URL, progress: @escaping @Sendable (FetchProgress) -> Void = { _ in }
+    ) async throws -> FetchedInput {
+        try await fetch(id: id, into: workFolder, originalOnly: true, progress: progress)
+    }
+
+    private func fetch(
+        id: String, into workFolder: URL, originalOnly: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
     ) async throws -> FetchedInput {
         let asset: PhotoAsset
         do {
@@ -63,7 +94,7 @@ public struct PhotoInputFetcher: Sendable {
         } catch {
             throw Self.map(error)
         }
-        let isEdited = asset.hasAdjustments
+        let isEdited = asset.hasAdjustments && !originalOnly
         let url = workFolder.appending(
             path: Self.fileName(for: asset, isEdited: isEdited), directoryHint: .notDirectory)
         // Every delete goes through the containment check: only a file inside the job folder is removed.
@@ -78,7 +109,7 @@ public struct PhotoInputFetcher: Sendable {
             try Task.checkCancellation()
             let bytes = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
             guard bytes > 0 else { throw PhotoFetchError.failed("Photos wrote an empty file.") }
-            return FetchedInput(url: url, isEditedVersion: isEdited, bytes: bytes)
+            return FetchedInput(url: url, isEditedVersion: isEdited, bytes: bytes, asset: asset)
         } catch {
             jobFolder.remove(url)
             throw Self.map(error)
@@ -87,7 +118,7 @@ public struct PhotoInputFetcher: Sendable {
 
     /// The original's own name (its last path component only), or the same stem with `-edited.mov` for the
     /// export, so a second fetch of the original into the same folder keeps its own file.
-    static func fileName(for asset: PhotoAsset, isEdited: Bool) -> String {
+    public static func fileName(for asset: PhotoAsset, isEdited: Bool) -> String {
         var name = asset.originalFileName.split(separator: "/").last.map(String.init) ?? ""
         // A name that is empty or points at the folder itself or its parent is never used as a file name.
         if ["", ".", "..", "/"].contains(name) { name = "video.mov" }

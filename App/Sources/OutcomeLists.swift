@@ -42,7 +42,7 @@ private struct CompletedRow: View {
         HStack(spacing: 12) {
             JobThumbnail(url: outcome.output, thumbnails: thumbnails)
             VStack(alignment: .leading, spacing: 4) {
-                Text(outcome.output.lastPathComponent)
+                Text(outcome.output.isFileURL ? outcome.output.lastPathComponent : job.displayName)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 HStack(spacing: 6) {
@@ -69,7 +69,8 @@ private struct CompletedRow: View {
             ReportBadge(outcome: outcome) {
                 if !outcome.isVerified { WhyInline(assistant: assistant, job: job, outcome: outcome) }
             }
-            ShowInFinderButton(url: outcome.output)
+            // A new video in Photos has no file to reveal.
+            if outcome.output.isFileURL { ShowInFinderButton(url: outcome.output) }
         }
         .padding(.vertical, 2)
     }
@@ -147,7 +148,7 @@ private struct ReasonRow<Actions: View>: View {
             Spacer()
             WhyButton(assistant: assistant, job: job, outcome: nil)
             actions
-            ShowInFinderButton(url: job.source)
+            if job.source.isFileURL { ShowInFinderButton(url: job.source) }
         }
         .padding(.vertical, 2)
     }

@@ -35,6 +35,7 @@ extension AppModel {
 
     private func receive(_ jobs: [Job]) {
         self.jobs = jobs
+        relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused)
         activity = ActivitySummary(jobs: jobs)
         if let summary = runTracker.observe(jobs) {
             notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))
@@ -48,7 +49,9 @@ extension AppModel {
     /// finished before this session are taken as already reflected.
     private func reconcileReplacedFiles(_ jobs: [Job]) {
         let replaced = jobs.compactMap { job -> (id: UUID, sources: [URL], output: URL)? in
-            guard case .completed(let outcome) = job.state, outcome.replacedOriginal else { return nil }
+            guard case .completed(let outcome) = job.state, outcome.replacedOriginal, outcome.output.isFileURL else {
+                return nil
+            }
             return (job.id, [job.sourceUsed, job.source], outcome.output)
         }
         guard var handled = reconciledReplaceIDs else {

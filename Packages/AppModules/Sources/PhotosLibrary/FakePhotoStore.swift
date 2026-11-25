@@ -19,8 +19,37 @@ public final class FakePhotoStore: PhotoStore {
         var inputBytes = 1_000
         var inputSteps = 4
         var inputError: PhotoStoreError?
+        var originalFiles: [String: URL] = [:]
+        var currentVersionFiles: [String: URL] = [:]
         var beforeInputStep: (@Sendable (Int) async -> Void)?
         var inputRequests: [InputRequest] = []
+        var existingAlbums: Set<String> = []
+        var saveError: PhotoStoreError?
+        var deleteError: (any Error)?
+        var savedPixelSize = CGSize(width: 1920, height: 1080)
+        var savedDuration: Double?
+        var savedByteSize: Int64?
+        var adjustSaved: (@Sendable (PhotoAsset) -> PhotoAsset)?
+        var afterSave: (@Sendable () -> Void)?
+        var saves: [SaveRecord] = []
+        var deletedIDs: [String] = []
+        var operations: [Operation] = []
+        var savedCount = 0
+    }
+
+    /// A save the fake served: what it was asked for and what it did.
+    public struct SaveRecord: Sendable, Equatable {
+        public let request: PhotoSaveRequest
+        /// The albums the new asset was actually added to: the requested ones that exist, in order.
+        public let addedAlbums: [String]
+        public let newID: String
+    }
+
+    /// The calls that reach the library, in order, so a test can check what happened after what.
+    public enum Operation: Sendable, Equatable {
+        case save
+        case fetch(String)
+        case delete([String])
     }
 
     /// What a test can see of a fetch the fake served.
@@ -104,6 +133,19 @@ public final class FakePhotoStore: PhotoStore {
         set { state.withLock { $0.inputSteps = max(newValue, 1) } }
     }
 
+    /// Files a fetch of the original resource writes (their contents, in `inputSteps` chunks) in place of filler,
+    /// by asset identifier; a test that converts the input needs a real video here.
+    public var originalFiles: [String: URL] {
+        get { state.withLock { $0.originalFiles } }
+        set { state.withLock { $0.originalFiles = newValue } }
+    }
+
+    /// Like `originalFiles`, for the export of the current (edited) version.
+    public var currentVersionFiles: [String: URL] {
+        get { state.withLock { $0.currentVersionFiles } }
+        set { state.withLock { $0.currentVersionFiles = newValue } }
+    }
+
     /// When set, a fetch writes its first chunk and then throws it, like a download that broke off.
     public var inputError: PhotoStoreError? {
         get { state.withLock { $0.inputError } }
@@ -119,6 +161,63 @@ public final class FakePhotoStore: PhotoStore {
 
     /// The fetches started so far, in order.
     public var inputRequests: [InputRequest] { state.withLock { $0.inputRequests } }
+
+    /// Identifiers of the albums that exist; a save adds the new asset only to these.
+    public var existingAlbums: Set<String> {
+        get { state.withLock { $0.existingAlbums } }
+        set { state.withLock { $0.existingAlbums = newValue } }
+    }
+
+    /// When set, `saveVideo` throws it and adds nothing.
+    public var saveError: PhotoStoreError? {
+        get { state.withLock { $0.saveError } }
+        set { state.withLock { $0.saveError = newValue } }
+    }
+
+    /// When set, `deleteAssets` throws it and deletes nothing (`CancellationError` plays a declined confirmation).
+    public var deleteError: (any Error)? {
+        get { state.withLock { $0.deleteError } }
+        set { state.withLock { $0.deleteError = newValue } }
+    }
+
+    /// The pixel size a saved asset reports (default 1920x1080).
+    public var savedPixelSize: CGSize {
+        get { state.withLock { $0.savedPixelSize } }
+        set { state.withLock { $0.savedPixelSize = newValue } }
+    }
+
+    /// The duration a saved asset reports; nil (the default) is 10 s.
+    public var savedDuration: Double? {
+        get { state.withLock { $0.savedDuration } }
+        set { state.withLock { $0.savedDuration = newValue } }
+    }
+
+    /// The resource size a saved asset reports; nil (the default) is the size of the saved file.
+    public var savedByteSize: Int64? {
+        get { state.withLock { $0.savedByteSize } }
+        set { state.withLock { $0.savedByteSize = newValue } }
+    }
+
+    /// Changes the asset a save stores before it is added, to play Photos storing something else.
+    public var adjustSaved: (@Sendable (PhotoAsset) -> PhotoAsset)? {
+        get { state.withLock { $0.adjustSaved } }
+        set { state.withLock { $0.adjustSaved = newValue } }
+    }
+
+    /// Runs after each save has added its asset, so a test can change the library while a job is still running.
+    public var afterSave: (@Sendable () -> Void)? {
+        get { state.withLock { $0.afterSave } }
+        set { state.withLock { $0.afterSave = newValue } }
+    }
+
+    /// The saves served so far, in order.
+    public var saves: [SaveRecord] { state.withLock { $0.saves } }
+
+    /// Identifiers passed to `deleteAssets` that were deleted, in order.
+    public var deletedIDs: [String] { state.withLock { $0.deletedIDs } }
+
+    /// Saves, `asset(id:)` fetches and deletes, in the order they happened.
+    public var operations: [Operation] { state.withLock { $0.operations } }
 
     /// Number of open `changes()` streams.
     public var subscriberCount: Int { state.withLock { $0.subscribers.count } }
@@ -174,10 +273,57 @@ public final class FakePhotoStore: PhotoStore {
     }
 
     public func asset(id: String) async throws -> PhotoAsset {
+        state.withLock { $0.operations.append(.fetch(id)) }
         guard let asset = state.withLock({ state in state.assets.first { $0.id == id } }) else {
             throw PhotoStoreError.notInLibrary(id)
         }
         return asset
+    }
+
+    public func saveVideo(_ request: PhotoSaveRequest) async throws -> String {
+        let size = (try? request.file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+        let id = try addSavedAsset(request, size: size)
+        afterSave?()
+        return id
+    }
+
+    private func addSavedAsset(_ request: PhotoSaveRequest, size: Int64?) throws -> String {
+        try state.withLock { state in
+            state.operations.append(.save)
+            guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
+            if let error = state.saveError { throw error }
+            state.savedCount += 1
+            let id = "new-\(state.savedCount)"
+            let added = request.albumsToAdd(existing: state.existingAlbums)
+            var asset = PhotoAsset(
+                id: id, creationDate: request.creationDate, location: request.location,
+                pixelSize: state.savedPixelSize, duration: state.savedDuration ?? 10,
+                isFavorite: request.isFavorite, isHidden: request.isHidden,
+                // Photos marks a new asset with a subtype bit that has no name.
+                subtypes: PhotoSubtypes(rawValue: 1 << 20), originalFileName: request.file.lastPathComponent,
+                originalByteSize: state.savedByteSize ?? size ?? 1, isLocallyAvailable: true,
+                modificationDate: request.creationDate)
+            if let adjust = state.adjustSaved { asset = adjust(asset) }
+            state.assets.append(asset)
+            state.albums[id] = added
+            state.saves.append(SaveRecord(request: request, addedAlbums: added, newID: id))
+            return id
+        }
+    }
+
+    public func deleteAssets(ids: [String]) async throws {
+        try state.withLock { state in
+            state.operations.append(.delete(ids))
+            guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
+            if let error = state.deleteError { throw error }
+            // Like the real store: nothing is deleted when any asset is missing.
+            if let missing = ids.first(where: { id in !state.assets.contains { $0.id == id } }) {
+                throw PhotoStoreError.notInLibrary(missing)
+            }
+            state.assets.removeAll { ids.contains($0.id) }
+            for id in ids { state.albums[id] = nil }
+            state.deletedIDs.append(contentsOf: ids)
+        }
     }
 
     public func writeOriginal(
@@ -197,11 +343,12 @@ public final class FakePhotoStore: PhotoStore {
     private func simulate(
         id: String, kind: InputRequest.Kind, url: URL, progress: @Sendable (FetchProgress) -> Void
     ) async throws {
-        let (known, bytes, steps, error, hook) = state.withLock { state in
+        let (known, bytes, steps, error, hook, given) = state.withLock { state in
             state.inputRequests.append(InputRequest(id: id, kind: kind, url: url))
+            let files = kind == .original ? state.originalFiles : state.currentVersionFiles
             return (
                 state.assets.contains { $0.id == id }, state.inputBytes, state.inputSteps, state.inputError,
-                state.beforeInputStep
+                state.beforeInputStep, files[id].flatMap { try? Data(contentsOf: $0) }
             )
         }
         guard known else { throw PhotoStoreError.notInLibrary(id) }
@@ -211,8 +358,16 @@ public final class FakePhotoStore: PhotoStore {
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         let chunk = Data(repeating: 0x2A, count: max(bytes / steps, 1))
+        let chunkSize = given.map { max($0.count / steps, 1) } ?? 0
         for step in 1...steps {
-            try handle.write(contentsOf: chunk)
+            if let given {
+                // The last chunk takes what the division left over.
+                let start = min((step - 1) * chunkSize, given.count)
+                let end = step == steps ? given.count : min(step * chunkSize, given.count)
+                try handle.write(contentsOf: given[start..<end])
+            } else {
+                try handle.write(contentsOf: chunk)
+            }
             progress(.downloading(Double(step) / Double(steps)))
             await hook?(step)
             try Task.checkCancellation()
