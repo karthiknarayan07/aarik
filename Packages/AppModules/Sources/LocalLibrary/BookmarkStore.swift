@@ -25,6 +25,8 @@ public struct BookmarkStore: Sendable {
     public struct Resolved: Sendable {
         public let url: URL
         public let refreshedBookmark: Data?
+        /// The file now sits in a Trash folder; callers treat it as gone and keep the original path.
+        public let isTrashed: Bool
     }
 
     public let directory: URL
@@ -65,13 +67,29 @@ public struct BookmarkStore: Sendable {
     /// no longer resolves, as for a deleted file.
     public static func resolve(_ entry: Entry) -> Resolved {
         let stored = URL(filePath: entry.path)
-        guard let bookmark = entry.bookmark else { return Resolved(url: stored, refreshedBookmark: nil) }
+        guard let bookmark = entry.bookmark else {
+            return Resolved(url: stored, refreshedBookmark: nil, isTrashed: isInTrash(stored))
+        }
         var stale = false
         guard
             let url = try? URL(
                 resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
-        else { return Resolved(url: stored, refreshedBookmark: nil) }
+        else { return Resolved(url: stored, refreshedBookmark: nil, isTrashed: isInTrash(stored)) }
+        if isInTrash(url) { return Resolved(url: stored, refreshedBookmark: nil, isTrashed: true) }
         let moved = url.path != entry.path
-        return Resolved(url: url, refreshedBookmark: (stale || moved) ? makeBookmark(for: url) : nil)
+        return Resolved(url: url, refreshedBookmark: (stale || moved) ? makeBookmark(for: url) : nil, isTrashed: false)
+    }
+
+    /// True for a file inside the user's Trash or any volume's `.Trashes` folder.
+    public static func isInTrash(_ url: URL) -> Bool {
+        let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+        if resolved.pathComponents.contains(where: { $0 == ".Trashes" || $0 == ".Trash" }) { return true }
+        if let trash = try? FileManager.default.url(
+            for: .trashDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        {
+            let prefix = trash.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+            return resolved.path.hasPrefix(prefix)
+        }
+        return false
     }
 }

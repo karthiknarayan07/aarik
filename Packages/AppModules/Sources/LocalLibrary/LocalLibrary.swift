@@ -19,11 +19,18 @@ public final class LocalLibrary {
     @ObservationIgnored private var worker: Task<Void, Never>?
     /// Identifies the current worker, so a cancelled one finishing late cannot reset a newer scan's state.
     @ObservationIgnored private var workerID = UUID()
+    /// Path key of every item, computed once per item and kept in step with `items`.
+    @ObservationIgnored private var pathKeys = Set<String>()
+    @ObservationIgnored private var keyByID: [UUID: String] = [:]
+    @ObservationIgnored private let persistence: LibraryPersistence
+    @ObservationIgnored private var saveDirty = false
+    @ObservationIgnored private var saver: Task<Void, Never>?
     @ObservationIgnored private var cancelledWorkers: [Task<Void, Never>] = []
 
     /// Restores what the store remembers; files that are gone come back with `isAvailable == false`.
     public init(store: BookmarkStore, scanner: LibraryScanner = LibraryScanner(), batchSize: Int = 50) {
         self.store = store
+        self.persistence = LibraryPersistence(store: store)
         self.scanner = scanner
         self.batchSize = batchSize
         restore()
@@ -75,7 +82,7 @@ public final class LocalLibrary {
     /// Returns once no scan is running or queued.
     public func waitUntilIdle() async {
         while true {
-            let running = cancelledWorkers + (worker.map { [$0] } ?? [])
+            let running = cancelledWorkers + (worker.map { [$0] } ?? []) + (saver.map { [$0] } ?? [])
             if running.isEmpty { return }
             for task in running { await task.value }
             cancelledWorkers.removeAll()
@@ -85,14 +92,18 @@ public final class LocalLibrary {
     /// Removes items from the library only; the files are untouched.
     public func remove(_ ids: Set<UUID>) {
         items.removeAll { ids.contains($0.id) }
-        for id in ids { entries[id] = nil }
+        for id in ids {
+            entries[id] = nil
+            if let key = keyByID.removeValue(forKey: id) { pathKeys.remove(key) }
+        }
         persist()
     }
 
     /// Re-checks which files still exist.
     public func refreshAvailability() {
         for index in items.indices {
-            items[index].isAvailable = FileManager.default.fileExists(atPath: items[index].url.path)
+            let url = items[index].url
+            items[index].isAvailable = FileManager.default.fileExists(atPath: url.path) && !BookmarkStore.isInTrash(url)
         }
     }
 
@@ -101,8 +112,7 @@ public final class LocalLibrary {
     private func drain(_ id: UUID) async {
         while !pending.isEmpty, !Task.isCancelled, workerID == id {
             let urls = pending.removeFirst()
-            let known = Set(items.map { LibraryScanner.pathKey($0.url) })
-            await scanner.scan(urls, excluding: known, batchSize: batchSize) { [weak self] batch in
+            await scanner.scan(urls, excluding: pathKeys, batchSize: batchSize) { [weak self] batch in
                 await self?.receive(batch)
             }
         }
@@ -113,10 +123,11 @@ public final class LocalLibrary {
     }
 
     private func receive(_ batch: [ScannedFile]) {
-        var known = Set(items.map { LibraryScanner.pathKey($0.url) })
         for file in batch {
             let item = file.item
-            guard known.insert(LibraryScanner.pathKey(item.url)).inserted else { continue }
+            let key = LibraryScanner.pathKey(item.url)
+            guard pathKeys.insert(key).inserted else { continue }
+            keyByID[item.id] = key
             items.append(item)
             entries[item.id] = BookmarkStore.Entry(
                 id: item.id, path: item.url.path, bookmark: file.bookmark, byteSize: item.byteSize,
@@ -143,24 +154,54 @@ public final class LocalLibrary {
                 entry.path = resolved.url.path
                 refreshed = true
             }
-            let available = FileManager.default.fileExists(atPath: resolved.url.path)
+            let available = !resolved.isTrashed && FileManager.default.fileExists(atPath: resolved.url.path)
             guard
                 let item = LibraryItemBuilder.build(
                     url: resolved.url, inventory: entry.inventory, byteSize: entry.byteSize, id: entry.id,
                     isAvailable: available)
             else { continue }
+            let key = LibraryScanner.pathKey(item.url)
+            guard pathKeys.insert(key).inserted else { continue }
+            keyByID[item.id] = key
             items.append(item)
             entries[entry.id] = entry
         }
         if refreshed { persist() }
     }
 
+    /// Marks the library changed and makes sure a saver is running. Encoding and writing happen off the main
+    /// actor, and changes made while a write is in flight collapse into one more write of the latest state.
     private func persist() {
+        saveDirty = true
+        guard saver == nil else { return }
+        saver = Task { await saveLoop() }
+    }
+
+    private func saveLoop() async {
+        while saveDirty {
+            saveDirty = false
+            let snapshot = items.compactMap { entries[$0.id] }
+            persistenceError = await persistence.write(snapshot)
+        }
+        saver = nil
+    }
+}
+
+/// Writes snapshots of the library off the main actor.
+actor LibraryPersistence {
+    private let store: BookmarkStore
+
+    init(store: BookmarkStore) {
+        self.store = store
+    }
+
+    /// Saves the snapshot atomically; returns a message when that failed.
+    func write(_ entries: [BookmarkStore.Entry]) -> String? {
         do {
-            try store.save(items.compactMap { entries[$0.id] })
-            persistenceError = nil
+            try store.save(entries)
+            return nil
         } catch {
-            persistenceError = "Could not save the library: \(error.localizedDescription)"
+            return "Could not save the library: \(error.localizedDescription)"
         }
     }
 }
