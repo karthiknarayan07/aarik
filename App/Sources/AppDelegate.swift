@@ -40,6 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         if !files.isEmpty { model.openFiles(files) }
         for runID in responses { Task { await model.reviewQuickRun(runID) } }
+        // SwiftUI fills in its menus just after launch.
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            MenuFixups.apply()
+        }
         #if DEBUG
             if PhotosSpike.isRequested { PhotosSpike.start() }
         #endif
@@ -87,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// Files may have been moved, deleted or restored while the app was in the background.
     func applicationDidBecomeActive(_ notification: Notification) {
+        MenuFixups.apply()
         refreshLibrary()
     }
 
