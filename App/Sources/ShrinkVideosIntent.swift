@@ -82,12 +82,24 @@ struct ShrinkVideosIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[IntentFile]> & ProvidesDialog {
+        // A video with a file is read where it is. One that came as data only is copied by the app, off the main
+        // actor, and its result goes to a folder you can see.
+        let given = files ?? []
+        var dataInputs: [ShrinkDataInput] = []
+        var urls: [URL] = []
+        for file in given {
+            if let url = file.fileURL {
+                urls.append(url)
+            } else if !file.data.isEmpty {
+                dataInputs.append(ShrinkDataInput(name: file.filename, data: file.data))
+            }
+        }
         let request = ShrinkVideosRequest(
-            files: (files ?? []).compactMap(IntentStaging.url(for:)), quality: quality?.choice,
-            format: format?.choice, destination: destination?.choice, folder: folder.flatMap(IntentStaging.url(for:)),
-            dateRange: dateRange?.choice, resolution: resolution?.choice, source: source?.choice,
-            waitForCompletion: waitForCompletion)
-        let outcome = await AppModel.shared.shrinkVideos(request)
+            files: urls, quality: quality?.choice, format: format?.choice, destination: destination?.choice,
+            folder: folder?.fileURL, dateRange: dateRange?.choice, resolution: resolution?.choice,
+            source: source?.choice, waitForCompletion: waitForCompletion)
+        let outcome = await AppModel.shared.shrinkVideos(
+            request, dataInputs: dataInputs, providedCount: given.count)
         switch outcome {
         case .needsVideos:
             throw $files.needsValueError("Which videos do you want to shrink?")
@@ -95,8 +107,8 @@ struct ShrinkVideosIntent: AppIntent {
             throw ShrinkVideosIntentError(message: outcome.message)
         case .nothingMatched:
             return .result(value: [], dialog: IntentDialog(Self.resource(outcome.message)))
-        case .queued(_, let outputs):
-            let files = (outputs ?? []).map { IntentFile(fileURL: $0, filename: $0.lastPathComponent) }
+        case .queued:
+            let files = (outcome.outputs ?? []).map { IntentFile(fileURL: $0, filename: $0.lastPathComponent) }
             return .result(value: files, dialog: IntentDialog(Self.resource(outcome.message)))
         }
     }
@@ -112,27 +124,6 @@ struct ShrinkVideosIntentError: Error, CustomLocalizedStringResourceConvertible 
 
     var localizedStringResource: LocalizedStringResource {
         LocalizedStringResource(String.LocalizationValue(message))
-    }
-}
-
-/// Where a file handed to an action is read: its own location when it has one, else a copy of its data in the
-/// app's Staging folder (a video that came from Photos or another app as data only). The app isn't sandboxed, so a
-/// location needs no security scope.
-enum IntentStaging {
-    static func url(for file: IntentFile) -> URL? {
-        if let url = file.fileURL { return url }
-        guard !file.data.isEmpty else { return nil }
-        let directory = AppModel.supportDirectory().appending(
-            path: "Staging/\(UUID().uuidString)", directoryHint: .isDirectory)
-        let name = file.filename.isEmpty ? "Video.mov" : file.filename
-        let url = directory.appending(path: name)
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try file.data.write(to: url, options: .withoutOverwriting)
-            return url
-        } catch {
-            return nil
-        }
     }
 }
 

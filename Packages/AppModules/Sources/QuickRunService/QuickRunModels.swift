@@ -81,6 +81,17 @@ public struct QuickRunReceipt: Sendable, Equatable {
     }
 }
 
+/// How waiting for a run ended.
+public enum QuickRunWait: Sendable, Equatable {
+    /// Every job ended. `outputs` are the files the converted ones made; `converted` counts every converted job,
+    /// Photos ones too (their copies are in Photos or in the folder chosen, not in `outputs`).
+    case finished(outputs: [URL], converted: Int)
+    /// The queue is paused and none of the run's jobs is running, so nothing will move until the user resumes.
+    case paused
+    /// The queue stopped under the wait: the app is quitting, or the wait was cancelled.
+    case interrupted
+}
+
 /// The notification a finished run posts.
 public struct QuickRunNotice: Sendable, Equatable {
     public static let category = "QUICK_RUN_DONE"
@@ -116,6 +127,7 @@ public protocol QuickRunQueue: Sendable {
     var jobs: [Job] { get async }
     func enqueue(_ jobs: [Job]) async -> [Job]
     func resume() async
+    func isPaused() async -> Bool
     func updates() async -> AsyncStream<[Job]>
 }
 

@@ -108,6 +108,13 @@ final class AppModel {
     /// Set once `start()` has finished; entry points that arrive earlier (an intent that launched the app) wait.
     @ObservationIgnored var hasFinishedStarting = false
     @ObservationIgnored var startWaiters: [CheckedContinuation<Void, Never>] = []
+    /// The app's own copies of videos that reached the action as data only. Not the Photos Work folder: that one is
+    /// swept at every launch, this one keeps what a queued job still reads.
+    @ObservationIgnored let stagedInputs: StagedInputs
+    /// Copies whose jobs are queued; each is removed once none of its jobs is pending.
+    @ObservationIgnored var stagedWatch: Set<URL> = []
+    /// Told when an intent run arrives, so a launch it started stays windowless (set by `AppDelegate`).
+    @ObservationIgnored var intentRunHandler: (@MainActor () -> Void)?
     /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
@@ -123,6 +130,7 @@ final class AppModel {
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         self.quickRunStore = QuickRunStore(fileURL: directory.appending(path: "quick-runs.json"))
+        self.stagedInputs = StagedInputs(directory: directory.appending(path: "Staging", directoryHint: .isDirectory))
         let library = LocalLibrary(directory: directory)
         self.library = library
         self.browser = LibraryBrowser(collection: library)

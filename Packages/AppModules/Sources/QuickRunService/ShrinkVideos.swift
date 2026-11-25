@@ -12,6 +12,23 @@ public protocol ShrinkVideosSources: AnyObject {
     func photosLibrary() async -> (any MediaCollection)?
 }
 
+/// What happened after the jobs were queued.
+public enum ShrinkVideosWait: Sendable, Equatable {
+    /// The action was not asked to wait.
+    case notRequested
+    /// Every job ended; see `QuickRunWait.finished`.
+    case finished(outputs: [URL], converted: Int)
+    /// The queue is paused, so waiting would not end.
+    case paused
+    /// The app quit, or the wait was cancelled, before the jobs ended.
+    case interrupted
+
+    /// The files made, or nil when the run did not finish under the action's eyes.
+    public var outputs: [URL]? {
+        if case .finished(let outputs, _) = self { outputs } else { nil }
+    }
+}
+
 /// What running the action did.
 public enum ShrinkVideosOutcome: Sendable, Equatable {
     /// No videos were given and nothing was chosen to pick them by.
@@ -22,8 +39,13 @@ public enum ShrinkVideosOutcome: Sendable, Equatable {
     case photosAccessNeeded
     /// The request can't run as given.
     case failed(ShrinkVideosError)
-    /// Videos were handed to a quick run. `outputs` is nil when the action did not wait for the run to end.
-    case queued(QuickRunReceipt, outputs: [URL]?)
+    /// Videos were handed to a quick run.
+    case queued(QuickRunReceipt, ShrinkVideosWait)
+
+    /// The files the run made, when the action waited for it to finish.
+    public var outputs: [URL]? {
+        if case .queued(_, let wait) = self { wait.outputs } else { nil }
+    }
 
     /// The sentence the action shows (or Siri says).
     public var message: String {
@@ -33,23 +55,28 @@ public enum ShrinkVideosOutcome: Sendable, Equatable {
         case .photosAccessNeeded:
             "The app can't read your Photos library yet. Open the app to allow access, then try again."
         case .failed(let error): error.message
-        case .queued(let receipt, let outputs):
-            Self.queuedMessage(
-                queued: receipt.queuedJobIDs.count, skipped: receipt.skipped.count, finished: outputs != nil,
-                started: receipt.startedQueue)
+        case .queued(let receipt, let wait):
+            Self.queuedMessage(queued: receipt.queuedJobIDs.count, skipped: receipt.skipped.count, wait: wait)
         }
     }
 
-    private static func queuedMessage(queued: Int, skipped: Int, finished: Bool, started: Bool) -> String {
+    private static func queuedMessage(queued: Int, skipped: Int, wait: ShrinkVideosWait) -> String {
         var sentences: [String] = []
         if queued == 0 {
             sentences.append("Nothing was queued.")
-        } else if finished {
-            sentences.append("Finished \(videos(queued)).")
-        } else if !started {
-            sentences.append("Queued \(videos(queued)). They start when you resume the queue.")
         } else {
-            sentences.append("Queued \(videos(queued)). A notification says when they're done.")
+            switch wait {
+            case .notRequested:
+                sentences.append("Queued \(videos(queued)). A notification says when they're done.")
+            case .finished(_, let converted):
+                sentences.append(converted > 0 ? "Shrank \(videos(converted))." : "Nothing was converted.")
+            case .paused:
+                sentences.append(
+                    "Queued \(videos(queued)). The queue is paused, so they'll convert when you resume it.")
+            case .interrupted:
+                sentences.append(
+                    "Queued \(videos(queued)). The app quit first, so they'll continue when it opens again.")
+            }
         }
         if skipped > 0 { sentences.append("\(skipped) skipped.") }
         return sentences.joined(separator: " ")
@@ -68,21 +95,23 @@ public final class ShrinkVideos {
     private let quickRun: QuickRun
     private let now: @Sendable () -> Date
     private let calendar: Calendar
-    private let didQueue: @MainActor (QuickRunReceipt) -> Void
+    private let pollInterval: Duration
 
-    /// `didQueue` runs as soon as a run's jobs are in the queue, before the action waits for them.
     public init(
         sources: any ShrinkVideosSources, quickRun: QuickRun, now: @escaping @Sendable () -> Date = { Date() },
-        calendar: Calendar = .current, didQueue: @escaping @MainActor (QuickRunReceipt) -> Void = { _ in }
+        calendar: Calendar = .current, pollInterval: Duration = .seconds(1)
     ) {
         self.sources = sources
         self.quickRun = quickRun
         self.now = now
         self.calendar = calendar
-        self.didQueue = didQueue
+        self.pollInterval = pollInterval
     }
 
-    public func perform(_ request: ShrinkVideosRequest) async -> ShrinkVideosOutcome {
+    /// `didQueue` runs as soon as this run's jobs are in the queue, before the action waits for them.
+    public func perform(
+        _ request: ShrinkVideosRequest, didQueue: @MainActor (QuickRunReceipt) -> Void = { _ in }
+    ) async -> ShrinkVideosOutcome {
         let overrides: QuickRunOverrides
         do { overrides = try request.overrides() } catch let error as ShrinkVideosError {
             return .failed(error)
@@ -115,17 +144,31 @@ public final class ShrinkVideos {
             return .needsVideos
         }
         didQueue(receipt)
-        // With auto-start off the jobs wait for the user's Resume, which may never come: don't hold the action.
-        guard request.waitForCompletion, receipt.startedQueue else { return .queued(receipt, outputs: nil) }
-        return .queued(receipt, outputs: await quickRun.outputs(of: receipt))
+        guard request.waitForCompletion else { return .queued(receipt, .notRequested) }
+        // With auto-start off nothing will run until the user resumes: don't hold the action.
+        guard receipt.startedQueue else { return .queued(receipt, .paused) }
+        switch await quickRun.wait(for: receipt, pollInterval: pollInterval) {
+        case .finished(let outputs, let converted):
+            return .queued(receipt, .finished(outputs: outputs, converted: converted))
+        case .paused: return .queued(receipt, .paused)
+        case .interrupted: return .queued(receipt, .interrupted)
+        }
     }
 
     /// The available items of `collection` that the request's date range and resolution let through, in grid order.
     /// A fresh browser, so the window's own filters and selection are never touched.
     func select(from collection: any MediaCollection, request: ShrinkVideosRequest) -> [LibraryItem] {
         let browser = LibraryBrowser(collection: collection)
-        if let resolution = request.resolution { browser.quality = QualityFilter(qualities: resolution.buckets) }
+        // A video whose frame rate is unknown (Photos without its index) has no bucket of its own: it is let through
+        // the filter and kept when its size says it has the resolution.
+        if let resolution = request.resolution {
+            browser.quality = QualityFilter(qualities: resolution.buckets.union([.unknown]))
+        }
         browser.captureRange = request.dateRange?.range(now: now(), calendar: calendar)
-        return browser.snapshot.items.filter(\.isAvailable)
+        return browser.snapshot.items.filter { item in
+            guard item.isAvailable else { return false }
+            guard let resolution = request.resolution, QualityBucket(item: item) == .unknown else { return true }
+            return resolution.includes(pixelSize: item.pixelSize)
+        }
     }
 }

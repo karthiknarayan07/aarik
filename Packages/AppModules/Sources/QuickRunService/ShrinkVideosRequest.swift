@@ -71,6 +71,16 @@ public enum ShrinkResolution: Sendable, Equatable, CaseIterable {
         case .fullHD: Set(FrameRateTier.allCases.map(QualityBucket.fullHD))
         }
     }
+
+    /// Whether a video of this size has the resolution, for one whose frame rate is unknown (`QualityBucket.unknown`):
+    /// the same short-side thresholds `QualityBucket` uses.
+    public func includes(pixelSize: CGSize) -> Bool {
+        let shortSide = min(pixelSize.width, pixelSize.height)
+        switch self {
+        case .uhd: return shortSide >= 2160
+        case .fullHD: return shortSide >= 1080 && shortSide < 2160
+        }
+    }
 }
 
 public enum ShrinkSource: Sendable, Equatable, CaseIterable {
@@ -91,12 +101,17 @@ public struct ShrinkVideosRequest: Sendable, Equatable {
     public var resolution: ShrinkResolution?
     public var source: ShrinkSource?
     public var waitForCompletion = true
+    /// Where copies go when the videos have no place of their own (a video that came as data only was copied into the
+    /// app). It wins over "next to original" and the saved default, never over a folder chosen as the destination.
+    public var redirectedFolder: URL?
 
     public init(
         files: [URL] = [], quality: ShrinkQuality? = nil, format: ShrinkFormat? = nil,
         destination: ShrinkDestination? = nil, folder: URL? = nil, dateRange: ShrinkDateRange? = nil,
-        resolution: ShrinkResolution? = nil, source: ShrinkSource? = nil, waitForCompletion: Bool = true
+        resolution: ShrinkResolution? = nil, source: ShrinkSource? = nil, waitForCompletion: Bool = true,
+        redirectedFolder: URL? = nil
     ) {
+        self.redirectedFolder = redirectedFolder
         self.files = files
         self.quality = quality
         self.format = format
@@ -115,10 +130,14 @@ public struct ShrinkVideosRequest: Sendable, Equatable {
     public func overrides() throws -> QuickRunOverrides {
         var overrides = QuickRunOverrides(preset: quality?.preset, codec: format?.codec)
         switch destination {
-        case .none:
-            break
-        case .nextToOriginal:
-            overrides.saveLocation = SaveLocation()
+        case .none, .nextToOriginal:
+            if let redirectedFolder {
+                var location = SaveLocation()
+                do { try location.setFolder(redirectedFolder) } catch { throw ShrinkVideosError.folderUnavailable }
+                overrides.saveLocation = location
+            } else if destination == .nextToOriginal {
+                overrides.saveLocation = SaveLocation()
+            }
         case .folder:
             guard let folder else { throw ShrinkVideosError.folderNeeded }
             var location = SaveLocation()
@@ -134,11 +153,14 @@ public enum ShrinkVideosError: Error, Sendable, Equatable {
     case folderNeeded
     case folderUnavailable
     case h264NotForPhotos
+    /// Videos were handed over but none could be read or copied.
+    case inputsUnreadable
 
     public var message: String {
         switch self {
         case .folderNeeded: "Choose a folder to save the videos in, or save them next to the originals."
         case .folderUnavailable: "That folder can't be used. Choose another folder."
+        case .inputsUnreadable: "The videos you gave couldn't be read."
         case .h264NotForPhotos: "H.264 isn't available for videos in Photos. Choose HEVC, or shrink Local Files."
         }
     }

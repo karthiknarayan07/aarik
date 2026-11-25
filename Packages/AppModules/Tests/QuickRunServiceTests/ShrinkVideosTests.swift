@@ -237,11 +237,11 @@ private enum Calendars {
         let outcome = await harness.shrink.perform(
             ShrinkVideosRequest(dateRange: .lastMonth, resolution: .uhd, waitForCompletion: false))
 
-        guard case .queued(let receipt, let outputs) = outcome else {
+        guard case .queued(let receipt, _) = outcome else {
             Issue.record("expected a run, got \(outcome)")
             return
         }
-        #expect(outputs == nil)
+        #expect(outcome.outputs == nil)
         #expect(receipt.queuedJobIDs.count == 1)
         let jobs = await harness.queue.jobs
         #expect(jobs.map(\.source.lastPathComponent) == ["a.mov"])
@@ -420,12 +420,12 @@ private enum Calendars {
         await harness.queue.completeAll()
         let outcome = await run.value
 
-        guard case .queued(_, let outputs) = outcome else {
+        guard case .queued = outcome else {
             Issue.record("expected a run, got \(outcome)")
             return
         }
-        #expect(outputs?.map(\.lastPathComponent) == ["out.mov"])
-        #expect(outcome.message == "Finished 1 video.")
+        #expect(outcome.outputs?.map(\.lastPathComponent) == ["out.mov"])
+        #expect(outcome.message == "Shrank 1 video.")
         // The run's one notification is posted by the queue watcher, a moment after the action returns.
         for _ in 0..<200 where await harness.notifier.notices.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         #expect(await harness.notifier.notices.count == 1)
@@ -440,15 +440,154 @@ private enum Calendars {
         })
         defer { harness.fixture.remove() }
         var told: [QuickRunReceipt] = []
-        let shrink = ShrinkVideos(
-            sources: harness.sources, quickRun: harness.quickRun, didQueue: { told.append($0) })
 
-        // Nothing finishes this job, so the action would hang if it waited without telling the app first.
-        let run = Task { await shrink.perform(ShrinkVideosRequest(files: [url])) }
+        // Nothing finishes this job until the test says so, so the action is still waiting when the app is told.
+        let run = Task { @MainActor in
+            await harness.shrink.perform(ShrinkVideosRequest(files: [url]), didQueue: { told.append($0) })
+        }
         for _ in 0..<200 where told.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         #expect(told.map(\.queuedJobIDs.count) == [1])
         await harness.queue.completeAll()
         _ = await run.value
+    }
+
+    @Test func aWaitEndsWhenTheQueueIsPausedAndNothingIsRunning() async throws {
+        var url: URL!
+        let harness = try Harness(local: { fixture in
+            let item = try Self.fileItem(fixture, "a.mov")
+            url = item.fileURL
+            return [item]
+        })
+        defer { harness.fixture.remove() }
+
+        let run = Task { await harness.shrink.perform(ShrinkVideosRequest(files: [url])) }
+        for _ in 0..<200 where await harness.queue.jobs.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        // Pausing is not a queue change; the wait notices on its next check.
+        await harness.queue.setPaused(true)
+        let outcome = await run.value
+
+        guard case .queued(_, .paused) = outcome else {
+            Issue.record("expected a paused wait, got \(outcome)")
+            return
+        }
+        #expect(outcome.message == "Queued 1 video. The queue is paused, so they'll convert when you resume it.")
+    }
+
+    @Test func aPausedQueueDoesNotEndAWaitWhileTheRunsJobIsRunning() async throws {
+        var url: URL!
+        let harness = try Harness(local: { fixture in
+            let item = try Self.fileItem(fixture, "a.mov")
+            url = item.fileURL
+            return [item]
+        })
+        defer { harness.fixture.remove() }
+
+        let run = Task { await harness.shrink.perform(ShrinkVideosRequest(files: [url])) }
+        for _ in 0..<200 where await harness.queue.jobs.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        let job = try #require(await harness.queue.jobs.first)
+        await harness.queue.finish(job.id, with: .running(progress: 0.5))
+        await harness.queue.setPaused(true)
+        try await Task.sleep(for: .milliseconds(100))
+        await harness.queue.completeAll()
+        let outcome = await run.value
+
+        #expect(outcome.outputs?.count == 1)
+    }
+
+    @Test func aWaitEndsWhenTheQueueStops() async throws {
+        var url: URL!
+        let harness = try Harness(local: { fixture in
+            let item = try Self.fileItem(fixture, "a.mov")
+            url = item.fileURL
+            return [item]
+        })
+        defer { harness.fixture.remove() }
+
+        let run = Task { await harness.shrink.perform(ShrinkVideosRequest(files: [url])) }
+        for _ in 0..<200 where await harness.queue.jobs.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        await harness.queue.stop()
+        let outcome = await run.value
+
+        guard case .queued(_, .interrupted) = outcome else {
+            Issue.record("expected an interrupted wait, got \(outcome)")
+            return
+        }
+        #expect(outcome.message == "Queued 1 video. The app quit first, so they'll continue when it opens again.")
+    }
+
+    @Test func aFailedJobIsNotCountedAsShrunk() async throws {
+        var url: URL!
+        let harness = try Harness(local: { fixture in
+            let item = try Self.fileItem(fixture, "a.mov")
+            url = item.fileURL
+            return [item]
+        })
+        defer { harness.fixture.remove() }
+
+        let run = Task { await harness.shrink.perform(ShrinkVideosRequest(files: [url])) }
+        for _ in 0..<200 where await harness.queue.jobs.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        let job = try #require(await harness.queue.jobs.first)
+        await harness.queue.finish(job.id, with: .failed(reason: "no"))
+        let outcome = await run.value
+
+        #expect(outcome.message == "Nothing was converted.")
+    }
+
+    @Test func unknownFrameRatePhotosAreMatchedByTheirSize() throws {
+        let harness = try Harness()
+        defer { harness.fixture.remove() }
+        func item(_ id: String, _ size: CGSize, fps: Double) -> LibraryItem {
+            LibraryItem(
+                id: UUID(), source: .photos(id), name: id, byteSize: 1, duration: 1, pixelSize: size, frameRate: fps,
+                captureDate: nil, badges: [], isAvailable: true, inventory: MetadataInventory())
+        }
+        let collection = FakeCollection([
+            item("4k-no-index", CGSize(width: 3840, height: 2160), fps: 0),
+            item("1080-no-index", CGSize(width: 1920, height: 1080), fps: 0),
+            item("4k-indexed", CGSize(width: 3840, height: 2160), fps: 60),
+            item("720", CGSize(width: 1280, height: 720), fps: 0),
+        ])
+
+        let uhd = harness.shrink.select(from: collection, request: ShrinkVideosRequest(resolution: .uhd))
+        #expect(Set(uhd.map(\.name)) == ["4k-no-index", "4k-indexed"])
+        let fullHD = harness.shrink.select(from: collection, request: ShrinkVideosRequest(resolution: .fullHD))
+        #expect(fullHD.map(\.name) == ["1080-no-index"])
+    }
+
+    @Test func dataOnlyVideosGoWhereTheRequestRedirectsThem() throws {
+        let fixture = try QuickRunFixture()
+        defer { fixture.remove() }
+        let redirected = try ShrinkVideosRequest(redirectedFolder: fixture.directory).overrides()
+        #expect(redirected.saveLocation?.folder == fixture.directory)
+        let nextTo = try ShrinkVideosRequest(destination: .nextToOriginal, redirectedFolder: fixture.directory)
+            .overrides()
+        #expect(nextTo.saveLocation?.folder == fixture.directory)
+        // A folder the user chose wins.
+        let chosen = fixture.directory.appending(path: "chosen", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: chosen, withIntermediateDirectories: true)
+        let wins = try ShrinkVideosRequest(destination: .folder, folder: chosen, redirectedFolder: fixture.directory)
+            .overrides()
+        #expect(wins.saveLocation?.folder == chosen)
+    }
+
+    @Test func photosGetANoteWhenTheSavedSaveToIsNotForThem() async throws {
+        let fixture = try QuickRunFixture()
+        defer { fixture.remove() }
+        let queue = FakeQueue()
+        var location = SaveLocation()
+        try location.setFolder(fixture.directory)
+        let saved = location
+        let quickRun = QuickRun(
+            queue: queue, store: QuickRunStore(fileURL: fixture.storeURL), notifier: FakeNotifier(),
+            inspector: FakeInspector(sources: [:]),
+            settings: { QuickRunSettings(preset: .balanced, saveLocation: saved) })
+
+        let receipt = await quickRun.runPhotos(
+            [QuickRunPhotoVideo(assetID: "A/L0/001", name: "A.MOV", isCinematic: false, isHDR: false)],
+            overrides: nil)
+
+        #expect(receipt.queuedJobIDs.count == 1)
+        #expect(receipt.notes == ["Saved as new videos in Photos: the Save to folder is for files."])
     }
 
     @Test func notWaitingReturnsAtOnceWithNoOutputs() async throws {
@@ -462,11 +601,11 @@ private enum Calendars {
 
         let outcome = await harness.shrink.perform(ShrinkVideosRequest(files: urls, waitForCompletion: false))
 
-        guard case .queued(let receipt, let outputs) = outcome else {
+        guard case .queued(let receipt, _) = outcome else {
             Issue.record("expected a run, got \(outcome)")
             return
         }
-        #expect(outputs == nil)
+        #expect(outcome.outputs == nil)
         #expect(receipt.queuedJobIDs.count == 2)
         #expect(outcome.message == "Queued 2 videos. A notification says when they're done.")
     }
@@ -484,12 +623,12 @@ private enum Calendars {
         // Would hang if it waited: nothing ever finishes this job.
         let outcome = await harness.shrink.perform(ShrinkVideosRequest(files: [url], waitForCompletion: true))
 
-        guard case .queued(_, let outputs) = outcome else {
+        guard case .queued = outcome else {
             Issue.record("expected a run, got \(outcome)")
             return
         }
-        #expect(outputs == nil)
-        #expect(outcome.message == "Queued 1 video. They start when you resume the queue.")
+        #expect(outcome.outputs == nil)
+        #expect(outcome.message == "Queued 1 video. The queue is paused, so they'll convert when you resume it.")
     }
 
     @Test func skippedVideosAreCounted() async throws {

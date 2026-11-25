@@ -43,10 +43,14 @@ public enum LaunchWindowPlan: Equatable, Sendable {
     case show
     case stayHidden
 
-    /// Files that arrived with the launch and nothing that needs the window (a notification response) keep it
-    /// hidden: they are a quick run. Any other launch shows it.
-    public static func plan(openedFileCount: Int, hasNotificationResponse: Bool) -> LaunchWindowPlan {
-        openedFileCount > 0 && !hasNotificationResponse ? .stayHidden : .show
+    /// Files that arrived with the launch, or an intent run (Shortcuts, the Finder Quick Action, Siri, Spotlight) that
+    /// started it, and nothing that needs the window (a notification response) keep it hidden: they are a quick run.
+    /// Any other launch shows it. An intent run that arrives after the window is up is not a launch and changes
+    /// nothing, so it isn't asked about here.
+    public static func plan(
+        openedFileCount: Int, hasNotificationResponse: Bool, hasIntentRun: Bool = false
+    ) -> LaunchWindowPlan {
+        (openedFileCount > 0 || hasIntentRun) && !hasNotificationResponse ? .stayHidden : .show
     }
 }
 

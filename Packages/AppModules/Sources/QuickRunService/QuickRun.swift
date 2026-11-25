@@ -101,8 +101,18 @@ public actor QuickRun {
             for: accepted.map { (assetID: $0.assetID, name: $0.name, preset: preset) },
             settings: DownscaleJobSettings(preset: preset, saveTo: .nextToOriginal), destination: destination,
             lost: [:], now: now())
+        // The saved Save to is for files; say so when it isn't what the copies got.
+        var notes: [String] = []
+        if overrides?.saveLocation == nil {
+            switch saved.saveLocation.choice {
+            case .nextToOriginal: break
+            case .folder: notes.append("Saved as new videos in Photos: the Save to folder is for files.")
+            case .replace:
+                notes.append("Saved as new videos in Photos: replacing originals needs your confirmation in the app.")
+            }
+        }
         return await enqueue(
-            jobs, order: unique.map { PhotoAssetURL.url(for: $0.assetID) }, skipped: skipped, notes: [],
+            jobs, order: unique.map { PhotoAssetURL.url(for: $0.assetID) }, skipped: skipped, notes: notes,
             startsQueue: saved.startsQueue)
     }
 
@@ -133,22 +143,52 @@ public actor QuickRun {
             runID: runID, queuedJobIDs: added.map(\.id), skipped: skipped, notes: notes, startedQueue: startsQueue)
     }
 
-    /// Waits until every job of the run has ended (a job removed from the queue counts as ended) and returns the
-    /// files the converted ones produced, in the order queued. Photos jobs add no file here: their copy is a new
-    /// video in Photos, or sits in the folder chosen.
-    public func outputs(of receipt: QuickRunReceipt) async -> [URL] {
+    /// Waits until every job of the run has ended (a job removed from the queue counts as ended), or until it is
+    /// clear that waiting would not end: the queue is paused with none of the run's jobs running (checked on every
+    /// queue change and every `pollInterval`, because pausing is not a queue change), or the queue stopped.
+    public func wait(for receipt: QuickRunReceipt, pollInterval: Duration = .seconds(1)) async -> QuickRunWait {
         let wanted = receipt.queuedJobIDs
-        guard !wanted.isEmpty else { return [] }
-        for await jobs in await queue.updates() {
-            let byID = Dictionary(jobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            let present = wanted.compactMap { byID[$0] }
-            if present.contains(where: { Self.result(of: $0) == nil }) { continue }
-            return present.compactMap { job in
+        guard !wanted.isEmpty else { return .finished(outputs: [], converted: 0) }
+        let queue = self.queue
+        return await withTaskGroup(of: QuickRunWait?.self) { group in
+            group.addTask {
+                for await jobs in await queue.updates() {
+                    if let done = await Self.decide(wanted, jobs: jobs, queue: queue) { return done }
+                }
+                return .interrupted
+            }
+            group.addTask {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: pollInterval)
+                    if Task.isCancelled { break }
+                    if let done = await Self.decide(wanted, jobs: await queue.jobs, queue: queue) { return done }
+                }
+                return .interrupted
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? .interrupted
+        }
+    }
+
+    private static func decide(_ wanted: [UUID], jobs: [Job], queue: any QuickRunQueue) async -> QuickRunWait? {
+        let byID = Dictionary(jobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let present = wanted.compactMap { byID[$0] }
+        if !present.contains(where: { result(of: $0) == nil }) {
+            let outputs = present.compactMap { job -> URL? in
                 guard job.source.isFileURL, case .completed(let outcome) = job.state else { return nil }
                 return outcome.output
             }
+            let converted = present.filter { job in
+                if case .completed = job.state { true } else { false }
+            }.count
+            return .finished(outputs: outputs, converted: converted)
         }
-        return []
+        let running = present.contains { job in
+            if case .running = job.state { true } else { false }
+        }
+        if !running, await queue.isPaused() { return .paused }
+        return nil
     }
 
     /// Posts the notification of every run whose jobs have all finished and that wasn't announced yet. The queue's
