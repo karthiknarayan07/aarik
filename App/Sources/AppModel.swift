@@ -1,15 +1,21 @@
 import AppCore
+import AppKit
 import AppUI
 import DownscaleVideo
 import Foundation
 import LocalLibrary
 import Observation
 import PhotosLibrary
+import QuickRunService
 
 /// The composition root: the library, the job queue, and the window's shared state.
 @MainActor
 @Observable
 final class AppModel {
+    /// The one model of the process: the window, quick runs, Dock drops and Open With all feed its queue. Created
+    /// by `AppDelegate.init`, before any scene.
+    static let shared = AppModel()
+
     private enum Keys {
         static let inspector = "window.inspectorPresented"
     }
@@ -23,6 +29,10 @@ final class AppModel {
     }
     var isImporterPresented = false
     var quickLookURL: URL?
+    /// The main window while it exists; nil once SwiftUI has dropped it.
+    @ObservationIgnored weak var mainWindow: NSWindow?
+    /// Opens the main window from code (set by the window's own view; works after the window was closed).
+    @ObservationIgnored var openMainWindow: (() -> Void)?
 
     // MARK: Conversion choices
     var preset: Preset {
@@ -67,6 +77,9 @@ final class AppModel {
     @ObservationIgnored var lastQueueCommand: Task<Void, Never>?
     @ObservationIgnored var runTracker = QueueRunTracker()
     @ObservationIgnored let notifier = QueueNotifier()
+    /// The quick runs of the last week, so their jobs get their own notification (see `receive`).
+    @ObservationIgnored let quickRunStore: QuickRunStore
+    @ObservationIgnored lazy var quickRun = makeQuickRun()
     /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
@@ -81,6 +94,7 @@ final class AppModel {
             defaults.string(forKey: AppSettings.Keys.preset).flatMap(Preset.init(rawValue:)) ?? .balanced
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
+        self.quickRunStore = QuickRunStore(fileURL: directory.appending(path: "quick-runs.json"))
         let library = LocalLibrary(directory: directory)
         self.library = library
         self.browser = LibraryBrowser(collection: library)

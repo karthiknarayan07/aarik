@@ -18,11 +18,16 @@ final class QueueNotifier {
     }
 
     /// Posts only while another app is frontmost; in front, the Activity lists already show the result.
-    func postUnlessFrontmost(title: String, body: String) {
+    /// With a `category`, the notification offers that category's actions; `userInfo` comes back with the response.
+    func postUnlessFrontmost(
+        title: String, body: String, category: String? = nil, userInfo: [String: String] = [:]
+    ) {
         guard !NSApp.isActive else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
+        if let category { content.categoryIdentifier = category }
+        content.userInfo = userInfo
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         Task {
             try? await UNUserNotificationCenter.current().add(request)

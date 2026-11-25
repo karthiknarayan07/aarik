@@ -10,6 +10,7 @@ extension AppModel {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        await quickRun.start()
         let queue = self.queue
         updatesTask = Task { [weak self] in
             for await jobs in await queue.updates() {
@@ -36,7 +37,10 @@ extension AppModel {
     private func receive(_ jobs: [Job]) {
         self.jobs = jobs
         activity = ActivitySummary(jobs: jobs)
-        if let summary = runTracker.observe(jobs) {
+        // A quick run announces itself; the generic "Queue finished" is for the window's jobs.
+        let quickRunJobs = quickRunStore.jobIDs
+        let windowJobs = quickRunJobs.isEmpty ? jobs : jobs.filter { !quickRunJobs.contains($0.id) }
+        if let summary = runTracker.observe(windowJobs) {
             notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))
         }
         reconcileReplacedFiles(jobs)
