@@ -71,10 +71,10 @@ import Testing
     @Test func keptOriginalsAreListedWithAReasonAndCanBeRemovedFromTheList() {
         let content = PendingDeletionBarContent(
             count: 0, status: .ready, heldCount: 2,
-            heldMessages: ["Kept the original because it was edited after shrinking"])
+            heldMessages: ["Kept the original because it changed after shrinking"])
 
         #expect(content.title == "2 originals were kept in Photos")
-        #expect(content.detail == "Kept the original because it was edited after shrinking")
+        #expect(content.detail == "Kept the original because it changed after shrinking")
         #expect(content.offersRemove)
         #expect(!content.offersSettings)
         #expect(content.buttonTitle == nil)  // nothing left to move

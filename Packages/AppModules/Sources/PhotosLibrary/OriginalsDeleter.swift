@@ -58,8 +58,8 @@ public enum OriginalsDeleter {
         }
         for (entry, reason) in result.blocked { pending.setBlock(reason, forAsset: entry.assetID) }
 
-        // An id that vanishes between the check and the call makes Photos refuse the whole call: leave it out and
-        // try once more.
+        // An id that vanishes between the check and the call makes Photos refuse the whole call. Then everything
+        // left is checked again, so nothing unchecked is sent, and the call is made once more.
         var attempt = 0
         while !ready.isEmpty {
             try Task.checkCancellation()
@@ -68,16 +68,19 @@ public enum OriginalsDeleter {
                 break
             } catch PhotoStoreError.notInLibrary(let missing) where attempt == 0 {
                 attempt += 1
-                guard let index = ready.firstIndex(where: { $0.assetID == missing }) else {
-                    throw PhotoStoreError.notInLibrary(missing)
+                var stillReady: [PendingDeletion] = []
+                for entry in ready {
+                    switch await check(entry, in: store, limited: limited) {
+                    case .ready: stillReady.append(entry)
+                    case .gone: result.alreadyGone.append(entry)
+                    case .blocked(let reason):
+                        result.blocked.append((entry, reason))
+                        pending.setBlock(reason, forAsset: entry.assetID)
+                    }
                 }
-                let entry = ready.remove(at: index)
-                if limited {
-                    result.blocked.append((entry, .limitedAccess))
-                    pending.setBlock(.limitedAccess, forAsset: entry.assetID)
-                } else {
-                    result.alreadyGone.append(entry)
-                }
+                // Photos named an id that the checks still see: not a vanished one, so nothing is retried.
+                guard stillReady.count < ready.count else { throw PhotoStoreError.notInLibrary(missing) }
+                ready = stillReady
             }
         }
         for entry in ready {
@@ -94,6 +97,9 @@ public enum OriginalsDeleter {
     }
 
     private static func check(_ entry: PendingDeletion, in store: any PhotoStore, limited: Bool) async -> Check {
+        // Without what the original looked like when the copy was verified (and which copy that was), nothing can
+        // say it is unchanged, so it never goes in a batch.
+        guard entry.hasBaseline, !entry.replacedBy.isEmpty else { return .blocked(.noBaseline) }
         let original: PhotoAsset
         do {
             original = try await store.asset(id: entry.assetID)
@@ -102,11 +108,11 @@ public enum OriginalsDeleter {
         } catch {
             return .blocked(.unchecked)
         }
-        if entry.hasBaseline,
-            original.modificationDate != entry.originalModified
-                || original.hasAdjustments != entry.originalHadAdjustments
+        // Any change counts, a trim or an edit as well as a caption or a favourite: the date is the safe check.
+        if original.modificationDate != entry.originalModified
+            || original.hasAdjustments != entry.originalHadAdjustments
         {
-            return .blocked(.originalEdited)
+            return .blocked(.originalChanged)
         }
         do {
             _ = try await store.asset(id: entry.replacedBy)

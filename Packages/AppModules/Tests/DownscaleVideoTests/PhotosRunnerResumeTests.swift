@@ -234,10 +234,10 @@ private struct WatchingStore: PhotoStore {
             replacedOriginal: false,
             notes: ["Saved to Photos as a new video", "Original will move to Recently Deleted"])
 
-        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalEdited.message)
-        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalEdited.message)
+        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalChanged.message)
+        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalChanged.message)
 
-        #expect(outcome.warnings == ["Kept the original because it was edited after shrinking"])
+        #expect(outcome.warnings == ["Kept the original because it changed after shrinking"])
         #expect(!outcome.notes.contains("Original will move to Recently Deleted"))
         #expect(!outcome.replacedOriginal)
 

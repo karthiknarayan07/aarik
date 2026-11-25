@@ -103,9 +103,9 @@ import Testing
         let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
 
         #expect(store.deletedIDs == ["B"])
-        #expect(result.blocked.map(\.reason) == [.originalEdited])
-        #expect(pending.all.first?.blocked == .originalEdited)
-        #expect(PendingBlock.originalEdited.message == "Kept the original because it was edited after shrinking")
+        #expect(result.blocked.map(\.reason) == [.originalChanged])
+        #expect(pending.all.first?.blocked == .originalChanged)
+        #expect(PendingBlock.originalChanged.message == "Kept the original because it changed after shrinking")
     }
 
     @Test func anEditStateChangeAloneKeepsTheOriginal() async throws {
@@ -118,7 +118,7 @@ import Testing
         let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
 
         #expect(store.deletedIDs.isEmpty)
-        #expect(result.blocked.map(\.reason) == [.originalEdited])
+        #expect(result.blocked.map(\.reason) == [.originalChanged])
     }
 
     @Test func aMixedBatchSendsOnlyTheValidOnesToPhotos() async throws {
@@ -195,6 +195,82 @@ import Testing
         #expect(result.moved.map(\.assetID) == ["B"])
         #expect(result.alreadyGone.map(\.assetID) == ["A"])
         #expect(pending.all.isEmpty)
+    }
+
+    @Test func theRetryChecksEveryRemainingOriginalAgainBeforeTheSecondCall() async throws {
+        let (store, pending, url) = library(["A", "B", "C"])
+        defer { cleanUp(url) }
+        // A is gone at the first call, and B is edited at the same moment: B must not be sent in the second call.
+        store.beforeDelete = { [store] in
+            store.assets.removeAll { $0.id == "A" }
+            store.assets = store.assets.map { $0.id == "B" ? Samples.asset(id: "B", modified: Date()) : $0 }
+        }
+
+        let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
+
+        #expect(store.deletedIDs == ["C"])
+        #expect(result.moved.map(\.assetID) == ["C"])
+        #expect(result.alreadyGone.map(\.assetID) == ["A"])
+        #expect(result.blocked.map(\.reason) == [.originalChanged])
+        #expect(pending.all.map(\.assetID) == ["B"])
+    }
+
+    private func writeLegacy(_ json: String) throws -> (FakePhotoStore, PendingDeletions, URL) {
+        let url = file()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(json.utf8).write(to: url)
+        let store = FakePhotoStore(
+            assets: ["A", "B"].flatMap { [Samples.asset(id: $0), Samples.asset(id: "new-\($0)")] })
+        return (store, PendingDeletions(fileURL: url), url)
+    }
+
+    private static let legacyEntries = """
+        {"assetID":"A","jobID":"6F1B8A2C-1D3E-4F5A-9B7C-0E2D4F6A8B1C","replacedBy":"new-A"},
+        {"assetID":"B","jobID":"7F1B8A2C-1D3E-4F5A-9B7C-0E2D4F6A8B1C","replacedBy":"new-B"}
+        """
+
+    @Test func entriesFromTheOldPlainArrayAreNeverSentToPhotos() async throws {
+        let (store, pending, url) = try writeLegacy("[\(Self.legacyEntries)]")
+        defer { cleanUp(url) }
+        #expect(pending.all.count == 2)
+        #expect(pending.all.allSatisfy { !$0.hasBaseline })
+
+        let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
+
+        #expect(store.deletedIDs.isEmpty)
+        #expect(!store.operations.contains { if case .delete = $0 { true } else { false } })
+        #expect(result.blocked.map(\.reason) == [.noBaseline, .noBaseline])
+        #expect(pending.all.map(\.assetID) == ["A", "B"])
+        #expect(
+            PendingBlock.noBaseline.message
+                == "Kept the original because it couldn't be checked. Shrink it again to replace it.")
+    }
+
+    @Test func entriesFromAnObjectWithoutTheNewFieldsAreNeverSentToPhotos() async throws {
+        let (store, pending, url) = try writeLegacy(#"{"pending":[\#(Self.legacyEntries)],"saved":[]}"#)
+        defer { cleanUp(url) }
+        #expect(pending.all.count == 2)
+
+        let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
+
+        #expect(store.deletedIDs.isEmpty)
+        #expect(result.blocked.map(\.reason) == [.noBaseline, .noBaseline])
+        // They can be removed from the list, and nothing is deleted by that.
+        pending.remove(assetIDs: ["A", "B"])
+        #expect(pending.all.isEmpty)
+        #expect(store.assets.count == 4)
+    }
+
+    @Test func anEntryWithNoCopyRecordedIsNeverSentToPhotos() async throws {
+        let (store, pending, url) = library(["A"])
+        defer { cleanUp(url) }
+        pending.add(assetID: "A", jobID: UUID(), replacedBy: "", originalModified: Self.modified)
+
+        let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
+
+        #expect(store.deletedIDs.isEmpty)
+        #expect(result.blocked.map(\.reason) == [.noBaseline])
     }
 
     @Test func aRefusalFromPhotosKeepsTheListAndIsReported() async throws {

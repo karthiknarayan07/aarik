@@ -6,20 +6,23 @@ import Synchronization
 public enum PendingBlock: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     /// The shrunk copy is no longer in the library.
     case copyMissing
-    /// The original was edited (or trimmed) after it was shrunk.
-    case originalEdited
+    /// The original changed (edited, trimmed, or its details changed) after it was shrunk.
+    case originalChanged
     /// Photos access is limited and the original can't be seen.
     case limitedAccess
     /// Photos couldn't say.
     case unchecked
+    /// The record has no baseline to check the original against (an entry from an older version).
+    case noBaseline
 
     /// What the bar and the job say, in a sentence.
     public var message: String {
         switch self {
         case .copyMissing: "Kept the original because the shrunk copy is no longer in your library"
-        case .originalEdited: "Kept the original because it was edited after shrinking"
+        case .originalChanged: "Kept the original because it changed after shrinking"
         case .limitedAccess: "Can't see this original with limited Photos access"
         case .unchecked: "Kept the original because it couldn't be checked"
+        case .noBaseline: "Kept the original because it couldn't be checked. Shrink it again to replace it."
         }
     }
 
