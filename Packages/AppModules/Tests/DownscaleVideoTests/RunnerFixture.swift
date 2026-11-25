@@ -47,8 +47,14 @@ enum RunnerFixture {
     ]
 
     /// 640x360 at a low bit rate: below a 1080 short side, so a 1080p downscale finds it already small.
-    static func smallSource(name: String = "small.mov") async throws -> URL {
+    static func smallSource(
+        name: String = "small.mov", fileType: AVFileType = .mov, timedMetadata: Bool = false,
+        metadata: [String: String] = [:]
+    ) async throws -> URL {
         var options = ClipOptions()
+        options.fileType = fileType
+        options.includeTimedMetadataTrack = timedMetadata
+        options.quickTimeMetadata = metadata
         options.width = 640
         options.height = 360
         options.fps = 10

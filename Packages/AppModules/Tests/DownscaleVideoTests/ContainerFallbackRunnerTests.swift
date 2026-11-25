@@ -167,6 +167,22 @@ import Testing
         #expect(!progressReported.withLock { $0 })
     }
 
+    /// An already-small MPEG-4 clip with ISO user data is kept for being small, not for its file format: the
+    /// planner speaks first.
+    @Test(.timeLimit(.minutes(2))) func alreadySmallMPEG4WithIsoUserDataKeepsTheSmallReason() async throws {
+        let source = try await RunnerFixture.smallSource(
+            name: "small.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let settings = DownscaleJobSettings(
+            preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: [], predictedLostKeys: [])
+
+        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+
+        #expect(state == .keptAsIs(reason: "Already small"))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
+    }
+
     @Test func fallbackLossCountsAsShownOnlyWhenEveryItemWasPredicted() {
         let inventory = MetadataInventory(items: [
             MetadataItem(key: "qt.uiso/loci", category: .location, displayName: "Location", value: "+1+2/"),

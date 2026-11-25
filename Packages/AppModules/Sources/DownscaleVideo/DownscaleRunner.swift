@@ -68,14 +68,9 @@ public struct DownscaleRunner: JobRunner {
         // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
         // that loses, which was shown before the job was added. Found only now (the add-time probe failed, or the
         // job predates predictions), that loss was never shown: keep the original as is, without encoding. Never
-        // a silent loss; the check after the run stays as the backstop.
+        // a silent loss; the check after the run stays as the backstop. The planner speaks first, so a video kept
+        // for another reason (already small, too little saved) says that reason.
         let container = try await OutputContainer.decide(for: source)
-        if container.fallsBackToQuickTime,
-            !Self.fallbackLossWasShown(
-                inventory, predictedLost: settings.predictedLost, predictedLostKeys: settings.predictedLostKeys)
-        {
-            return .keptAsIs(reason: Self.formatCantKeepDetails)
-        }
 
         // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
         // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
@@ -88,6 +83,12 @@ public struct DownscaleRunner: JobRunner {
         switch decision {
         case .keptAsIs(let reason): return .keptAsIs(reason: reason)
         case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
+        }
+        if container.fallsBackToQuickTime,
+            !Self.fallbackLossWasShown(
+                inventory, predictedLost: settings.predictedLost, predictedLostKeys: settings.predictedLostKeys)
+        {
+            return .keptAsIs(reason: Self.formatCantKeepDetails)
         }
 
         let folder = try Self.outputFolder(for: settings.saveTo, source: source)
