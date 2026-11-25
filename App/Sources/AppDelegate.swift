@@ -5,10 +5,17 @@ import PhotosLibrary
 /// quitting.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
-    let updater = Updater()
+    let model: AppModel
+    let updater: Updater
     private var isTerminating = false
     private var volumeObservers: [any NSObjectProtocol] = []
+
+    override init() {
+        let model = AppModel()
+        self.model = model
+        updater = Updater(relaunchGate: model.relaunchGate)
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Photos input left behind by a crash or quit is cleared before the queue starts, so a job can't create
