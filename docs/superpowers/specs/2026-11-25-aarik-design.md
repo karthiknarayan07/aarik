@@ -172,16 +172,24 @@ Every feature module provides one type conforming to a `Tool` protocol in `AppCo
   - *ProRes / Apple Log*: supported; HEVC output keeps 10-bit and copies the source's color tags as-is (Log is not "converted" to HDR).
   - *Live Photo videos*: the pairing identifier is kept on exported files; downscaling the video half of a Live Photo inside Photos is out of scope.
 
-### 8.2 Settings
-| Setting | Options | Default |
-|---|---|---|
-| Resolution | 720p, 1080p, 1440p, Custom (width or height, aspect preserved) | 1080p |
-| Format | **HEVC — keep HDR** (preserves source HDR type: Dolby Vision, HLG, HDR10, or SDR) / **H.264 — compatible** (SDR, tone-mapped if source is HDR) | HEVC |
-| Quality | Presets (High / Balanced / Small) + advanced: bitrate or target file size | High |
-| Frame rate | Same as source, or a lower standard rate (60 / 30 / 25 / 24); never upsample | Same |
-| Save to | Next to original / Choose folder / Photos (new item) / **Replace and free space** | Next to original (Photos inputs: Replace and free space, see §8.5) |
+### 8.2 Settings (revised 2026-11-25: presets + estimates, owner decision)
+The primary control is a **quality preset**, chosen globally in the header and overridable per clip in the inspector. Every clip shows its **estimated output size and % saved for each preset before anything runs**.
 
-Never upscale: if a clip is already at or below the target, it's skipped with a note (unless only format/frame rate changed).
+| Preset | Resolution | Target | Notes |
+|---|---|---|---|
+| **High** | keep source resolution (4K stays 4K) | ~50% of source bitrate | biggest, safest |
+| **Balanced** (default) | 1080p short side | bitrate scaled to pixel rate (≈ 8–10 Mbps @1080p30 HEVC 10-bit) | the everyday choice |
+| **Smaller** | 1080p short side | ≈ 60% of Balanced | for archives / sharing |
+
+Exact bitrate tables are the builder's call; they must scale with resolution × frame rate and must produce a meaningful saving (the 20 Mbps engine default saved only ~22% on a real 4K30 clip).
+
+**Advanced** (disclosure in the inspector): resolution (720p / 1080p / 1440p / custom), format (**HEVC — keep HDR** default, or **H.264 — compatible**: SDR, tone-mapped), bitrate or target size, frame rate (same, or lower standard rate; never upsample).
+
+**Kept As Is:** if a clip's estimated saving is under **10%**, or the clip is already at/below the preset's resolution and bitrate, it isn't converted; it goes to *Kept As Is* with the reason. Never upscale.
+
+**Estimates:** a fast estimate from duration × preset bitrate (+ passthrough audio/metadata size). An optional **Measure Exactly** action encodes short samples with the real settings for a tighter number (builder may defer to Plan 3+).
+
+**Save to** (Local Files): next to original (default) / chosen folder / Replace and free space (§8.5).
 
 Output naming for files: `IMG_4211 (1080p).mov`, never overwriting an existing file (append a counter). Container matches the source unless the format requires otherwise.
 
@@ -214,6 +222,8 @@ Consequences:
 ### 8.5 Replace and free space (owner: the main purpose is freeing Photos/iCloud storage)
 - **Finder:** output written and verified, then the original is **moved to Trash** (not deleted) and the output takes its name.
 - **Photos:** output saved as a **new asset** (with date, location, favorite, hidden, albums copied per §8.3), verified, then the original asset is **deleted via Photos**, which shows the system's own confirmation and moves it to **Recently Deleted** (recoverable for 30 days; space is freed once it leaves Recently Deleted). A revertible edit is *not* used, because it keeps the full-size original and saves no space.
+- **Originals backup (owner decision, 2026-11-25):** an optional setting, *Keep a copy of originals*, saves each untouched original to a folder (default `~/Movies/<App Name> Originals/`, user can pick an external drive) **before** any replace; files are never overwritten (counter suffix). The replace only proceeds once the backup copy is written and its size verified.
+- The UI says plainly that iCloud space is freed only when Recently Deleted is emptied or after 30 days.
 - If verification fails, the original is never touched.
 - Batch-friendly: one system confirmation for the whole batch where Photos allows it.
 - aarik shows the space saved (before → after, total) when the batch finishes.
@@ -230,24 +240,34 @@ Consequences:
 - Notification on completion if the app isn't frontmost.
 - Result row: size before → after, Verified / warnings, Show in Finder / Show in Photos.
 
-## 9. App shell and UI
+## 9. App shell and UI (revised 2026-11-25: hybrid layout, owner decision)
 
-Layout (owner chose the native sidebar mockup):
+Research (KeepFeather, Swivel, Permute, HandBrake, Photos space-savers) led the owner to a **hybrid** shape: library-first for media (inspired by KeepFeather's *layout*, not its look, name, icon or copy) plus a toolbox for everything else. Approved mockup: `.superpowers/brainstorm/*/content/shell-v1.html` (local).
 
 ```
-┌──────────────┬────────────────────────────────────────┬───────────────┐
-│ Video        │  [ Drop videos here · Choose · Photos ]│ Inspector     │
-│ ▸ Downscale  │  ┌ queue ───────────────────────────┐  │ (toggleable)  │
-│ Image        │  │ ▭ IMG_4211.MOV  4K·DV   All kept │  │ Will be kept  │
-│ PDF          │  │ ▭ IMG_4230.MOV  4K·Cin  1 lost › │  │ Will change   │
-│ Documents    │  └──────────────────────────────────┘  │ Will be lost  │
-│              │  Resolution [720|1080|1440|Custom]     │               │
-│              │  Format     [HEVC·keep HDR|H.264]      │               │
-│              │  ...                    [Convert 2]    │               │
-└──────────────┴────────────────────────────────────────┴───────────────┘
+┌──────────────────┬───────────────────────────────────────────┬────────────────────┐
+│ Library          │ Could free about 12.1 GB   [High|Balanced|Smaller]           │
+│  Overview        │ ████████░░░░  18.6 GB now → ≈6.5 GB after  │  preview           │
+│  Videos (Photos) │ August 2026 · 9 videos                     │  IMG_4211.MOV      │
+│  Local Files     │ ┌────┐┌────┐┌────┐┌────┐  tiles: thumbnail, │  DV 8.4 · Location │
+│ Media types      │ │DV4K││DV  ││SLO ││SDR │  badges (DV, 4K,   │  Quality:          │
+│  Dolby Vision    │ │1.2G││890M││640M││310M│  Cinematic, Slo-mo,│   Original 1.2 GB  │
+│  Cinematic …     │ └────┘└────┘└────┘└────┘  Spatial, Edited), │   High  ≈620MB −48%│
+│ Tools            │                           size label       │  ◉Bal.  ≈260MB −78%│
+│  Downscale Video │                                            │   Small ≈170MB −86%│
+│  (more later)    │                                            │  Advanced ▸        │
+│ Activity         │                                            │  Metadata: kept/…  │
+│  Queue · Completed · Kept As Is · Failed                       │ [+ Add to Queue]   │
+└──────────────────┴───────────────────────────────────────────┴────────────────────┘
 ```
 
-- Sidebar categories appear only when they contain at least one tool (v1 shows just Video).
+- **Sidebar sections:** *Library* (Overview — savings dashboard; Videos — Photos library, Plan 3; Local Files — folders/files the user added), *Media types* (filters: Dolby Vision, Cinematic, Slo-mo, Spatial, Edited, …; shown only when non-empty), *Tools* (Downscale Video now; Convert Image / PDF / Office later — tool pages for non-media work), *Activity* (Queue, Completed, Kept As Is, Failed — each with counts).
+- **Grid:** Photos-like tiles grouped by month (Years / Months / All), sort Biggest first / Newest first, size label + badges; multi-select; Space = Quick Look preview; arrow keys; search by name. Optional list view.
+- **Header:** "Could free about X GB" for what's shown, with the preset switch and a bar of now → after.
+- **Inspector** (toggleable, right): preview, name/date/resolution/fps/duration, badges, per-preset estimates with % saved, Advanced disclosure, the metadata kept/changes/lost summary (§8.4 — badges + inspector), **Add to Queue · <preset>**, **Compare with Original** (side-by-side; may be deferred to a later plan).
+- **Activity:** the queue runs one job at a time (persists across launches), Pause / Resume (finishes current job), per-job progress; Completed shows before → after and saved; Kept As Is shows the reason; Failed shows the reason + Retry. Statistics (total saved) may come later.
+- **Trust copy** (first run / empty states), plain and short: nothing is changed until you add to the queue; copies keep date, place and albums; originals go to Recently Deleted only after a verified copy exists.
+- No-selection and empty states use SF Symbols + one sentence (no illustrations).
 - **Menu bar:** an icon that accepts dropped files and offers the matching tools; shows queue progress.
 - **Settings window:** default output location, updates on/off, notifications, per-tool defaults.
 - UI rules: system controls and colors only, SF Symbols, sentence-case labels, no emoji, full keyboard operation (⌘O open, ⌘⏎ convert, ⌘. cancel), VoiceOver labels on everything, respects Reduce Motion / Increase Contrast, light and dark.
@@ -259,6 +279,13 @@ Layout (owner chose the native sidebar mockup):
 - **Fixtures:** short (2–3 s) iPhone clips with location on, covering: Dolby Vision 4K60, Dolby Vision 4K30, Cinematic mode, spatial audio, slo-mo, a Live Photo video, an SDR clip, a spatial video (to test refusal), and **a Dolby Vision clip edited in Photos** (trim + filter). Kept small enough to commit (or via Git LFS if needed). **Owner to provide these from their iPhone.**
 - **Spike first — go/no-go gate (§8.3a):** before building UI, prove on real fixtures that a resize preserves genuine Dolby Vision and the metadata list in §8.3, including the edited-video case and the Photos replace-and-delete flow. If Apple's frameworks alone fail on DV, the spike continues with an RPU-reinjection route until it works. Adjust the expected-loss list from what's learned.
 - CI: build + test on every PR; release workflow builds the DMG, signs the Sparkle update, publishes to GitHub Releases.
+
+## 10a. Phase order (revised 2026-11-25)
+1. Plan 1 — engine + Dolby Vision gate (done).
+2. **Plan 2 — app shell:** brand config, hybrid sidebar, Local Files grid, presets + estimates, inspector, queue + Activity lists, Settings, partial-file output (atomic rename), H.264 path.
+3. **Plan 3 — Photos library:** Overview dashboard, Videos grid from PhotoKit (metadata-only scan, no iCloud download until queued), edited-version input, save-as-new, originals backup folder, replace via Recently Deleted.
+4. Plan 4 — Finder right-click, menu bar, Shortcuts.
+5. Plan 5 — release (CI, DMG, Sparkle, README).
 
 ## 11. Roadmap after v1 (each a new feature module)
 

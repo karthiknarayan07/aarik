@@ -13,3 +13,6 @@ xcuserdata/
 
 # Real iPhone fixtures contain personal location data: never commit
 Fixtures/iphone/
+
+# Reference screenshots contain personal photos: keep local only
+docs/references/KeepFeather/
