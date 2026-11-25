@@ -34,11 +34,7 @@ extension PhotoKitStore {
                 creation.addResource(with: .video, fileURL: request.file, options: options)
                 creation.creationDate = request.creationDate
                 if let location = request.location {
-                    creation.location = CLLocation(
-                        coordinate: CLLocationCoordinate2D(
-                            latitude: location.latitude, longitude: location.longitude),
-                        altitude: location.altitude, horizontalAccuracy: 0, verticalAccuracy: 0,
-                        timestamp: request.creationDate ?? Date())
+                    creation.location = location.clLocation(timestamp: request.creationDate ?? Date())
                 }
                 creation.isFavorite = request.isFavorite
                 creation.isHidden = request.isHidden
@@ -63,7 +59,12 @@ extension PhotoKitStore {
     public func deleteAssets(ids: [String]) async throws {
         guard await authorization().allowsReading else { throw PhotoStoreError.notAuthorized }
         let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
-        guard assets.count > 0 else { return }
+        // Nothing is deleted, and the caller hears of it, when any asset can't be found.
+        guard assets.count == Set(ids).count else {
+            var found: Set<String> = []
+            assets.enumerateObjects { asset, _, _ in found.insert(asset.localIdentifier) }
+            throw PhotoStoreError.notInLibrary(ids.first { !found.contains($0) } ?? "")
+        }
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 PHAssetChangeRequest.deleteAssets(assets)
@@ -71,5 +72,15 @@ extension PhotoKitStore {
         } catch {
             throw Self.mapTransferError(error)
         }
+    }
+}
+
+extension PhotoLocation {
+    /// The location as Photos wants it.
+    func clLocation(timestamp: Date) -> CLLocation {
+        CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+            altitude: altitude ?? 0, horizontalAccuracy: 0, verticalAccuracy: altitude == nil ? -1 : 0,
+            timestamp: timestamp)
     }
 }

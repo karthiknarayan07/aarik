@@ -14,6 +14,8 @@ public enum PhotoSaveError: Error, Sendable, Equatable, LocalizedError {
     public enum Cleanup: Sendable, Equatable {
         /// Deleted again (Photos asked the user to confirm, and they did).
         case removed
+        /// Photos found nothing to delete: the new asset is no longer there, but this call deleted nothing.
+        case notFound
         /// The user declined the delete: the new asset is still in the library.
         case declined
         /// The delete failed; the new asset may still be in the library. The text is what PhotoKit said.
@@ -27,6 +29,9 @@ public enum PhotoSaveError: Error, Sendable, Equatable, LocalizedError {
             switch cleanup {
             case .removed:
                 "The video added to Photos didn't check out, so it was removed. Your original is untouched."
+            case .notFound:
+                "The video added to Photos didn't check out, and Photos can no longer find it. Your original is "
+                    + "untouched."
             case .declined:
                 "The video added to Photos didn't check out. You chose to keep it; remove it in Photos if you "
                     + "don't want it. Your original is untouched."
@@ -134,6 +139,8 @@ public struct PhotoSaver: Sendable {
             return .removed
         } catch is CancellationError {
             return .declined
+        } catch PhotoStoreError.notInLibrary {
+            return .notFound
         } catch {
             return .failed(error.localizedDescription)
         }

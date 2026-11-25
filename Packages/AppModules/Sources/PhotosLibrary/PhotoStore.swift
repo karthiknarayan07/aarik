@@ -5,10 +5,10 @@ import Foundation
 public struct PhotoLocation: Sendable, Hashable {
     public let latitude: Double
     public let longitude: Double
-    /// Meters above sea level.
-    public let altitude: Double
+    /// Meters above sea level; nil when unknown.
+    public let altitude: Double?
 
-    public init(latitude: Double, longitude: Double, altitude: Double = 0) {
+    public init(latitude: Double, longitude: Double, altitude: Double? = nil) {
         self.latitude = latitude
         self.longitude = longitude
         self.altitude = altitude

@@ -288,6 +288,10 @@ public final class FakePhotoStore: PhotoStore {
             state.operations.append(.delete(ids))
             guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
             if let error = state.deleteError { throw error }
+            // Like the real store: nothing is deleted when any asset is missing.
+            if let missing = ids.first(where: { id in !state.assets.contains { $0.id == id } }) {
+                throw PhotoStoreError.notInLibrary(missing)
+            }
             state.assets.removeAll { ids.contains($0.id) }
             for id in ids { state.albums[id] = nil }
             state.deletedIDs.append(contentsOf: ids)

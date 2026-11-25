@@ -105,6 +105,26 @@ import Testing
         #expect(store.deletedIDs.isEmpty)
     }
 
+    @Test func deletingWhatIsNotThereIsReported() async {
+        let store = makeStore()
+        await #expect(throws: PhotoStoreError.notInLibrary("ghost")) {
+            try await store.deleteAssets(ids: ["ghost"])
+        }
+        #expect(store.deletedIDs.isEmpty)
+    }
+
+    @Test func cleanupThatFindsNothingToDeleteIsNotClaimedAsRemoved() async {
+        let store = makeStore()
+        store.savedDuration = 99
+        // Photos loses the new asset between the check and the delete.
+        store.deleteError = PhotoStoreError.notInLibrary("new-1")
+        guard case .verifyFailed(_, let cleanup)? = await verifyFailure(store) else {
+            Issue.record("expected verifyFailed")
+            return
+        }
+        #expect(cleanup == .notFound)
+    }
+
     @Test func limitedAccessMayDelete() async throws {
         let store = makeStore()
         store.currentAuthorization = .limited
