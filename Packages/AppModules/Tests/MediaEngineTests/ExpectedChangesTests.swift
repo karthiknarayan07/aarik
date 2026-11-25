@@ -23,12 +23,23 @@ import Testing
 
     @Test func otherChangesAreUnexpected() {
         let changes = [
-            change("video.duration", "1000", "990"),
+            change("video.duration", "1000", "800"),
             change("video.bitDepth", "10", "8"),
             change("hdr.dolbyVision", "profile 8, level 9, compat 4", "profile 5, level 9, compat 0"),
             change("hdr.dolbyVision", "present", "profile 8, level 9, compat 4"),
         ]
         #expect(unexpected(changes) == ["video.duration", "video.bitDepth", "hdr.dolbyVision", "hdr.dolbyVision"])
+    }
+
+    @Test func durationsMayMoveByLessThanATenthOfASecond() {
+        let changes = [
+            change("video.duration", "2335", "2337"),
+            change("audio.0.duration", "14813", "14764"),
+            change("timed.mdta/com.apple.quicktime.scene-illuminance.duration", "15398", "15397"),
+        ]
+        #expect(unexpected(changes).isEmpty)
+        #expect(unexpected([change("audio.0.duration", "14813", "14713")]) == ["audio.0.duration"])
+        #expect(unexpected([change("video.duration", "1000", "unknown")]) == ["video.duration"])
     }
 
     @Test func frameRateIsExpectedOnlyWithACap() {
@@ -52,7 +63,7 @@ import Testing
                 == ["video.transferFunction", "video.colorPrimaries", "video.matrix", "video.bitDepth"])
         // Anything else is still unexpected for H.264.
         #expect(
-            unexpected([change("video.duration", "1000", "990")], spec: DownscaleSpec(codec: .h264Compatible))
+            unexpected([change("video.duration", "1000", "800")], spec: DownscaleSpec(codec: .h264Compatible))
                 == ["video.duration"])
     }
 
