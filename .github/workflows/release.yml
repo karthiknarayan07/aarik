@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    # Assumption: macos-26 is the newest hosted runner with Xcode 26+ (see ci.yml).
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -z "$newest" ]]; then
+            echo "No versioned Xcode found under /Applications" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+
+      - name: Build DMG
+        run: scripts/make-dmg.sh
+
+      # TODO(sparkle): once Sparkle is integrated, sign the DMG with the EdDSA key
+      # (sign_update, key from a repository secret), generate appcast.xml and attach it
+      # to this release.
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          shopt -s nullglob
+          dmgs=(build/dist/*.dmg)
+          if [[ ${#dmgs[@]} -ne 1 ]]; then
+            echo "Expected exactly one DMG in build/dist, found ${#dmgs[@]}" >&2
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${dmgs[0]}" --clobber
+          else
+            gh release create "$TAG" "${dmgs[0]}" --title "$TAG" --generate-notes
+          fi

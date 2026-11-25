@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    # Assumption: macos-26 (Apple silicon) is the newest hosted runner with Xcode 26+.
+    # The project targets Xcode 27.2 locally; the step below selects the newest Xcode
+    # installed on the runner, so bump the label when a newer image appears.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -z "$newest" ]]; then
+            echo "No versioned Xcode found under /Applications" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+          swift --version
+
+      - name: Lint
+        run: swift format lint --recursive --strict Packages App
+
+      - name: Build packages
+        working-directory: Packages/AppModules
+        run: swift build
+
+      - name: Test packages
+        working-directory: Packages/AppModules
+        run: swift test
+
+      - name: Build app (Release)
+        run: |
+          xcodebuild -project App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build

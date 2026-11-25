@@ -16,3 +16,6 @@ Fixtures/iphone/
 
 # Reference screenshots contain personal photos: keep local only
 docs/references/KeepFeather/
+
+# Release artifacts (scripts/make-dmg.sh)
+build/
