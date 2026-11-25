@@ -100,6 +100,14 @@ let package = Package(
             dependencies: ["DownscaleVideo", "PhotosLibrary", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // XCTest, not Swift Testing: `measure(metrics:)` and the clock and memory metrics are XCTest's.
+        // Off unless RUN_PERF_TESTS=1 (see PERFORMANCE.md).
+        .testTarget(
+            name: "PerformanceTests",
+            dependencies: ["MediaEngine", "MediaTestSupport"],
+            exclude: ["Baselines"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .testTarget(
             name: "QuickRunServiceTests",
             dependencies: ["QuickRunService", "DownscaleVideo", "AppCore", "MediaEngine"],

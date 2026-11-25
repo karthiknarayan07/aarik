@@ -21,8 +21,9 @@ deletes files, and `PERFORMANCE.md` before touching the engine, the queue or the
 Run from the repository root unless stated.
 
 ```sh
-cd Packages/AppModules && swift build --build-tests
+cd Packages/AppModules && swift build -Xswiftc -warnings-as-errors --build-tests
 cd Packages/AppModules && swift test
+cd Packages/AppModules && RUN_PERF_TESTS=1 swift test --filter PerformanceTests   # benchmark vs stored baseline
 cd Packages/AppModules && swift test --sanitize=thread     # CI runs this and the address one as separate jobs
 cd Packages/AppModules && swift test --sanitize=address
 swift format lint --recursive --strict Packages/AppModules/Sources Packages/AppModules/Tests App/Sources
@@ -53,5 +54,5 @@ Format with `swift format -i <files>`. Do not open or launch the app from an aut
 ## Status of the hardening work
 
 `docs/superpowers/plans/2026-11-25-plan-6-stability-performance.md`. Done: sanitizer CI jobs, warnings as errors,
-scheme diagnostics, update relaunch held while work runs. Planned (not in the code): disk-space preflight, sleep
-and thermal handling, signposts and performance tests.
+scheme diagnostics, update relaunch held while work runs, disk-space preflight, signposts and performance tests
+(launch-time test waits for the `ui-tests` branch). Planned (not in the code): sleep and thermal handling.

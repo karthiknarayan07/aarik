@@ -1,7 +1,7 @@
 # Performance
 
 What the app does today to stay fast, the budgets it is held to, and how to measure. Items marked "planned" are
-Plan 6 Phase B and not in the code yet.
+not in the code yet.
 
 ## Design that already matters
 
@@ -29,8 +29,8 @@ Plan 6 Phase B and not in the code yet.
 | Main-thread hangs during a 20-video batch | none over 250 ms (Hangs instrument) |
 | 50-video batch | memory flat: under 10 % growth after warm-up |
 
-These are checked by hand before a release (the checklist is to be added to `docs/RELEASING.md`). Automated
-regression tests with stored baselines are planned (B3).
+These are checked by hand before a release (the checklist is to be added to `docs/RELEASING.md`). Regressions in
+engine time and memory are caught by the performance tests below.
 
 ## Measure, fix, measure
 
@@ -46,8 +46,41 @@ regression tests with stored baselines are planned (B3).
 
 ## Signposts
 
-None yet. `OSSignposter` intervals around read, transfer, encode, write, verify, download and save are planned
-(B3). Only `os.Logger` exists today (`queue` category in `JobQueue`).
+`OSSignposter` intervals, all through one signposter (`Signposts` in `AppCore/Safety/Signposts.swift`: the app's
+subsystem, category Points of Interest), so they show in Instruments' Points of Interest and Time Profiler lanes.
+The names are stable; `PipelineStage` is the list and a test pins it. Adding a stage means adding it here.
+
+| Interval | Where | Covers |
+| --- | --- | --- |
+| `read` | `DownscaleJob.run` | one video sample from `AVAssetReader` |
+| `transfer` | `DownscaleJob.run` | scaling one frame (`VTPixelTransferSession`) |
+| `encode` | `DownscaleJob.submitPending` | submitting one frame to `VTCompressionSession` |
+| `write` | `DownscaleJob.appendEncoded`, `run` | appending one encoded sample; finishing the file |
+| `verify` | `DownscaleRunner.convert` | reading the output back, and comparing it with the source |
+| `download` | `PhotosDownscaleRunner.fetchInput` | getting a Photos video onto this Mac (iCloud download, or copy, and an edit's render) |
+| `save` | `PhotosDownscaleRunner.saveToPhotos` | adding the new video to Photos and checking it |
+
+`read`, `transfer`, `encode` and `write` are per frame or sample, so a clip shows thousands of short intervals;
+`verify`, `download` and `save` are one per job. Beyond these, only `os.Logger` is used (`queue` category in
+`JobQueue`).
+
+## Performance tests
+
+- `Packages/AppModules/Tests/PerformanceTests` (XCTest, because `measure` and the metrics are XCTest's):
+  - `DownscalePerformanceTests` downscales a **generated** 3840x2160 HLG clip (two seconds, no audio; never personal
+    media) five times under `measure(metrics: [XCTClockMetric(), XCTMemoryMetric()])`, and compares the fastest time
+    and the median rise in physical memory with the stored baseline. More than 20 % worse fails.
+  - It runs only with `RUN_PERF_TESTS=1` (it skips itself otherwise): it takes about 5 to 15 s, but timings need a
+    quiet machine and would flake in a shared everyday run. CI has its own `performance` job that sets it.
+  - **Baselines are a JSON file** (`PerformanceTests/Baselines/baselines.json`), keyed by hardware model and core
+    count. SwiftPM can't store XCTest baselines (`swift test` neither reads nor writes `xcbaseline` files, which
+    belong to an Xcode project), so the 20 % rule is applied in the test. A machine with no entry measures, prints
+    the numbers and passes. Record or update one on a quiet Mac with
+    `RUN_PERF_TESTS=1 RECORD_PERF_BASELINE=1 swift test --filter DownscalePerformanceTests` and commit the file.
+    `BaselineGuardTests` covers the rule itself and runs every time.
+- Launch time: `App/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines) belongs in
+  the `AppUITests` target of the `ui-tests` branch; the target is not on this branch, so it doesn't build yet. Running
+  UI tests needs automation permission.
 
 ## Rules of thumb for changes
 

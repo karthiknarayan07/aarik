@@ -35,7 +35,7 @@ jobs:
 
       - name: Build packages
         working-directory: Packages/AppModules
-        run: swift build -Xswiftc -warnings-as-errors
+        run: swift build -Xswiftc -warnings-as-errors --build-tests
 
       - name: Test packages
         working-directory: Packages/AppModules
@@ -69,3 +69,27 @@ jobs:
       - name: Test (${{ matrix.sanitizer }} sanitizer)
         working-directory: Packages/AppModules
         run: swift test --sanitize=${{ matrix.sanitizer }}
+
+  performance:
+    # Times and memory of a generated 4K downscale, compared with the stored baseline (20 % rule). Off in the other
+    # jobs: RUN_PERF_TESTS is unset there, so the benchmark skips itself. A runner with no stored baseline (the
+    # baselines are per hardware model) measures and prints instead of failing.
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -z "$newest" ]]; then
+            echo "No versioned Xcode found under /Applications" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+
+      - name: Performance tests
+        working-directory: Packages/AppModules
+        env:
+          RUN_PERF_TESTS: "1"
+        run: swift test --filter PerformanceTests

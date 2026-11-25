@@ -9,6 +9,9 @@ First public release.
 
 ### Added
 
+- **Free-space check:** before a conversion writes anything, the app checks that the disk has room for the converted
+  video (and, for a Photos video, its download) plus 1 GB to spare. If not, the video fails with "Not enough free space
+  on <disk> (needs about X, has Y)", nothing is written, and Retry works once there is room.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).
 

@@ -1,7 +1,7 @@
 # Stability
 
 How the app keeps long batches and user files safe. Every rule here is enforced in code and most are covered by tests (the
-Time Machine exclusion, for one, is not); "planned" items belong to Plan 6 Phase B and do not exist yet. Change a rule only together with its test.
+Time Machine exclusion, for one, is not); "planned" items (sleep and thermal handling, B2) do not exist yet. Change a rule only together with its test.
 
 ## File safety (never break these)
 
@@ -60,8 +60,25 @@ Time Machine exclusion, for one, is not); "planned" items belong to Plan 6 Phase
 
 - Heavy work is bounded: `WorkSlots` (half the cores, at least 2) limits concurrent downscales; blocking reads run
   on a dedicated executor, never the shared pool.
-- Disk space preflight, sleep prevention during a batch and thermal throttling: **planned** (Plan 6 B1, B2). Until
-  then a full disk surfaces as a failed job, with the partial removed.
+- **Disk space preflight** (`AppCore/Safety/DiskSpace.swift`, B1). Before a job writes anything, every volume it
+  will write to must have `volumeAvailableCapacityForImportantUsage` of at least what goes there plus a 1 GB margin
+  (`DiskSpaceCheck.margin`). Needs on one volume add up.
+  - A file job: the planner's estimated output on the output folder's volume (`DownscaleRunner.convert`, after the
+    plan and before the encoder starts).
+  - A Photos job, before the download and before the job's folder is created: the video as Photos has it, plus the
+    planner's estimate for the converted copy, on the Work volume (the converted copy goes to a chosen folder's
+    volume instead when the destination is a folder); with a Replace and an originals backup, the original on the
+    backup volume, and, for an edited video, a second copy of the original on the Work volume
+    (`PhotosDownscaleRunner.checkFreeSpaceBeforeDownload`). Skipped when Photos doesn't report the video's size. Once
+    the video is read, the exact estimate is checked again as for a file.
+  - The originals backup copy checks its folder's volume right before copying (`DownscaleRunner.backUp`); a failure
+    keeps the original and says so, like any backup failure.
+  - On failure the job fails with `NotEnoughSpaceError`: "Not enough free space on <volume> (needs about X, has Y)"
+    (the volume's localized name, `ByteCountFormatter` sizes). Nothing was written, so Retry works. A volume that
+    can't be read is not checked (the write would then fail as before, with its partial removed).
+  - The volume query is the `DiskSpaceProviding` protocol; tests use `FakeDiskSpace`
+    (`DiskSpacePreflightTests`, `DiskSpaceTests`).
+- Sleep prevention during a batch and thermal throttling: **planned** (Plan 6 B2).
 
 ## Diagnostics and CI
 
