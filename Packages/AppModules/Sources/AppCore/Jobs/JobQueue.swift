@@ -17,16 +17,24 @@ public actor JobQueue {
     /// Running jobs the user cancelled: when their run throws they leave the queue instead of failing.
     private var cancelledByUser: Set<UUID> = []
     private var subscribers: [UUID: AsyncStream<[Job]>.Continuation] = [:]
-    /// Set when the saved queue couldn't be read and was set aside; the queue starts empty.
+    /// Set when the saved queue couldn't be read (it was set aside, or it is left alone and this session's queue
+    /// isn't saved); the queue starts empty.
     public private(set) var loadError: String?
+    /// False when the saved queue couldn't be read or set aside: saving would overwrite it.
+    private let savesChanges: Bool
 
     public init(store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false) {
         self.store = store
         self.runners = runners
         self.paused = startPaused
         let result = store.loadReportingProblems()
+        savesChanges = !result.mustNotSave
         if let aside = result.setAside {
             loadError = "The saved queue couldn't be read. It was kept as \(aside.lastPathComponent)."
+        } else if result.mustNotSave {
+            loadError =
+                "The saved queue couldn't be read. It was left as it is, and changes to the queue won't be saved "
+                + "until the app is opened again."
         }
         var loaded = result.jobs
         var recovered = false
@@ -37,7 +45,7 @@ public actor JobQueue {
             }
         }
         self.items = loaded
-        if recovered { try? store.save(loaded) }
+        if recovered, savesChanges { try? store.save(loaded) }
     }
 
     public var jobs: [Job] { items }
@@ -169,7 +177,7 @@ public actor JobQueue {
     }
 
     private func changed() {
-        try? store.save(items)
+        if savesChanges { try? store.save(items) }
         for continuation in subscribers.values { continuation.yield(items) }
     }
 

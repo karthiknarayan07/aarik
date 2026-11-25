@@ -532,3 +532,40 @@ private actor ProgressRunner: JobRunner {
     try store.save([makeJob()])
     #expect(await JobQueue(store: store, runners: [:]).loadError == nil)
 }
+
+@Test func jobsFileThatCantBeReadIsNeverSavedOver() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    try store.save([makeJob(name: "saved")])
+    let file = dir.appendingPathComponent("jobs.json")
+    let saved = try Data(contentsOf: file)
+    // Exists but can't be read (permissions here; a failing disk in real life).
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path) }
+
+    let queue = JobQueue(store: store, runners: [:], startPaused: true)
+
+    let error = try #require(await queue.loadError)
+    #expect(error.contains("won't be saved"))
+    await queue.enqueue([makeJob(name: "new")])
+    try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+    #expect(try Data(contentsOf: file) == saved)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["jobs.json"])
+}
+
+@Test func jobsFileThatCantBeSetAsideIsNeverSavedOver() async throws {
+    let (_, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let garbage = Data("{ not jobs".utf8)
+    let file = dir.appendingPathComponent("jobs.json")
+    try garbage.write(to: file)
+    var store = JobStore(directory: dir)
+    store.moveItem = { _, _ in throw CocoaError(.fileWriteNoPermission) }
+
+    let queue = JobQueue(store: store, runners: [:], startPaused: true)
+
+    let error = try #require(await queue.loadError)
+    #expect(error.contains("won't be saved"))
+    await queue.enqueue([makeJob()])
+    #expect(try Data(contentsOf: file) == garbage)
+}
