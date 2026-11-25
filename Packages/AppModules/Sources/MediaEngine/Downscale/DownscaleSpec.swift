@@ -1,7 +1,7 @@
 import CoreGraphics
 
 /// What a downscale produces: the short side, the average bit rate, and an optional frame-rate cap.
-public struct DownscaleSpec: Sendable, Equatable, Codable {
+public struct DownscaleSpec: Sendable, Hashable, Codable {
     /// `nil` keeps the source resolution.
     public var targetShortSide: Int? = 1080
     public var averageBitRate: Int = 20_000_000

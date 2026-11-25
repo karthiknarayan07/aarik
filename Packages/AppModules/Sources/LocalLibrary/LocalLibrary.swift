@@ -6,7 +6,11 @@ import Observation
 @MainActor
 @Observable
 public final class LocalLibrary {
-    public private(set) var items: [LibraryItem] = []
+    public private(set) var items: [LibraryItem] = [] {
+        didSet { revision &+= 1 }
+    }
+    /// Changes whenever `items` does, so views and caches can tell cheaply that the library changed.
+    public private(set) var revision = 0
     public private(set) var isScanning = false
     /// Set when the library file could not be read or written; the in-memory library keeps working.
     public private(set) var persistenceError: String?
@@ -26,6 +30,7 @@ public final class LocalLibrary {
     @ObservationIgnored private var saveDirty = false
     @ObservationIgnored private var saver: Task<Void, Never>?
     @ObservationIgnored private var cancelledWorkers: [Task<Void, Never>] = []
+    @ObservationIgnored private var cachedBadgeCounts: (revision: Int, counts: [MediaBadge: Int])?
 
     /// Restores what the store remembers; files that are gone come back with `isAvailable == false`.
     public init(store: BookmarkStore, scanner: LibraryScanner = LibraryScanner(), batchSize: Int = 50) {
@@ -44,9 +49,12 @@ public final class LocalLibrary {
 
     /// How many items carry each badge; badges nobody has are absent.
     public var badgeCounts: [MediaBadge: Int] {
-        items.reduce(into: [:]) { counts, item in
+        if let cached = cachedBadgeCounts, cached.revision == revision { return cached.counts }
+        let counts = items.reduce(into: [MediaBadge: Int]()) { counts, item in
             for badge in item.badges { counts[badge, default: 0] += 1 }
         }
+        cachedBadgeCounts = (revision, counts)
+        return counts
     }
 
     public func groups(by grouping: Grouping, sort: Sort, filter: MediaBadge?) -> [ItemGroup] {

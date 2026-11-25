@@ -25,7 +25,11 @@ public enum Preset: String, Codable, CaseIterable, Sendable {
     static let assumedAudioBitRate = 256_000
 
     public func spec(for inventory: MetadataInventory, byteSize: Int64) -> DownscaleSpec {
-        let source = SourceProfile(inventory: inventory, byteSize: byteSize)
+        spec(for: SourceProfile(inventory: inventory, byteSize: byteSize))
+    }
+
+    /// The spec for an already-read source profile, so a planner call reads the inventory once.
+    func spec(for source: SourceProfile) -> DownscaleSpec {
         switch self {
         case .high:
             let floor = Self.balancedBitRate(source: source, shortSide: nil)

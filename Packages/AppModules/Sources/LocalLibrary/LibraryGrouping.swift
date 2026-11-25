@@ -32,6 +32,10 @@ enum LibraryGrouper {
         }
         if kept.isEmpty { return [] }
         if grouping == .none { return [ItemGroup(id: "all", title: "All videos", items: kept)] }
+        // One style for the whole pass; Foundation caches the formatter behind it.
+        let monthStyle = Date.FormatStyle(
+            locale: Locale(identifier: "en_US"), calendar: calendar, timeZone: calendar.timeZone
+        ).month(.wide).year()
 
         var buckets: [String: [LibraryItem]] = [:]
         var order: [String] = []
@@ -47,7 +51,8 @@ enum LibraryGrouper {
             return lhs > rhs
         }.map { key in
             ItemGroup(
-                id: key, title: title(for: key, grouping: grouping, calendar: calendar), items: buckets[key] ?? [])
+                id: key, title: title(for: key, grouping: grouping, calendar: calendar, style: monthStyle),
+                items: buckets[key] ?? [])
         }
     }
 
@@ -58,18 +63,15 @@ enum LibraryGrouper {
         return grouping == .year ? String(format: "%04d", year) : String(format: "%04d-%02d", year, parts.month ?? 0)
     }
 
-    private static func title(for key: String, grouping: Grouping, calendar: Calendar) -> String {
+    private static func title(
+        for key: String, grouping: Grouping, calendar: Calendar, style: Date.FormatStyle
+    ) -> String {
         if key == "unknown" { return unknownTitle }
         if grouping == .year { return key }
         let parts = key.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 2,
             let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: 1))
         else { return key }
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-        return formatter.string(from: date)
+        return date.formatted(style)
     }
 }

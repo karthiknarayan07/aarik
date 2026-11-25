@@ -11,7 +11,11 @@ public enum Estimator {
     }
 
     public static func estimatedBytes(inventory: MetadataInventory, byteSize: Int64, spec: DownscaleSpec) -> Int64 {
-        let source = SourceProfile(inventory: inventory, byteSize: byteSize)
+        estimatedBytes(source: SourceProfile(inventory: inventory, byteSize: byteSize), spec: spec)
+    }
+
+    static func estimatedBytes(source: SourceProfile, spec: DownscaleSpec) -> Int64 {
+        let byteSize = source.byteSize
         guard source.durationSeconds > 0 else { return byteSize }
         let videoBytes = Double(spec.averageBitRate) * source.durationSeconds / 8
         let sourceVideoBytes = source.videoBitRate * source.durationSeconds / 8

@@ -19,25 +19,36 @@ public enum DownscalePlanner {
 
     /// Decides for an explicit spec (a preset's or a custom one).
     public static func decide(inventory: MetadataInventory, byteSize: Int64, spec: DownscaleSpec) -> PlanDecision {
+        decide(source: SourceProfile(inventory: inventory, byteSize: byteSize), inventory: inventory, spec: spec)
+    }
+
+    /// Decides with an already-read source profile, so the inventory is parsed once per decision.
+    static func decide(source: SourceProfile, inventory: MetadataInventory, spec: DownscaleSpec) -> PlanDecision {
+        let byteSize = source.byteSize
         if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: spatialReason) }
-        let source = SourceProfile(inventory: inventory, byteSize: byteSize)
         guard source.durationSeconds > 0 else { return .keptAsIs(reason: "Couldn't read the video's length") }
         if let target = spec.targetShortSide {
             if source.shortSide > 0, source.shortSide <= target { return .keptAsIs(reason: "Already small") }
         } else if source.videoBitRate > 0, source.videoBitRate <= Double(spec.averageBitRate) {
             return .keptAsIs(reason: "Already small")
         }
-        let estimate = Estimator.estimatedBytes(inventory: inventory, byteSize: byteSize, spec: spec)
+        let estimate = Estimator.estimatedBytes(source: source, spec: spec)
         if Double(estimate) > Double(byteSize) * 0.9 {
             return .keptAsIs(reason: "Would save less than 10%")
         }
-        return .convert(spec, estimatedBytes: estimate, predicted: predicted(inventory: inventory, spec: spec))
+        let report = predicted(inventory: inventory, source: source, spec: spec)
+        return .convert(spec, estimatedBytes: estimate, predicted: report)
     }
 
     /// What the conversion is expected to change or drop: the dimensions (and the Dolby Vision level) when the
     /// size shrinks, and auxiliary video tracks such as the Cinematic disparity track. All else is kept.
     static func predicted(inventory: MetadataInventory, spec: DownscaleSpec) -> MetadataReport {
-        let source = SourceProfile(inventory: inventory, byteSize: 0)
+        predicted(inventory: inventory, source: SourceProfile(inventory: inventory, byteSize: 0), spec: spec)
+    }
+
+    static func predicted(inventory: MetadataInventory, source: SourceProfile, spec: DownscaleSpec)
+        -> MetadataReport
+    {
         let size = source.outputSize(shortSide: spec.targetShortSide)
         let resized = (size.width, size.height) != (source.width, source.height)
         var report = MetadataReport()

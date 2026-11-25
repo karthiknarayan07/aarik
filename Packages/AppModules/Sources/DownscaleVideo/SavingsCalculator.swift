@@ -31,8 +31,8 @@ public enum SavingsCalculator {
     public static func decision(
         byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil
     ) -> PlanDecision {
-        let spec = custom ?? preset.spec(for: inventory, byteSize: byteSize)
-        return DownscalePlanner.decide(inventory: inventory, byteSize: byteSize, spec: spec)
+        let source = SourceProfile(inventory: inventory, byteSize: byteSize)
+        return DownscalePlanner.decide(source: source, inventory: inventory, spec: custom ?? preset.spec(for: source))
     }
 
     /// Sum of `byteSize - estimate` over the videos that would be converted.

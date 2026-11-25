@@ -21,7 +21,7 @@ struct LibraryInspector: View {
                     }
                 }
                 DownscaleInspector(
-                    sources: items.map(\.savingsSource), preset: $model.preset, advanced: $model.advanced,
+                    sources: items.map(\.inspectorSource), preset: $model.preset, advanced: $model.advanced,
                     saveLocation: $model.saveLocation)
             }
             .formStyle(.grouped)
@@ -47,7 +47,7 @@ private struct QueueButton: View {
             .controlSize(.large)
             .disabled(!model.canAddSelectionToQueue)
             .help("Add to the queue (⌘⏎)")
-            if model.queueableItems.count < model.selectedItems.count {
+            if !model.queueableItems.isEmpty, model.queueableItems.count < model.selectedItems.count {
                 Text("Missing files are skipped.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -14,18 +14,14 @@ final class AppModel {
     }
 
     // MARK: Navigation and window
-    var selection: SidebarDestination? = .localFiles
+    var selection: SidebarDestination? = .localFiles {
+        didSet { browser.filter = badgeFilter }
+    }
     var isInspectorPresented: Bool {
         didSet { defaults.set(isInspectorPresented, forKey: Keys.inspector) }
     }
     var isImporterPresented = false
     var quickLookURL: URL?
-
-    // MARK: Local Files
-    var grouping: Grouping = .month
-    var sort: Sort = .biggestFirst
-    var searchText = ""
-    var selectedItemIDs: Set<UUID> = []
 
     // MARK: Conversion choices
     var preset: Preset {
@@ -42,6 +38,8 @@ final class AppModel {
     var queueError: String?
 
     let library: LocalLibrary
+    /// Grouping, sort, search, filter and selection for the grid, with cached sections and savings.
+    let browser: LibraryBrowser
     let queue: JobQueue
     let thumbnails = ThumbnailCache()
     let tools: [ToolEntry] = ToolRegistry.tools
@@ -56,7 +54,9 @@ final class AppModel {
         self.defaults = defaults
         self.preset = defaults.string(forKey: Keys.preset).flatMap(Preset.init(rawValue:)) ?? .balanced
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
-        self.library = LocalLibrary(directory: directory)
+        let library = LocalLibrary(directory: directory)
+        self.library = library
+        self.browser = LibraryBrowser(library: library)
         self.queue = JobQueue(
             store: JobStore(directory: directory), runners: [DownscaleTool.toolID: DownscaleRunner()])
     }

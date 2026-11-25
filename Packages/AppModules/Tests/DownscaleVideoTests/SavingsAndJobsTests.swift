@@ -123,4 +123,11 @@ import Testing
         options.bitRateMbps = 0
         #expect(options.spec == DownscaleSpec(targetShortSide: nil, averageBitRate: 1_000_000, maxFrameRate: nil))
     }
+
+    @Test func queueButtonTitlesAreSentenceCaseAndSayWhenNothingCanBeAdded() {
+        #expect(QueueButtonTitle.title(count: 1, preset: .balanced, isCustom: false) == "Add to queue · Balanced")
+        #expect(QueueButtonTitle.title(count: 1, preset: .balanced, isCustom: true) == "Add to queue · Custom")
+        #expect(QueueButtonTitle.title(count: 3, preset: .high, isCustom: false) == "Add 3 to queue")
+        #expect(QueueButtonTitle.title(count: 0, preset: .high, isCustom: false) == "Nothing to add")
+    }
 }

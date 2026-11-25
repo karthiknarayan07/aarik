@@ -18,20 +18,20 @@ struct MainApp: App {
     }
 }
 
-/// File → Add Files… (⌘O) and Queue → Add to Queue (⌘⏎).
+/// File → Add files… (⌘O) and Queue → Add to queue (⌘⏎).
 private struct LibraryCommands: Commands {
     let model: AppModel
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Add Files…") {
+            Button("Add files…") {
                 if model.selection?.showsLibrary != true { model.selection = .localFiles }
                 model.isImporterPresented = true
             }
             .keyboardShortcut("o")
         }
         CommandMenu("Queue") {
-            Button("Add to Queue") { model.requestAddSelectionToQueue() }
+            Button("Add to queue") { model.requestAddSelectionToQueue() }
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!model.canAddSelectionToQueue)
         }

@@ -2,6 +2,7 @@ import AppUI
 import DownscaleVideo
 import Foundation
 import LocalLibrary
+import MediaEngine
 
 extension AppModel {
     /// The media-type filter when the sidebar points at one.
@@ -10,41 +11,54 @@ extension AppModel {
         return nil
     }
 
-    /// The grid's sections: the library grouped, sorted, filtered by media type and by the search text.
+    /// The grid's sections, built once per change of the library or the query (never per selection change).
     var sections: [MediaSection<LibraryItem>] {
-        let query = searchText.trimmingCharacters(in: .whitespaces)
-        return library.groups(by: grouping, sort: sort, filter: badgeFilter).compactMap { group in
-            let items =
-                query.isEmpty
-                ? group.items : group.items.filter { $0.url.lastPathComponent.localizedStandardContains(query) }
-            guard !items.isEmpty else { return nil }
-            let count = items.count == 1 ? "1 video" : "\(items.count) videos"
-            return MediaSection(
-                id: group.id, title: grouping == .none ? "" : group.title, subtitle: count, items: items)
+        let grouping = browser.grouping
+        return browser.cached("sections") { snapshot in
+            snapshot.groups.map { group in
+                let count = group.items.count == 1 ? "1 video" : "\(group.items.count) videos"
+                return MediaSection(
+                    id: group.id, title: grouping == .none ? "" : group.title, subtitle: count, items: group.items)
+            }
         }
     }
 
-    var shownItems: [LibraryItem] { sections.flatMap(\.items) }
+    /// What converting the shown, available items would free with the current preset or Advanced spec.
+    /// Kept As Is items count as zero. Cached until the items, the query, the preset or the spec change.
+    var couldFreeShown: Int64 {
+        let key = SavingsKey(preset: preset, custom: advanced.spec)
+        return browser.cached(key) { snapshot in
+            couldFreeBytes(for: snapshot.items.filter(\.isAvailable), key: key)
+        }
+    }
 
-    var selectedItems: [LibraryItem] { library.items.filter { selectedItemIDs.contains($0.id) } }
+    /// Visible selected items, in grid order; a search or filter that hides an item also deselects it here.
+    var selectedItems: [LibraryItem] { browser.selectedItems }
 
-    /// What converting the given items with the current preset would free; Kept As Is items count as zero.
     func couldFreeBytes(for items: [LibraryItem]) -> Int64 {
-        SavingsCalculator.couldFreeBytes(for: items.map(\.savingsSource), preset: preset)
+        couldFreeBytes(for: items, key: SavingsKey(preset: preset, custom: advanced.spec))
+    }
+
+    private func couldFreeBytes(for items: [LibraryItem], key: SavingsKey) -> Int64 {
+        SavingsCalculator.couldFreeBytes(for: items.map(\.savingsSource), preset: key.preset, custom: key.custom)
     }
 
     /// Space toggles Quick Look for the selection.
     func toggleQuickLook() {
-        if quickLookURL != nil {
-            quickLookURL = nil
-        } else {
-            quickLookURL = shownItems.first { selectedItemIDs.contains($0.id) }?.url
-        }
+        quickLookURL = quickLookURL == nil ? selectedItems.first?.url : nil
     }
 
-    var quickLookURLs: [URL] { shownItems.filter { selectedItemIDs.contains($0.id) }.map(\.url) }
+    var quickLookURLs: [URL] { selectedItems.map(\.url) }
+}
+
+private struct SavingsKey: Hashable {
+    let preset: Preset
+    let custom: DownscaleSpec?
 }
 
 extension LibraryItem {
     var savingsSource: SavingsCalculator.Source { (byteSize: byteSize, inventory: inventory) }
+    var inspectorSource: InspectorSource {
+        InspectorSource(byteSize: byteSize, inventory: inventory, isAvailable: isAvailable)
+    }
 }
