@@ -157,8 +157,8 @@ public actor JobQueue {
             }
             return state
         } catch {
-            // A cancelled run (shutdown) is not a failure: nil means "put back in the queue".
-            if Task.isCancelled || error is CancellationError { return nil }
+            // Only a cancelled worker (shutdown) is not a failure: nil means "put back in the queue".
+            if Task.isCancelled { return nil }
             let reason = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             return .failed(reason: reason)
         }

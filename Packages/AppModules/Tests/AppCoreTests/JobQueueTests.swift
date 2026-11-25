@@ -318,3 +318,40 @@ private actor ProgressRunner: JobRunner {
         gate = nil
     }
 }
+
+@Test func cancellationErrorWithoutShutdownFailsTheJob() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let job = makeJob()
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([job])
+    _ = await starts.next()
+    await runner.finish(job.id, .failure(CancellationError()))
+    await waitUntil(queue) { jobs in
+        if case .failed = jobs[0].state { return true } else { return false }
+    }
+    #expect(await runner.events == ["start a", "abort a"])
+    await queue.shutdown()
+}
+
+@Test func recoveredJobRunsAfterResume() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    var stuck = makeJob()
+    stuck.state = .running(progress: 0.4)
+    try store.save([stuck])
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.resume()
+    let startedID = await starts.next()
+    #expect(startedID == stuck.id)
+    await runner.finish(stuck.id, .success(completed()))
+    await waitUntil(queue) { jobs in
+        if case .completed = jobs[0].state { return true } else { return false }
+    }
+}
