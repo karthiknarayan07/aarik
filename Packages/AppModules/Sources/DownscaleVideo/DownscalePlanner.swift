@@ -21,13 +21,14 @@ public enum DownscalePlanner {
     static func decide(inventory: MetadataInventory, byteSize: Int64, spec: DownscaleSpec) -> PlanDecision {
         if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: spatialReason) }
         let source = SourceProfile(inventory: inventory, byteSize: byteSize)
+        guard source.durationSeconds > 0 else { return .keptAsIs(reason: "Couldn't read the video's length") }
         if let target = spec.targetShortSide {
             if source.shortSide > 0, source.shortSide <= target { return .keptAsIs(reason: "Already small") }
         } else if source.videoBitRate > 0, source.videoBitRate <= Double(spec.averageBitRate) {
             return .keptAsIs(reason: "Already small")
         }
         let estimate = Estimator.estimatedBytes(inventory: inventory, byteSize: byteSize, spec: spec)
-        if source.durationSeconds > 0, byteSize > 0, Double(estimate) > Double(byteSize) * 0.9 {
+        if Double(estimate) > Double(byteSize) * 0.9 {
             return .keptAsIs(reason: "Would save less than 10%")
         }
         return .convert(spec, estimatedBytes: estimate, predicted: predicted(inventory: inventory, spec: spec))
@@ -41,8 +42,19 @@ public enum DownscalePlanner {
         let resized = (size.width, size.height) != (source.width, source.height)
         var report = MetadataReport()
         var seen = Set<String>()
+        // `track.<n>.kind` = `auxv/<subtype>` marks an auxiliary video track (Cinematic disparity); the downscaler
+        // drops it along with its `trackmeta.<n>.*` items.
+        let auxPrefixes = inventory.items.compactMap { item -> String? in
+            let parts = item.key.split(separator: ".")
+            guard parts.count == 3, parts[0] == "track", parts[2] == "kind", item.value.hasPrefix("auxv/") else {
+                return nil
+            }
+            return "trackmeta.\(parts[1])."
+        }
         for item in inventory.items where seen.insert(item.key).inserted {
-            if item.key.hasPrefix("track."), item.key.hasSuffix(".kind"), item.value.contains("auxv") {
+            if item.key.hasPrefix("track."), item.key.hasSuffix(".kind"), item.value.hasPrefix("auxv/") {
+                report.lost.append(item)
+            } else if auxPrefixes.contains(where: { item.key.hasPrefix($0) }) {
                 report.lost.append(item)
             } else if resized, item.key == "video.dimensions" {
                 report.changed.append(

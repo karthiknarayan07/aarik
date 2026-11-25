@@ -37,6 +37,8 @@ public struct ClipOptions: Sendable {
     public var masteringDisplay: Data?
     public var contentLightLevel: Data?
     public var ambientViewingEnvironment: Data?
+    /// Average encode bit rate in bits per second; nil uses 2 bits per pixel per second.
+    public var videoBitRate: Int?
     public var finderTags: [String] = []
     public var extendedAttributes: [String: Data] = [:]
 
@@ -68,7 +70,7 @@ public enum FixtureFactory {
             AVVideoProfileLevelKey: hlg
                 ? kVTProfileLevel_HEVC_Main10_AutoLevel as String
                 : kVTProfileLevel_HEVC_Main_AutoLevel as String,
-            AVVideoAverageBitRateKey: max(options.width * options.height * 2, 1_000_000),
+            AVVideoAverageBitRateKey: options.videoBitRate ?? max(options.width * options.height * 2, 1_000_000),
         ]
         let staticHDR: [(CFString, Data?)] = [
             (kVTCompressionPropertyKey_MasteringDisplayColorVolume, options.masteringDisplay),

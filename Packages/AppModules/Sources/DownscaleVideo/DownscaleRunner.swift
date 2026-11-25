@@ -1,5 +1,4 @@
 import AppCore
-import Darwin
 import Foundation
 import MediaEngine
 
@@ -20,17 +19,24 @@ public enum DownscaleRunnerError: Error, LocalizedError, Equatable {
 public struct DownscaleRunner: JobRunner {
     /// Moves a file to the Trash and returns where it went.
     public typealias Trasher = @Sendable (URL) throws -> URL
+    typealias Inspector = @Sendable (URL) async throws -> MetadataInventory
 
     private static let maxNamingAttempts = 3
     private let trash: Trasher
+    private let inspect: Inspector
 
     public init() {
         self.init(trash: Self.trashItem)
     }
 
-    /// `trash` is a seam for tests, which need the Trash location of the fixture they created.
-    init(trash: @escaping Trasher) {
+    /// Seams for tests: `trash` reports the Trash location of the fixture a test created, `inspect` reads the
+    /// output's metadata (a test can make the output look unfaithful).
+    init(
+        trash: @escaping Trasher,
+        inspect: @escaping Inspector = { try await MediaInspector().inventory(of: $0) }
+    ) {
         self.trash = trash
+        self.inspect = inspect
     }
 
     private static func trashItem(_ url: URL) throws -> URL {
@@ -45,25 +51,17 @@ public struct DownscaleRunner: JobRunner {
         let byteSize = try Self.fileSize(source)
         let inventory = try await MediaInspector().inventory(of: source)
 
-        let spec: DownscaleSpec
+        // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule.
+        let spec = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
         let predicted: MetadataReport
-        if let custom = settings.custom {
-            // A custom spec is the user's explicit choice: no savings check, only what the downscaler refuses.
-            if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: DownscalePlanner.spatialReason) }
-            spec = custom
-            predicted = DownscalePlanner.predicted(inventory: inventory, spec: custom)
-        } else {
-            let decision = DownscalePlanner.decide(
-                source: source, inventory: inventory, byteSize: byteSize, preset: settings.preset)
-            switch decision {
-            case .keptAsIs(let reason): return .keptAsIs(reason: reason)
-            case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
-            }
+        switch DownscalePlanner.decide(inventory: inventory, byteSize: byteSize, spec: spec) {
+        case .keptAsIs(let reason): return .keptAsIs(reason: reason)
+        case .convert(_, _, let report): predicted = report
         }
 
         let folder = try Self.outputFolder(for: settings.saveTo, source: source)
         defer { folder.stop() }
-        let label = Self.label(for: spec)
+        let label = Self.label(for: spec, settings: settings)
 
         let output: URL
         do {
@@ -73,17 +71,18 @@ public struct DownscaleRunner: JobRunner {
             return .keptAsIs(reason: "Already small")
         }
 
-        let outputInventory = try await MediaInspector().inventory(of: output)
+        let outputInventory = try await inspect(output)
         let report = MetadataDiff.report(source: inventory, output: outputInventory)
-        let predictedLost = Set(predicted.lost.map(\.key))
-        let verified = report.lost.allSatisfy { predictedLost.contains($0.key) }
+        let verified = Self.isVerified(report, predicted: predicted, spec: spec)
 
         var finalURL = output
         var replaced = false
+        // Only a verified output replaces the original, and only once the original is safely in the Trash. If
+        // trashing fails nothing moves and the job still completes with the output beside the original.
         if settings.saveTo == .replace, verified, (try? trash(source)) != nil {
             replaced = true
-            // The original is in the Trash; take its name if it is still free, else keep the output's own name.
-            if Self.renameExclusively(output, to: source) { finalURL = source }
+            // Take the original's name if it is still free, else keep the output's own name.
+            if (try? AtomicOutput.moveWithoutReplacing(output, to: source)) != nil { finalURL = source }
         }
         return .completed(
             JobOutcome(
@@ -113,8 +112,17 @@ public struct DownscaleRunner: JobRunner {
         throw DownscaleRunnerError.nameTaken
     }
 
-    static func label(for spec: DownscaleSpec) -> String {
-        spec.targetShortSide.map { "\($0)p" } ?? "High"
+    /// "<N>p" for a real downscale; for keep-resolution, the preset's name, or "Compressed" for a custom spec.
+    static func label(for spec: DownscaleSpec, settings: DownscaleJobSettings) -> String {
+        if let target = spec.targetShortSide { return "\(target)p" }
+        return settings.custom == nil ? settings.preset.displayName : "Compressed"
+    }
+
+    /// Verified: nothing lost beyond what was predicted, and no change beyond the expected ones.
+    static func isVerified(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec) -> Bool {
+        let predictedLost = Set(predicted.lost.map(\.key))
+        return report.lost.allSatisfy { predictedLost.contains($0.key) }
+            && ExpectedChanges.unexpected(in: report, spec: spec).isEmpty
     }
 
     /// Deletes `.<final name>.partial-*` beside `output`: leftovers of an interrupted run of this very output.
@@ -182,10 +190,5 @@ public struct DownscaleRunner: JobRunner {
             throw DownscaleRunnerError.outputFolderUnavailable
         }
         return (url, { if scoped { url.stopAccessingSecurityScopedResource() } })
-    }
-
-    /// Renames `from` to `to` only if nothing exists at `to`. Returns whether it did.
-    private static func renameExclusively(_ from: URL, to destination: URL) -> Bool {
-        renamex_np(from.path, destination.path, UInt32(RENAME_EXCL)) == 0
     }
 }

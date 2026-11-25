@@ -15,6 +15,8 @@ import Testing
         options.height = 1440
         options.fps = 10
         options.hdr = .sdr
+        // A bit rate well above the 2 Mbps the tests encode at, so the planner sees a saving over 10%.
+        options.videoBitRate = 20_000_000
         let clip = try await FixtureFactory.makeClip(options)
         let renamed = clip.deletingLastPathComponent().appending(path: name)
         try FileManager.default.moveItem(at: clip, to: renamed)
@@ -200,8 +202,101 @@ import Testing
     }
 
     @Test func labelsFollowTheSpec() {
-        #expect(DownscaleRunner.label(for: DownscaleSpec(targetShortSide: 1080)) == "1080p")
-        #expect(DownscaleRunner.label(for: DownscaleSpec(targetShortSide: 720)) == "720p")
-        #expect(DownscaleRunner.label(for: DownscaleSpec(targetShortSide: nil)) == "High")
+        func label(_ target: Int?, _ preset: Preset, custom: Bool) -> String {
+            let spec = DownscaleSpec(targetShortSide: target)
+            let settings = DownscaleJobSettings(
+                preset: preset, saveTo: .nextToOriginal, custom: custom ? spec : nil)
+            return DownscaleRunner.label(for: spec, settings: settings)
+        }
+        #expect(label(1080, .balanced, custom: false) == "1080p")
+        #expect(label(720, .balanced, custom: true) == "720p")
+        #expect(label(nil, .high, custom: false) == "High")
+        #expect(label(nil, .balanced, custom: false) == "Balanced")
+        #expect(label(nil, .smaller, custom: false) == "Smaller")
+        #expect(label(nil, .high, custom: true) == "Compressed")
+    }
+
+    @Test func verificationRejectsUnexpectedChangesAndLosses() {
+        let spec = DownscaleSpec()
+        let predicted = MetadataReport()
+        let ok = MetadataReport(
+            changed: [MetadataChange(key: "video.dimensions", displayName: "d", from: "a", to: "b")])
+        #expect(DownscaleRunner.isVerified(ok, predicted: predicted, spec: spec))
+        let changed = MetadataReport(
+            changed: [MetadataChange(key: "video.bitDepth", displayName: "d", from: "10", to: "8")])
+        #expect(!DownscaleRunner.isVerified(changed, predicted: predicted, spec: spec))
+        let item = MetadataItem(key: "audio.0.format", category: .audio, displayName: "a", value: "aac ")
+        let lost = MetadataReport(lost: [item])
+        #expect(!DownscaleRunner.isVerified(lost, predicted: predicted, spec: spec))
+        #expect(DownscaleRunner.isVerified(lost, predicted: lost, spec: spec))
+    }
+
+    @Test(.timeLimit(.minutes(2))) func replaceWithUnverifiedOutputNeverTrashes() async throws {
+        let source = try await makeSource()
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let called = Mutex(false)
+        // The output reads back with a changed bit depth and no audio: unverified either way.
+        let runner = DownscaleRunner(
+            trash: { url in
+                called.withLock { $0 = true }
+                return url
+            },
+            inspect: { url in
+                var inventory = try await MediaInspector().inventory(of: url)
+                inventory.items = inventory.items.filter { !$0.key.hasPrefix("audio.") }.map {
+                    $0.key == "video.bitDepth"
+                        ? MetadataItem(key: $0.key, category: $0.category, displayName: $0.displayName, value: "8")
+                        : $0
+                }
+                return inventory
+            })
+        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+
+        let state = try await runner.run(try job(source, settings)) { _ in }
+
+        guard case .completed(let outcome) = state else {
+            Issue.record("expected completed, got \(state)")
+            return
+        }
+        #expect(!outcome.replacedOriginal)
+        #expect(!called.withLock { $0 })
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(FileManager.default.fileExists(atPath: outcome.output.path))
+        #expect(outcome.output != source)
+        #expect(!outcome.report.lost.isEmpty)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func failedTrashKeepsBothFiles() async throws {
+        let source = try await makeSource()
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        struct Refused: Error {}
+        let runner = DownscaleRunner(trash: { _ in throw Refused() })
+        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+
+        let state = try await runner.run(try job(source, settings)) { _ in }
+
+        guard case .completed(let outcome) = state else {
+            Issue.record("expected completed, got \(state)")
+            return
+        }
+        #expect(!outcome.replacedOriginal)
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(outcome.output.lastPathComponent == "x (1080p).mov")
+        #expect(FileManager.default.fileExists(atPath: outcome.output.path))
+    }
+
+    @Test(.timeLimit(.minutes(2))) func customSpecSavingTooLittleIsKeptAsIs() async throws {
+        let source = try await makeSource()
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // A 100 Mbps target estimates far above the source size.
+        let custom = DownscaleSpec(targetShortSide: 1080, averageBitRate: 100_000_000)
+        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
+
+        let state = try await DownscaleRunner().run(try job(source, settings)) { _ in }
+
+        #expect(state == .keptAsIs(reason: "Would save less than 10%"))
     }
 }

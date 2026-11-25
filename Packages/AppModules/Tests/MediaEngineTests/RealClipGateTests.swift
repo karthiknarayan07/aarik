@@ -74,21 +74,10 @@ import Testing
         return numbers.count == 3 ? (numbers[0], numbers[1], numbers[2]) : nil
     }
 
-    /// Only `video.dimensions` may change, plus `video.codec` when the source isn't HEVC already, plus the Dolby
-    /// Vision level (profile and compatibility kept) when the source has Dolby Vision.
+    /// Only the changes `ExpectedChanges` allows, and the dimensions must be the spec's output size.
     private func expectOnlyExpectedChanges(_ run: Run) {
-        var allowed: Set<String> = ["video.dimensions"]
-        if run.source["video.codec"]?.value != run.output["video.codec"]?.value { allowed.insert("video.codec") }
-        for change in run.report.changed {
-            if change.key == "hdr.dolbyVision", let from = Self.dolbyVisionParts(change.from),
-                let to = Self.dolbyVisionParts(change.to)
-            {
-                #expect(
-                    from.profile == to.profile && from.compat == to.compat,
-                    "Dolby Vision may change level only: \(change.from) -> \(change.to)")
-                continue
-            }
-            #expect(allowed.contains(change.key), "unexpected change \(change.key): \(change.from) -> \(change.to)")
+        for change in ExpectedChanges.unexpected(in: run.report, spec: run.spec) {
+            Issue.record("unexpected change \(change.key): \(change.from) -> \(change.to)")
         }
         let expected = run.spec.outputSize(forNaturalSize: Self.size(run.source["video.dimensions"]?.value) ?? .zero)
         #expect(run.output["video.dimensions"]?.value == "\(Int(expected.width))x\(Int(expected.height))")

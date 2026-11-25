@@ -27,7 +27,8 @@ import Testing
         let hd = inventory(size: "1920x1080")
         let balanced = Preset.balanced.spec(for: hd, byteSize: bytes(mbps: 40))
         #expect((8_000_000...10_000_000).contains(balanced.averageBitRate))
-        #expect(balanced.targetShortSide == 1080)
+        // A 1080p source keeps its resolution; the 1080 target applies to larger ones.
+        #expect(balanced.targetShortSide == nil)
         let smaller = Preset.smaller.spec(for: hd, byteSize: bytes(mbps: 40))
         #expect(smaller.averageBitRate == Int(Double(balanced.averageBitRate) * 0.6))
 
@@ -35,6 +36,7 @@ import Testing
         let high = Preset.high.spec(for: uhd, byteSize: bytes(mbps: 60))
         let balanced4K = Preset.balanced.spec(for: uhd, byteSize: bytes(mbps: 60))
         #expect(high.targetShortSide == nil)
+        #expect(balanced4K.targetShortSide == 1080)
         #expect(high.averageBitRate > balanced4K.averageBitRate)
         // Floor is the balanced formula at the source resolution: 0.145 x 3840 x 2160 x 30.
         #expect(high.averageBitRate == Int(0.145 * 3840 * 2160 * 30))
@@ -54,11 +56,38 @@ import Testing
         }
     }
 
-    @Test func smallSourceIsKeptAsIs() {
+    @Test func smallLowBitrateSourceIsKeptAsIs() {
+        // 720p30 balanced is ~4 Mbps; a 3 Mbps source is already below it.
         let source = inventory(size: "1280x720")
         let decision = DownscalePlanner.decide(
-            source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 20), preset: .balanced)
+            source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 3), preset: .balanced)
         #expect(decision == .keptAsIs(reason: "Already small"))
+    }
+
+    @Test func highBitrate1080pBalancedKeepsResolutionAndConverts() {
+        let source = inventory(size: "1920x1080")
+        let decision = DownscalePlanner.decide(
+            source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 40), preset: .balanced)
+        guard case .convert(let spec, _, _) = decision else {
+            Issue.record("expected convert, got \(decision)")
+            return
+        }
+        #expect(spec.targetShortSide == nil)
+        #expect((8_000_000...10_000_000).contains(spec.averageBitRate))
+    }
+
+    @Test func unknownDurationIsKeptAsIs() {
+        let source = inventory(size: "3840x2160", durationMs: 0)
+        let decision = DownscalePlanner.decide(
+            source: URL(filePath: "/x.mov"), inventory: source, byteSize: 1_000_000, preset: .balanced)
+        #expect(decision == .keptAsIs(reason: "Couldn't read the video's length"))
+    }
+
+    @Test func customSpecUsesTheSameRules() {
+        let source = inventory(size: "2560x1440")
+        let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 9_000_000)
+        let decision = DownscalePlanner.decide(inventory: source, byteSize: bytes(mbps: 10), spec: spec)
+        #expect(decision == .keptAsIs(reason: "Would save less than 10%"))
     }
 
     @Test func lowBitrateKeepResolutionIsKeptAsIs() {
@@ -87,15 +116,17 @@ import Testing
 
     @Test func cinematicPredictsAuxLoss() throws {
         let aux = MetadataItem(
-            key: "track.1.kind", category: .track, displayName: "Track 2 kind", value: "video/auxv")
-        let source = inventory(size: "3840x2160", extra: [aux])
+            key: "track.1.kind", category: .track, displayName: "Track 2 kind", value: "auxv/dish")
+        let meta = MetadataItem(
+            key: "trackmeta.1.com.apple.quicktime.x", category: .track, displayName: "x", value: "1")
+        let source = inventory(size: "3840x2160", extra: [aux, meta])
         let decision = DownscalePlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 60), preset: .balanced)
         guard case .convert(_, _, let predicted) = decision else {
             Issue.record("expected convert, got \(decision)")
             return
         }
-        #expect(predicted.lost.map(\.key) == ["track.1.kind"])
+        #expect(predicted.lost.map(\.key) == ["track.1.kind", "trackmeta.1.com.apple.quicktime.x"])
         #expect(predicted.changed.map(\.key).contains("video.dimensions"))
         #expect(predicted.changed.first { $0.key == "video.dimensions" }?.to == "1920x1080")
     }

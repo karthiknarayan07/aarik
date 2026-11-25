@@ -9,8 +9,8 @@ import AppCore
 /// | Preset   | Short side | Video bit rate                                                         |
 /// |----------|------------|------------------------------------------------------------------------|
 /// | high     | kept       | 50% of the source video bit rate, never below the balanced rate at the source size |
-/// | balanced | 1080       | `0.145 x outputWidth x outputHeight x min(fps, 60)` (1920x1080 at 30 fps is about 9.0 Mbps) |
-/// | smaller  | 1080       | 60% of balanced                                                        |
+/// | balanced | 1080 (kept when the source is 1080 or smaller) | `0.145 x outputWidth x outputHeight x min(fps, 60)` (1920x1080 at 30 fps is about 9.0 Mbps) |
+/// | smaller  | 1080 (kept when the source is 1080 or smaller) | 60% of balanced                                                        |
 ///
 /// The source video bit rate is the whole file's bit rate (`byteSize x 8 / duration`) minus an assumed
 /// 256 kbps per audio track, since the inventory carries no per-track bit rates.
@@ -33,15 +33,25 @@ public enum Preset: String, Codable, CaseIterable, Sendable {
             return DownscaleSpec(targetShortSide: nil, averageBitRate: rate)
         case .balanced:
             return DownscaleSpec(
-                targetShortSide: 1080, averageBitRate: Self.balancedBitRate(source: source, shortSide: 1080))
+                targetShortSide: source.downscaleTarget, averageBitRate: Self.balancedBitRate(source: source))
         case .smaller:
-            let rate = Int(Double(Self.balancedBitRate(source: source, shortSide: 1080)) * 0.6)
-            return DownscaleSpec(targetShortSide: 1080, averageBitRate: max(rate, Self.minimumBitRate))
+            let rate = Int(Double(Self.balancedBitRate(source: source)) * 0.6)
+            return DownscaleSpec(
+                targetShortSide: source.downscaleTarget, averageBitRate: max(rate, Self.minimumBitRate))
+        }
+    }
+
+    /// The name shown to the user, also the output label when a preset keeps the resolution.
+    public var displayName: String {
+        switch self {
+        case .high: "High"
+        case .balanced: "Balanced"
+        case .smaller: "Smaller"
         }
     }
 
     /// The balanced rate for the size the source has after scaling its short side to `shortSide` (never upscaled).
-    private static func balancedBitRate(source: SourceProfile, shortSide: Int?) -> Int {
+    private static func balancedBitRate(source: SourceProfile, shortSide: Int? = 1080) -> Int {
         let size = source.outputSize(shortSide: shortSide)
         let pixelRate = Double(size.width) * Double(size.height) * min(source.frameRate, 60)
         return max(Int(bitsPerPixel * pixelRate), minimumBitRate)
@@ -72,6 +82,10 @@ struct SourceProfile {
     }
 
     var shortSide: Int { min(width, height) }
+
+    /// 1080 for a source taller than that; nil (keep the resolution) when the source is already 1080 or smaller,
+    /// so the 1080 presets still compress it, at the bit rate formula for the source's own size.
+    var downscaleTarget: Int? { shortSide > 1080 ? 1080 : nil }
 
     /// The source's video bit rate in bits per second: the file's rate minus the assumed audio; 0 when unknown.
     var videoBitRate: Double {
