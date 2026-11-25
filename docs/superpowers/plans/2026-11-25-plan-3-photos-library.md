@@ -269,3 +269,10 @@ public protocol PhotoStore: Sendable {
   `.dolbyVision` — iPhone HDR video is Dolby Vision 8.4 — otherwise `.hdr`. The real inventory at queue time is authoritative.
   Cost if wrong: a non-DV Apple HDR clip shows a DV badge in the grid until inspected.
 - The Photos index has no bit rates in this library (ZBITRATE empty); estimates keep using size ÷ duration.
+- **Task 1 spike (ADR 0002) amends Tasks 4–8; its "Plan amendments" section is binding for those tasks.** In short:
+  unedited input = `writeData(.video)`, edited input = `requestExportSession(version: .current)` (never
+  `.fullSizeVideo`); error 3164 → `.downloadFailed`; the iCloud download is its own job phase with progress and
+  cancel (99.5 % of the owner's videos are iCloud-only, ~1.7 MB/s); the saver never re-fetches after a delete and
+  never compares subtypes for equality; a dropped live-photo-info track and ~2 ms duration shift in an edit's
+  rendering are not verify failures; "moved to Recently Deleted" rests on the delete succeeding plus the id no longer
+  fetching; Task 8 removes `App/Sources/Debug/` and the AppDelegate DEBUG hook.
