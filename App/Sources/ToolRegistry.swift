@@ -1,14 +1,27 @@
-/// A tool as the sidebar shows it. The full Tool contract arrives with the job model.
+import AppCore
+import DownscaleVideo
+
+/// A tool as the sidebar shows it.
 struct ToolEntry: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let systemImage: String
+
+    init(id: String, title: String, systemImage: String) {
+        self.id = id
+        self.title = title
+        self.systemImage = systemImage
+    }
+
+    init(_ descriptor: ToolDescriptor) {
+        self.init(id: descriptor.id, title: descriptor.name, systemImage: descriptor.symbol)
+    }
 }
 
 /// The one list of tools.
 enum ToolRegistry {
     static let tools: [ToolEntry] = [
-        ToolEntry(id: "downscale-video", title: "Downscale Video", systemImage: "arrow.down.right.and.arrow.up.left")
+        ToolEntry(DownscaleTool.descriptor)
     ]
 
     /// Shown disabled with a "Soon" label until they ship.

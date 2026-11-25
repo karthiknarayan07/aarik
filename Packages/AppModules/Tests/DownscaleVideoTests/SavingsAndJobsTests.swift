@@ -1,0 +1,126 @@
+import AppCore
+import Foundation
+import MediaEngine
+import Testing
+
+@testable import DownscaleVideo
+
+@Suite struct SavingsAndJobsTests {
+    private func inventory(size: String, durationMs: Int = 60_000, extra: [MetadataItem] = []) -> MetadataInventory {
+        func item(_ key: String, _ value: String) -> MetadataItem {
+            MetadataItem(key: key, category: .video, displayName: key, value: value)
+        }
+        return MetadataInventory(
+            items: [
+                item("video.dimensions", size), item("video.frameRate", "30.00"),
+                item("video.duration", String(durationMs)), item("audio.0.format", "aac "),
+            ] + extra)
+    }
+
+    /// A file of `megabits` per second for 60 s.
+    private func bytes(mbps: Double) -> Int64 { Int64(mbps * 1_000_000 * 60 / 8) }
+
+    @Test func couldFreeExcludesKeptAsIs() {
+        let big = (byteSize: bytes(mbps: 100), inventory: inventory(size: "3840x2160"))
+        // Already small: a 720p clip below the balanced rate.
+        let small = (byteSize: bytes(mbps: 3), inventory: inventory(size: "1280x720"))
+        // Spatial video is refused, however big it is.
+        let spatial = (
+            byteSize: bytes(mbps: 100),
+            inventory: inventory(
+                size: "3840x2160",
+                extra: [MetadataItem(key: "hdr.stereo", category: .hdr, displayName: "Stereo", value: "1")])
+        )
+        let estimate = Estimator.estimatedBytes(inventory: big.inventory, byteSize: big.byteSize, preset: .balanced)
+        #expect(estimate < big.byteSize)
+
+        let freed = SavingsCalculator.couldFreeBytes(for: [big, small, spatial], preset: .balanced)
+        #expect(freed == big.byteSize - estimate)
+        #expect(SavingsCalculator.couldFreeBytes(for: [small, spatial], preset: .balanced) == 0)
+        #expect(SavingsCalculator.couldFreeBytes(for: [], preset: .smaller) == 0)
+    }
+
+    @Test func couldFreeUsesACustomSpecWhenGiven() {
+        let big = (byteSize: bytes(mbps: 100), inventory: inventory(size: "3840x2160"))
+        let custom = DownscaleSpec(targetShortSide: 720, averageBitRate: 4_000_000)
+        let estimate = Estimator.estimatedBytes(inventory: big.inventory, byteSize: big.byteSize, spec: custom)
+        #expect(SavingsCalculator.couldFreeBytes(for: [big], preset: .high, custom: custom) == big.byteSize - estimate)
+    }
+
+    @Test func estimatesListEveryPresetWithItsDecision() {
+        let big = inventory(size: "3840x2160")
+        let rows = SavingsCalculator.estimates(byteSize: bytes(mbps: 100), inventory: big)
+        #expect(rows.map(\.preset) == Preset.allCases)
+        for row in rows {
+            #expect(row.estimatedBytes != nil)
+            #expect((row.savedFraction ?? 0) > 0)
+        }
+        let small = SavingsCalculator.estimates(byteSize: bytes(mbps: 3), inventory: inventory(size: "1280x720"))
+        #expect(small.first { $0.preset == .balanced }?.decision == .keptAsIs(reason: "Already small"))
+        #expect(small.first { $0.preset == .balanced }?.estimatedBytes == nil)
+    }
+
+    @Test func addSelectionCreatesOneJobPerItemWithPreset() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "jobfactory-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let urls = try (1...3).map { index in
+            let url = folder.appending(path: "clip-\(index).mov")
+            try Data([UInt8(index)]).write(to: url)
+            return url
+        }
+        let settings = DownscaleJobSettings(preset: .smaller, saveTo: .nextToOriginal)
+
+        let jobs = try JobFactory.makeJobs(for: urls, settings: settings)
+
+        #expect(jobs.count == 3)
+        #expect(jobs.map(\.source) == urls)
+        #expect(Set(jobs.map(\.id)).count == 3)
+        for job in jobs {
+            #expect(job.toolID == DownscaleTool.toolID)
+            #expect(job.state == .queued)
+            let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+            #expect(decoded == settings)
+            var stale = false
+            let resolved = try URL(
+                resolvingBookmarkData: job.sourceBookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
+            #expect(resolved.standardizedFileURL.path == job.source.standardizedFileURL.path)
+        }
+    }
+
+    @Test func jobsCarryCustomSpecAndDestination() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "jobfactory-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appending(path: "clip.mov")
+        try Data([1]).write(to: url)
+        let settings = DownscaleJobSettings(
+            preset: .high, saveTo: .replace, custom: DownscaleSpec(targetShortSide: 720, averageBitRate: 3_000_000))
+
+        let jobs = try JobFactory.makeJobs(for: [url], settings: settings)
+        let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: try #require(jobs.first).settings)
+        #expect(decoded == settings)
+    }
+
+    @Test func missingSourceThrows() {
+        let missing = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID().uuidString).mov")
+        #expect(throws: (any Error).self) {
+            try JobFactory.makeJobs(
+                for: [missing], settings: DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal))
+        }
+    }
+
+    @Test func advancedOptionsBuildACustomSpecOnlyWhenOn() {
+        var options = AdvancedOptions()
+        #expect(options.spec == nil)
+        options.isEnabled = true
+        options.resolution = .p720
+        options.bitRateMbps = 5
+        options.frameRate = .fps30
+        #expect(options.spec == DownscaleSpec(targetShortSide: 720, averageBitRate: 5_000_000, maxFrameRate: 30))
+        options.resolution = .keep
+        options.frameRate = .keep
+        options.bitRateMbps = 0
+        #expect(options.spec == DownscaleSpec(targetShortSide: nil, averageBitRate: 1_000_000, maxFrameRate: nil))
+    }
+}

@@ -18,7 +18,7 @@ public enum DownscalePlanner {
     }
 
     /// Decides for an explicit spec (a preset's or a custom one).
-    static func decide(inventory: MetadataInventory, byteSize: Int64, spec: DownscaleSpec) -> PlanDecision {
+    public static func decide(inventory: MetadataInventory, byteSize: Int64, spec: DownscaleSpec) -> PlanDecision {
         if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: spatialReason) }
         let source = SourceProfile(inventory: inventory, byteSize: byteSize)
         guard source.durationSeconds > 0 else { return .keptAsIs(reason: "Couldn't read the video's length") }
