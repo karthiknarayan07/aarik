@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "MediaEngine", targets: ["MediaEngine"]),
         .library(name: "AppUI", targets: ["AppUI"]),
         .library(name: "LocalLibrary", targets: ["LocalLibrary"]),
+        .library(name: "PhotosLibrary", targets: ["PhotosLibrary"]),
         .library(name: "DownscaleVideo", targets: ["DownscaleVideo"]),
         .executable(name: "devtool", targets: ["devtool"]),
     ],
@@ -30,6 +31,11 @@ let package = Package(
         .target(
             name: "LocalLibrary",
             dependencies: ["MediaEngine", "AppCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "PhotosLibrary",
+            dependencies: ["MediaEngine", "AppCore", "LocalLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -65,6 +71,11 @@ let package = Package(
         .testTarget(
             name: "LocalLibraryTests",
             dependencies: ["LocalLibrary", "MediaTestSupport"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "PhotosLibraryTests",
+            dependencies: ["PhotosLibrary", "LocalLibrary", "AppCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
