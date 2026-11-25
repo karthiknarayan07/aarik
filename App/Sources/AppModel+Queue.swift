@@ -5,8 +5,8 @@ import Foundation
 import LocalLibrary
 
 extension AppModel {
-    /// Mirrors the queue's jobs and starts it, or holds it paused when auto-start is off. Safe to call more than
-    /// once.
+    /// Mirrors the queue's jobs and starts it unless it was created paused (auto-start off). Safe to call more
+    /// than once.
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
@@ -16,12 +16,8 @@ extension AppModel {
                 self?.receive(jobs)
             }
         }
-        if AppSettings.autoStartQueue(defaults) {
-            await queue.resume()
-        } else {
-            await queue.pause()
-        }
-        isQueuePaused = await queue.isPaused()
+        // A queue created paused (auto-start off) waits for Resume.
+        if !isQueuePaused { await queue.resume() }
     }
 
     /// Stops scanning (items found so far stay), lets library saves finish, and stops the queue before the app

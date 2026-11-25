@@ -67,7 +67,11 @@ final class AppModel {
         self.browser = LibraryBrowser(library: library)
         // The runner asks for the backup folder at each Replace, so the setting applies without rebuilding the queue.
         let runner = DownscaleRunner(originalsBackup: AppSettings.originalsBackupProvider(defaults))
-        self.queue = JobQueue(store: JobStore(directory: directory), runners: [DownscaleTool.toolID: runner])
+        // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause.
+        let autoStart = AppSettings.autoStartQueue(defaults)
+        self.isQueuePaused = !autoStart
+        self.queue = JobQueue(
+            store: JobStore(directory: directory), runners: [DownscaleTool.toolID: runner], startPaused: !autoStart)
     }
 
     /// Application Support/<bundle id>.

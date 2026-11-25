@@ -355,3 +355,59 @@ private actor ProgressRunner: JobRunner {
         if case .completed = jobs[0].state { return true } else { return false }
     }
 }
+
+@Test func retryDoesNotDuplicatePendingFile() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let queue = JobQueue(store: store, runners: [:])
+    let failedA = makeJob(tool: "nope", name: "a")
+    let failedC1 = makeJob(tool: "nope", name: "c")
+    await queue.enqueue([failedA])
+    await waitUntil(queue) { $0.allSatisfy { if case .failed = $0.state { true } else { false } } }
+    await queue.pause()
+    // A second failed job for the same file "c": possible since finished jobs don't block re-adding.
+    await queue.enqueue([failedC1])
+    await queue.resume()
+    await waitUntil(queue) { $0.allSatisfy { if case .failed = $0.state { true } else { false } } }
+    let failedC2 = makeJob(tool: "nope", name: "c")
+    await queue.enqueue([failedC2])
+    await waitUntil(queue) { $0.count == 3 && $0.allSatisfy { if case .failed = $0.state { true } else { false } } }
+    await queue.pause()
+
+    // The user re-adds "a" while its old job is failed; retrying the old job must not queue the file twice.
+    let readded = makeJob(tool: "nope", name: "a")
+    #expect(await queue.enqueue([readded]).map(\.id) == [readded.id])
+    await queue.retry(failedA.id)
+    func state(_ id: UUID) async -> JobState? { await queue.jobs.first { $0.id == id }?.state }
+    #expect(await state(failedA.id) == .failed(reason: "No tool can run this job"))
+
+    // Retry all: "a" is still pending through the re-added job, and only one of the two "c" jobs goes back.
+    await queue.retryAllFailed()
+    #expect(await state(failedA.id) == .failed(reason: "No tool can run this job"))
+    #expect(await state(failedC1.id) == .queued)
+    #expect(await state(failedC2.id) == .failed(reason: "No tool can run this job"))
+    #expect(await state(readded.id) == .queued)
+    await queue.shutdown()
+}
+
+@Test func queueStartedPausedRunsNothingUntilResume() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner], startPaused: true)
+    #expect(await queue.isPaused())
+    let job = makeJob()
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([job])
+    await queue.retryAllFailed()
+    #expect(await queue.jobs.map(\.state) == [.queued])
+    #expect(await runner.events.isEmpty)
+
+    await queue.resume()
+    #expect(await starts.next() == job.id)
+    await runner.finish(job.id, .success(completed()))
+    await waitUntil(queue) { jobs in
+        if case .completed = jobs[0].state { return true } else { return false }
+    }
+}

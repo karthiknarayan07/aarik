@@ -151,4 +151,28 @@ import Testing
         #expect(!outcome.replacedOriginal)
         #expect(try FileManager.default.contentsOfDirectory(atPath: backup.path) == [])
     }
+
+    @Test(.timeLimit(.minutes(2))) func staleBackupPartialsOfThisSourceAreRemovedOthersKept() async throws {
+        let source = try await RunnerFixture.source(name: "clip.mov")
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let backup = directory.appending(path: "Originals", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        // Left by a copy interrupted by a crash, and by another source's interrupted copy.
+        let stale = backup.appending(path: ".clip.mov.partial-\(UUID().uuidString)")
+        let other = backup.appending(path: ".other.mov.partial-\(UUID().uuidString)")
+        let lookalike = backup.appending(path: ".clip.mov 2.partial-\(UUID().uuidString)")
+        for file in [stale, other, lookalike] { try Data("half".utf8).write(to: file) }
+        let runner = DownscaleRunner(
+            trash: Self.fakeTrash(in: directory), originalsBackup: { OriginalsBackup(folder: backup) })
+
+        let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
+
+        let outcome = try #require(completedOutcome(state))
+        #expect(outcome.replacedOriginal)
+        #expect(!FileManager.default.fileExists(atPath: stale.path))
+        #expect(FileManager.default.fileExists(atPath: other.path))
+        #expect(FileManager.default.fileExists(atPath: lookalike.path))
+        #expect(FileManager.default.fileExists(atPath: backup.appending(path: "clip.mov").path))
+    }
 }

@@ -182,7 +182,7 @@ public struct DownscaleRunner: JobRunner {
     }
 
     /// Deletes `.<final name>.partial-*` beside `output`: leftovers of an interrupted run of this very output.
-    private static func removeStalePartials(of output: URL) {
+    static func removeStalePartials(of output: URL) {
         let directory = output.deletingLastPathComponent()
         let prefix = "." + output.lastPathComponent + ".partial-"
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []

@@ -36,6 +36,8 @@ extension DownscaleRunner {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue
         else { throw .folderUnavailable }
+        // A crash or power loss mid-copy leaves `.<name>.partial-*` behind; clear this source's leftovers first.
+        Self.removeStalePartials(of: folder.appending(path: source.lastPathComponent))
         let partial = folder.appending(path: ".\(source.lastPathComponent).partial-\(UUID().uuidString)")
         do {
             try FileManager.default.copyItem(at: source, to: partial)

@@ -3,7 +3,8 @@ import Foundation
 /// Runs jobs one at a time, in order, persisting after every state change.
 ///
 /// Nothing runs until the first `enqueue`, `resume` or `retry`; call `resume()` after
-/// creating a queue to continue jobs restored from the store.
+/// creating a queue to continue jobs restored from the store. A queue created with `startPaused`
+/// runs nothing, enqueued or restored, until `resume()`.
 public actor JobQueue {
     private let store: JobStore
     private let runners: [String: any JobRunner]
@@ -13,9 +14,10 @@ public actor JobQueue {
     private var worker: Task<Void, Never>?
     private var subscribers: [UUID: AsyncStream<[Job]>.Continuation] = [:]
 
-    public init(store: JobStore, runners: [String: any JobRunner]) {
+    public init(store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false) {
         self.store = store
         self.runners = runners
+        self.paused = startPaused
         var loaded = store.load()
         var recovered = false
         for index in loaded.indices {
@@ -55,23 +57,28 @@ public actor JobQueue {
         startWorkerIfNeeded()
     }
 
-    /// Puts a failed job back in the queue. Other states are ignored.
+    /// Puts a failed job back in the queue. Other states are ignored, and so is a failed job whose file already
+    /// has a queued or running job for the same tool (it stays failed).
     public func retry(_ id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }),
-            case .failed = items[index].state
-        else { return }
-        items[index].state = .queued
-        changed()
-        startWorkerIfNeeded()
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        requeueFailed([index])
     }
 
+    /// Puts every failed job back in the queue, except those whose file already has a queued or running job for
+    /// the same tool, and all but the first of several failed jobs for one file. Skipped jobs stay failed.
     public func retryAllFailed() {
+        requeueFailed(Array(items.indices))
+    }
+
+    private func requeueFailed(_ indices: [Int]) {
+        var pending = Set(items.filter(\.state.isPending).map(SourceKey.init))
         var any = false
-        for index in items.indices {
-            if case .failed = items[index].state {
-                items[index].state = .queued
-                any = true
+        for index in indices {
+            guard case .failed = items[index].state, pending.insert(SourceKey(items[index])).inserted else {
+                continue
             }
+            items[index].state = .queued
+            any = true
         }
         guard any else { return }
         changed()
