@@ -45,6 +45,7 @@ enum Samples {
         #expect(PhotoItemBuilder.build(Samples.asset(width: 3840, height: 2160)).badges == [.k4])
         #expect(PhotoItemBuilder.build(Samples.asset(width: 2160, height: 3840)).badges == [.k4])
         #expect(PhotoItemBuilder.build(Samples.asset(width: 2560, height: 1440)).badges.isEmpty)
+        #expect(PhotoItemBuilder.build(Samples.asset(width: 3840, height: 1600)).badges.isEmpty)
     }
 
     @Test func combinedSubtypesGiveEveryBadge() {

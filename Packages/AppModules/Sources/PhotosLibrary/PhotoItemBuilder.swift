@@ -29,7 +29,7 @@ public enum PhotoItemBuilder {
         if asset.subtypes.contains(.highFrameRate) { result.insert(.sloMo) }
         if asset.subtypes.contains(.spatial) { result.insert(.spatial) }
         if asset.hasAdjustments { result.insert(.edited) }
-        if max(asset.pixelSize.width, asset.pixelSize.height) >= 3840 { result.insert(.k4) }
+        if min(asset.pixelSize.width, asset.pixelSize.height) >= 2160 { result.insert(.k4) }  // same rule as local files
         return result
     }
 
