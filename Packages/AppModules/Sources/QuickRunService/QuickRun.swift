@@ -48,7 +48,9 @@ public actor QuickRun {
     }
 
     /// Plans `urls` with the saved settings (or `overrides`), queues what converts cleanly and remembers the run.
-    public func run(urls: [URL], overrides: QuickRunOverrides?) async -> QuickRunReceipt {
+    public func run(
+        urls: [URL], overrides: QuickRunOverrides?, origin: QuickRunOrigin = .background
+    ) async -> QuickRunReceipt {
         let saved = await settings()
         let preset = overrides?.preset ?? saved.preset
         let (destination, notes) = Self.destination(for: overrides?.saveLocation ?? saved.saveLocation)
@@ -64,7 +66,8 @@ public actor QuickRun {
         let runID = UUID()
         store.add(
             QuickRunRecord(
-                runID: runID, createdAt: now(), jobIDs: batch.jobs.map(\.id), skipped: [], notes: notes))
+                runID: runID, createdAt: now(), jobIDs: batch.jobs.map(\.id), skipped: [], notes: notes,
+                origin: origin))
         starting.insert(runID)
         let added = await queue.enqueue(batch.jobs)
         let addedSources = Set(added.map(\.source))
@@ -214,7 +217,9 @@ public actor QuickRun {
         if failed > 0 { sentences.append("\(failed) failed.") }
         if sentences.isEmpty { sentences.append("Nothing was converted.") }
         sentences += record.notes
-        return QuickRunNotice(runID: record.runID, title: "Quick run finished", body: sentences.joined(separator: " "))
+        return QuickRunNotice(
+            runID: record.runID, title: "Quick run finished", body: sentences.joined(separator: " "),
+            origin: record.origin, tally: QuickRunTally(converted: converted, skipped: skipped, failed: failed))
     }
 }
 

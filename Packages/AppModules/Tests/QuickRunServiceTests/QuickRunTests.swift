@@ -65,6 +65,29 @@ import Testing
         #expect(await harness.queue.jobs.isEmpty)
     }
 
+    @Test func theNoticeCarriesTheRunsOriginAndTally() async throws {
+        var small: URL!
+        let harness = try Harness { fixture in
+            small = try fixture.file("small.mov")
+            return [small: QuickRunFixture.small]
+        }
+        defer { harness.fixture.remove() }
+
+        _ = await harness.quickRun.run(urls: [small], overrides: nil, origin: .statusItem)
+
+        let notice = try #require(await harness.notifier.notices.first)
+        #expect(notice.origin == .statusItem)
+        #expect(notice.tally == QuickRunTally(converted: 0, skipped: 1, failed: 0))
+    }
+
+    @Test func recordsSavedWithoutAnOriginAreBackgroundRuns() throws {
+        let json = """
+            {"runID":"\(UUID().uuidString)","createdAt":0,"jobIDs":[],"skipped":[],"notes":[]}
+            """
+        let record = try JSONDecoder().decode(QuickRunRecord.self, from: Data(json.utf8))
+        #expect(record.origin == .background)
+    }
+
     @Test func unreadableFilesAreSkipped() async throws {
         var missing: URL!
         let harness = try Harness { fixture in
