@@ -32,11 +32,17 @@ public actor JobQueue {
 
     public func isPaused() -> Bool { paused }
 
-    public func enqueue(_ newJobs: [Job]) {
-        guard !newJobs.isEmpty else { return }
-        items.append(contentsOf: newJobs)
+    /// Appends the jobs and returns the ones actually added. A job whose file already has a queued or running job
+    /// for the same tool is skipped, as is a repeat within `newJobs`; finished jobs don't block adding a file again.
+    @discardableResult
+    public func enqueue(_ newJobs: [Job]) -> [Job] {
+        var pending = Set(items.filter(\.state.isPending).map(SourceKey.init))
+        let added = newJobs.filter { pending.insert(SourceKey($0)).inserted }
+        guard !added.isEmpty else { return [] }
+        items.append(contentsOf: added)
         changed()
         startWorkerIfNeeded()
+        return added
     }
 
     /// Lets the running job finish, then stops taking new ones.
@@ -176,5 +182,44 @@ public actor JobQueue {
         else { return }
         items[index].state = .running(progress: min(max(value, 0), 1))
         for continuation in subscribers.values { continuation.yield(items) }
+    }
+}
+
+/// Identifies "the same file for the same tool" across spellings of its path.
+struct SourceKey: Hashable {
+    let toolID: String
+    let path: String
+
+    init(_ job: Job) {
+        toolID = job.toolID
+        path = Self.path(of: job.source)
+    }
+
+    /// The real path with symlinks and `..` resolved (`/tmp/a.mov` and `/private/tmp/a.mov` match). A missing file
+    /// resolves through its parent folder; failing that, the standardized path.
+    static func path(of url: URL) -> String {
+        let standardized = url.standardizedFileURL
+        if let real = realPath(standardized.path) { return real }
+        let parent = standardized.deletingLastPathComponent().path
+        if let real = realPath(parent) {
+            return (real as NSString).appendingPathComponent(standardized.lastPathComponent)
+        }
+        return standardized.path
+    }
+
+    private static func realPath(_ path: String) -> String? {
+        guard let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+}
+
+extension JobState {
+    /// Queued or running: still to finish.
+    public var isPending: Bool {
+        switch self {
+        case .queued, .running: true
+        case .completed, .keptAsIs, .failed: false
+        }
     }
 }

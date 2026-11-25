@@ -5,7 +5,7 @@ struct SidebarView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        let counts = model.activityCounts
+        let activity = model.activity
         let badgeCounts = model.library.badgeCounts
         List(selection: $model.selection) {
             Section("Library") {
@@ -29,10 +29,10 @@ struct SidebarView: View {
                 }
             }
             Section("Activity") {
-                DestinationRow(destination: .queue, count: counts.queue)
-                DestinationRow(destination: .completed, count: counts.completed)
-                DestinationRow(destination: .keptAsIs, count: counts.keptAsIs)
-                DestinationRow(destination: .failed, count: counts.failed)
+                DestinationRow(destination: .queue, count: activity.queue, progress: activity.runningProgress)
+                DestinationRow(destination: .completed, count: activity.completed)
+                DestinationRow(destination: .keptAsIs, count: activity.keptAsIs)
+                DestinationRow(destination: .failed, count: activity.failed)
             }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 220)
@@ -42,12 +42,29 @@ struct SidebarView: View {
 private struct DestinationRow: View {
     let destination: SidebarDestination
     var count: Int?
+    /// A running job's progress: shows a small ring.
+    var progress: Double?
 
     var body: some View {
-        Label(destination.title, systemImage: destination.systemImage)
-            .badge(count ?? 0)
-            .tag(destination)
-            .accessibilityLabel(count.map { "\(destination.title), \($0)" } ?? destination.title)
+        HStack {
+            Label(destination.title, systemImage: destination.systemImage)
+            if let progress {
+                Spacer()
+                ProgressView(value: progress)
+                    .progressViewStyle(.circular)
+                    .controlSize(.mini)
+            }
+        }
+        .badge(count ?? 0)
+        .tag(destination)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        var text = count.map { "\(destination.title), \($0)" } ?? destination.title
+        if let progress { text += ", converting \(Int((progress * 100).rounded()))%" }
+        return text
     }
 }
 

@@ -9,7 +9,6 @@ import Observation
 @Observable
 final class AppModel {
     private enum Keys {
-        static let preset = "downscale.preset"
         static let inspector = "window.inspectorPresented"
     }
 
@@ -25,13 +24,16 @@ final class AppModel {
 
     // MARK: Conversion choices
     var preset: Preset {
-        didSet { defaults.set(preset.rawValue, forKey: Keys.preset) }
+        didSet { defaults.set(preset.rawValue, forKey: AppSettings.Keys.preset) }
     }
     var advanced = AdvancedOptions()
-    var saveLocation = SaveLocation()
+    var saveLocation: SaveLocation
 
     // MARK: Queue
     var jobs: [Job] = []
+    /// Counts, saved total and running progress for the Activity rows, updated with `jobs`.
+    var activity = ActivitySummary(jobs: [])
+    var isQueuePaused = false
     var isConfirmingReplace = false
     /// The first Replace in a session asks for confirmation; later ones don't.
     var hasConfirmedReplace = false
@@ -45,20 +47,27 @@ final class AppModel {
     let tools: [ToolEntry] = ToolRegistry.tools
     let comingSoonTools: [ToolEntry] = ToolRegistry.comingSoon
 
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored var updatesTask: Task<Void, Never>?
     @ObservationIgnored var hasStarted = false
+    /// The last command sent to the queue; each new one waits for it, so commands arrive in the order given.
+    @ObservationIgnored var lastQueueCommand: Task<Void, Never>?
+    @ObservationIgnored var runTracker = QueueRunTracker()
+    @ObservationIgnored let notifier = QueueNotifier()
 
     init(directory: URL = AppModel.supportDirectory(), defaults: UserDefaults = .standard) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         self.defaults = defaults
-        self.preset = defaults.string(forKey: Keys.preset).flatMap(Preset.init(rawValue:)) ?? .balanced
+        self.preset =
+            defaults.string(forKey: AppSettings.Keys.preset).flatMap(Preset.init(rawValue:)) ?? .balanced
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
+        self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         let library = LocalLibrary(directory: directory)
         self.library = library
         self.browser = LibraryBrowser(library: library)
-        self.queue = JobQueue(
-            store: JobStore(directory: directory), runners: [DownscaleTool.toolID: DownscaleRunner()])
+        // The runner asks for the backup folder at each Replace, so the setting applies without rebuilding the queue.
+        let runner = DownscaleRunner(originalsBackup: AppSettings.originalsBackupProvider(defaults))
+        self.queue = JobQueue(store: JobStore(directory: directory), runners: [DownscaleTool.toolID: runner])
     }
 
     /// Application Support/<bundle id>.

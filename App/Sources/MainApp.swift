@@ -15,10 +15,13 @@ struct MainApp: App {
             InspectorCommands()
             LibraryCommands(model: delegate.model)
         }
+        Settings {
+            SettingsView(model: delegate.model)
+        }
     }
 }
 
-/// File → Add files… (⌘O) and Queue → Add to queue (⌘⏎).
+/// File → Add files… (⌘O); Queue → Add to queue (⌘⏎) and Pause or Resume queue (⌘.).
 private struct LibraryCommands: Commands {
     let model: AppModel
 
@@ -34,6 +37,8 @@ private struct LibraryCommands: Commands {
             Button("Add to queue") { model.requestAddSelectionToQueue() }
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!model.canAddSelectionToQueue)
+            Button(model.isQueuePaused ? "Resume queue" : "Pause queue") { model.toggleQueuePaused() }
+                .keyboardShortcut(".", modifiers: .command)
         }
     }
 }

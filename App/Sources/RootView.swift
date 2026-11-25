@@ -13,6 +13,17 @@ struct RootView: View {
         }
     }
 
+    /// The inspector belongs to the library grid; the Activity lists don't show it.
+    private var showsLibrary: Bool { model.selection?.showsLibrary == true }
+
+    private var inspectorShown: Binding<Bool> {
+        Binding {
+            showsLibrary && model.isInspectorPresented
+        } set: {
+            if showsLibrary { model.isInspectorPresented = $0 }
+        }
+    }
+
     var body: some View {
         NavigationSplitView {
             SidebarView(model: model)
@@ -24,13 +35,15 @@ struct RootView: View {
                 ) { result in
                     if case .success(let urls) = result { model.addFiles(urls) }
                 }
-                .inspector(isPresented: $model.isInspectorPresented) {
+                .inspector(isPresented: inspectorShown) {
                     LibraryInspector(model: model)
                         .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
                 }
                 .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        InspectorToggle(isPresented: $model.isInspectorPresented)
+                    if showsLibrary {
+                        ToolbarItem(placement: .primaryAction) {
+                            InspectorToggle(isPresented: $model.isInspectorPresented)
+                        }
                     }
                 }
         }
@@ -57,14 +70,16 @@ private struct DetailView: View {
 
     var body: some View {
         Group {
-            if let destination = model.selection {
-                if destination.showsLibrary {
-                    LocalFilesView(model: model)
-                } else {
-                    destination.emptyState
-                        .navigationTitle(destination.title)
-                }
-            } else {
+            switch model.selection {
+            case .localFiles, .mediaType: LocalFilesView(model: model)
+            case .queue: QueueView(model: model)
+            case .completed: CompletedView(model: model)
+            case .keptAsIs: KeptAsIsView(model: model)
+            case .failed: FailedView(model: model)
+            case .some(let destination):
+                destination.emptyState
+                    .navigationTitle(destination.title)
+            case nil:
                 EmptyState("Nothing selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar.")
                     .navigationTitle(AppModel.displayName)
             }

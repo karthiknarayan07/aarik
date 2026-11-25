@@ -1,28 +1,27 @@
 import AppCore
+import AppUI
 import DownscaleVideo
 import Foundation
 import LocalLibrary
 
-/// Counts for the Activity rows in the sidebar.
-struct ActivityCounts: Equatable {
-    var queue = 0
-    var completed = 0
-    var keptAsIs = 0
-    var failed = 0
-}
-
 extension AppModel {
-    /// Starts the queue (auto-start; a setting arrives later) and mirrors its jobs. Safe to call more than once.
+    /// Mirrors the queue's jobs and starts it, or holds it paused when auto-start is off. Safe to call more than
+    /// once.
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
         let queue = self.queue
         updatesTask = Task { [weak self] in
             for await jobs in await queue.updates() {
-                self?.jobs = jobs
+                self?.receive(jobs)
             }
         }
-        await queue.resume()
+        if AppSettings.autoStartQueue(defaults) {
+            await queue.resume()
+        } else {
+            await queue.pause()
+        }
+        isQueuePaused = await queue.isPaused()
     }
 
     /// Stops scanning (items found so far stay), lets library saves finish, and stops the queue before the app
@@ -30,20 +29,81 @@ extension AppModel {
     func prepareForTermination() async {
         library.cancelScan()
         await library.waitUntilIdle()
+        await lastQueueCommand?.value
         await queue.shutdown()
         updatesTask?.cancel()
     }
 
-    var activityCounts: ActivityCounts {
-        jobs.reduce(into: ActivityCounts()) { counts, job in
-            switch job.state {
-            case .queued, .running: counts.queue += 1
-            case .completed: counts.completed += 1
-            case .keptAsIs: counts.keptAsIs += 1
-            case .failed: counts.failed += 1
-            }
+    private func receive(_ jobs: [Job]) {
+        self.jobs = jobs
+        activity = ActivitySummary(jobs: jobs)
+        if let summary = runTracker.observe(jobs) {
+            notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))
         }
     }
+
+    // MARK: - Lists
+
+    var queuedJobs: [Job] { jobs.filter(\.state.isPending) }
+
+    // The finished lists show the most recently added first.
+
+    var completedJobs: [(job: Job, outcome: JobOutcome)] {
+        jobs.reversed().compactMap { job in
+            if case .completed(let outcome) = job.state { return (job, outcome) }
+            return nil
+        }
+    }
+
+    var keptAsIsJobs: [(job: Job, reason: String)] {
+        jobs.reversed().compactMap { job in
+            if case .keptAsIs(let reason) = job.state { return (job, reason) }
+            return nil
+        }
+    }
+
+    var failedJobs: [(job: Job, reason: String)] {
+        jobs.reversed().compactMap { job in
+            if case .failed(let reason) = job.state { return (job, reason) }
+            return nil
+        }
+    }
+
+    // MARK: - Queue commands
+
+    /// Sends a command to the queue after the previous one.
+    private func send(_ command: @escaping @Sendable (JobQueue) async -> Void) {
+        let previous = lastQueueCommand
+        let queue = self.queue
+        lastQueueCommand = Task {
+            await previous?.value
+            await command(queue)
+        }
+    }
+
+    func toggleQueuePaused() {
+        let pause = !isQueuePaused
+        isQueuePaused = pause
+        send { queue in
+            if pause { await queue.pause() } else { await queue.resume() }
+        }
+    }
+
+    func remove(_ job: Job) {
+        let id = job.id
+        send { await $0.remove(id) }
+    }
+
+    func retry(_ job: Job) {
+        let id = job.id
+        send { await $0.retry(id) }
+    }
+
+    func retryAllFailed() {
+        send { await $0.retryAllFailed() }
+    }
+
+    // MARK: - Adding
 
     /// Available selected items; missing files can't be converted.
     var queueableItems: [LibraryItem] { selectedItems.filter(\.isAvailable) }
@@ -69,16 +129,27 @@ extension AppModel {
         addSelectionToQueue()
     }
 
-    /// One job per available selected video, with the current preset, Advanced spec and Save to choice.
+    /// One job per available selected video, with the current preset, Advanced spec and Save to choice. Files that
+    /// already wait or run in the queue are skipped by the queue. With auto-start on, the queue resumes.
     func addSelectionToQueue() {
         guard let destination = saveLocation.destination else { return }
         let settings = DownscaleJobSettings(preset: preset, saveTo: destination, custom: advanced.spec)
         do {
             let jobs = try JobFactory.makeJobs(for: queueableItems.map(\.url), settings: settings)
-            let queue = self.queue
-            Task { await queue.enqueue(jobs) }
+            let autoStart = AppSettings.autoStartQueue(defaults)
+            if autoStart { isQueuePaused = false }
+            send { queue in
+                await queue.enqueue(jobs)
+                if autoStart { await queue.resume() }
+            }
+            notifier.requestAuthorizationOnce()
         } catch {
             queueError = "Couldn't add to the queue: \(error.localizedDescription)"
         }
+    }
+
+    /// Puts the Settings window's Save to default into the inspector.
+    func applyDefaultSaveLocation() {
+        saveLocation = AppSettings.defaultSaveLocation(defaults)
     }
 }

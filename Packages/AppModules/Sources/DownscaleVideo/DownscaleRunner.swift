@@ -19,28 +19,36 @@ public enum DownscaleRunnerError: Error, LocalizedError, Equatable {
 public struct DownscaleRunner: JobRunner {
     /// Moves a file to the Trash and returns where it went.
     public typealias Trasher = @Sendable (URL) throws -> URL
+    /// Read when a Replace is about to trash an original: the folder to copy it to first, or nil for no copy.
+    public typealias BackupProvider = @Sendable () -> OriginalsBackup?
     typealias Sizer = @Sendable (URL) throws -> Int64
     typealias Inspector = @Sendable (URL) async throws -> MetadataInventory
 
-    private static let maxNamingAttempts = 3
+    static let maxNamingAttempts = 3
     private let trash: Trasher
     private let inspect: Inspector
-    private let sizeOf: Sizer
+    let sizeOf: Sizer
+    private let originalsBackup: BackupProvider
 
-    public init() {
-        self.init(trash: Self.trashItem)
+    /// `originalsBackup` is asked at the moment of each Replace, so a setting changed while the queue runs applies
+    /// to the next Replace without rebuilding the runner or the queue.
+    public init(originalsBackup: @escaping BackupProvider = { nil }) {
+        self.init(trash: Self.trashItem, originalsBackup: originalsBackup)
     }
 
     /// Seams for tests: `trash` reports the Trash location of the fixture a test created, `inspect` reads the
-    /// output's metadata (a test can make the output look unfaithful).
+    /// output's metadata (a test can make the output look unfaithful), `sizeOf` measures the output and the backup
+    /// copy.
     init(
         trash: @escaping Trasher,
         inspect: @escaping Inspector = { try await MediaInspector().inventory(of: $0) },
-        sizeOf: @escaping Sizer = { try DownscaleRunner.fileSize($0) }
+        sizeOf: @escaping Sizer = { try DownscaleRunner.fileSize($0) },
+        originalsBackup: @escaping BackupProvider = { nil }
     ) {
         self.sizeOf = sizeOf
         self.trash = trash
         self.inspect = inspect
+        self.originalsBackup = originalsBackup
     }
 
     private static func trashItem(_ url: URL) throws -> URL {
@@ -85,21 +93,49 @@ public struct DownscaleRunner: JobRunner {
 
         let outputInventory = try await inspect(output)
         let report = MetadataDiff.report(source: inventory, output: outputInventory)
-        let verified = Self.isVerified(report, predicted: predicted, spec: spec)
+        var warnings = Self.warnings(report, predicted: predicted, spec: spec)
 
         var finalURL = output
         var replaced = false
-        // Only a verified output replaces the original, and only once the original is safely in the Trash. If
-        // trashing fails nothing moves and the job still completes with the output beside the original.
-        if settings.saveTo == .replace, verified, (try? trash(source)) != nil {
-            replaced = true
-            // Take the original's name if it is still free, else keep the output's own name.
-            if (try? AtomicOutput.moveWithoutReplacing(output, to: source)) != nil { finalURL = source }
+        if settings.saveTo == .replace {
+            // Only a verified output replaces the original, only once its backup (when that is on) is written and
+            // checked, and only once the original is safely in the Trash. Otherwise nothing moves and the job
+            // still completes with the output beside the original.
+            if !warnings.isEmpty {
+                warnings.append(Self.keptBecause("the copy couldn't be verified"))
+            } else {
+                let result = replace(source, byteSize: byteSize, with: output)
+                finalURL = result.url
+                replaced = result.keptBecause == nil
+                if let reason = result.keptBecause { warnings.append(Self.keptBecause(reason)) }
+            }
         }
         return .completed(
             JobOutcome(
                 output: finalURL, bytesBefore: byteSize, bytesAfter: outputSize,
-                report: report, replacedOriginal: replaced))
+                report: report, replacedOriginal: replaced, warnings: warnings))
+    }
+
+    // MARK: - Replace
+
+    /// Backs the original up when asked to, trashes it, and gives the output the original's name if it is still
+    /// free. Returns where the output ends up, and why the original was kept when it was.
+    private func replace(_ source: URL, byteSize: Int64, with output: URL) -> (url: URL, keptBecause: String?) {
+        if let backup = originalsBackup() {
+            do {
+                _ = try backUp(source, byteSize: byteSize, into: backup.folder)
+            } catch {
+                return (output, error.keptBecause)
+            }
+        }
+        guard (try? trash(source)) != nil else { return (output, "it couldn't be moved to the Trash") }
+        // Take the original's name if it is still free, else keep the output's own name.
+        if (try? AtomicOutput.moveWithoutReplacing(output, to: source)) != nil { return (source, nil) }
+        return (output, nil)
+    }
+
+    private static func keptBecause(_ reason: String) -> String {
+        "The original was kept because \(reason)"
     }
 
     // MARK: - Encoding
@@ -132,9 +168,17 @@ public struct DownscaleRunner: JobRunner {
 
     /// Verified: nothing lost beyond what was predicted, and no change beyond the expected ones.
     static func isVerified(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec) -> Bool {
+        warnings(report, predicted: predicted, spec: spec).isEmpty
+    }
+
+    /// One line per item lost beyond what was predicted, then one per unexpected change.
+    static func warnings(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec) -> [String] {
         let predictedLost = Set(predicted.lost.map(\.key))
-        return report.lost.allSatisfy { predictedLost.contains($0.key) }
-            && ExpectedChanges.unexpected(in: report, spec: spec).isEmpty
+        let lost = report.lost.filter { !predictedLost.contains($0.key) }.map { "\($0.displayName) is lost" }
+        let changed = ExpectedChanges.unexpected(in: report, spec: spec).map {
+            "\($0.displayName) changed from \($0.from) to \($0.to)"
+        }
+        return lost + changed
     }
 
     /// Deletes `.<final name>.partial-*` beside `output`: leftovers of an interrupted run of this very output.

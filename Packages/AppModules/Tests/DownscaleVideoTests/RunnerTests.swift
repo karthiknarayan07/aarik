@@ -8,28 +8,15 @@ import Testing
 @testable import DownscaleVideo
 
 @Suite struct RunnerTests {
-    /// 2560x1440 so a 1080 short side really shrinks it; small and fast.
     private func makeSource(name: String = "x.mov") async throws -> URL {
-        var options = ClipOptions()
-        options.width = 2560
-        options.height = 1440
-        options.fps = 10
-        options.hdr = .sdr
-        // A bit rate well above the 2 Mbps the tests encode at, so the planner sees a saving over 10%.
-        options.videoBitRate = 20_000_000
-        let clip = try await FixtureFactory.makeClip(options)
-        let renamed = clip.deletingLastPathComponent().appending(path: name)
-        try FileManager.default.moveItem(at: clip, to: renamed)
-        return renamed
+        try await RunnerFixture.source(name: name)
     }
 
     private func job(_ source: URL, _ settings: DownscaleJobSettings) throws -> Job {
-        Job(
-            toolID: DownscaleTool.toolID, source: source, sourceBookmark: Data(),
-            settings: try JSONEncoder().encode(settings))
+        try RunnerFixture.job(source, settings)
     }
 
-    private let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 2_000_000)
+    private let spec = RunnerFixture.spec
 
     @Test func descriptorMatchesTheRuling() {
         #expect(DownscaleTool.toolID == "downscale-video")
@@ -59,6 +46,7 @@ import Testing
         #expect(!outcome.replacedOriginal)
         #expect(seen.withLock { $0 } > 0)
         #expect(outcome.report.lost.isEmpty)
+        #expect(outcome.isVerified)
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         #expect(!names.contains { $0.contains(".partial-") })
     }
@@ -267,6 +255,10 @@ import Testing
         #expect(outcome.output != source)
         #expect(outcome.report.lost.isEmpty)
         #expect(outcome.report.changed.contains { $0.key == "video.bitDepth" })
+        // Decided once, by the runner: the unexpected change is a warning, and so is the original being kept.
+        #expect(!outcome.isVerified)
+        #expect(outcome.warnings.contains("Bit depth changed from 8 to 10"))
+        #expect(outcome.warnings.contains("The original was kept because the copy couldn't be verified"))
     }
 
     @Test(.timeLimit(.minutes(2))) func failedTrashKeepsBothFiles() async throws {
