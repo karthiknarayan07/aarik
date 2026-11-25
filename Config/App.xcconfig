@@ -36,8 +36,10 @@ SWIFT_STRICT_CONCURRENCY = complete
 SWIFT_EMIT_LOC_STRINGS = YES
 LOCALIZATION_PREFERS_STRING_CATALOGS = YES
 
-// Signing: ad-hoc, hardened runtime
-ENABLE_HARDENED_RUNTIME = YES
+// Signing: ad-hoc. No hardened runtime: an ad-hoc binary has no Team ID, so the runtime's library validation
+// refuses to load the embedded Sparkle.framework and the app dies at launch. The runtime only matters for
+// notarization, which an ad-hoc build can't get. scripts/make-dmg.sh signs the same way.
+ENABLE_HARDENED_RUNTIME = NO
 CODE_SIGN_STYLE = Manual
 CODE_SIGN_IDENTITY = -
 DEVELOPMENT_TEAM =
