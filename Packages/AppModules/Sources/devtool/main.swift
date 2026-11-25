@@ -7,7 +7,7 @@ import MediaTestSupport
 
 let usage = """
     usage:
-      devtool fixture <out> [--sdr]
+      devtool fixture <out> [--sdr] [--seconds N] [--size WxH] [--camera-metadata]
       devtool inspect <file>
       devtool downscale <in> <out> [--short-side N] [--max-fps F] [--bitrate B] [--h264]
     """
@@ -35,9 +35,32 @@ func friendlyMessage(for error: Error) -> String {
 func runFixture(_ args: [String]) async throws {
     var paths: [String] = []
     var options = ClipOptions()
-    for arg in args {
+    var index = 0
+    while index < args.count {
+        let arg = args[index]
+        index += 1
         if arg == "--sdr" {
             options.hdr = .sdr
+        } else if arg == "--seconds" {
+            guard index < args.count, let seconds = Double(args[index]), seconds > 0 else {
+                fail("--seconds needs a positive number")
+            }
+            options.seconds = seconds
+            index += 1
+        } else if arg == "--size" {
+            let parts = index < args.count ? args[index].split(separator: "x").compactMap { Int($0) } : []
+            guard parts.count == 2, parts.allSatisfy({ $0 > 0 }) else { fail("--size needs WIDTHxHEIGHT") }
+            options.width = parts[0]
+            options.height = parts[1]
+            index += 1
+        } else if arg == "--camera-metadata" {
+            options.quickTimeMetadata = [
+                "com.apple.quicktime.make": "TestMake",
+                "com.apple.quicktime.model": "TestModel",
+                "com.apple.quicktime.software": "1.0",
+                "com.apple.quicktime.creationdate": "2020-01-02T03:04:05+0000",
+                "com.apple.quicktime.location.ISO6709": "+10.0000+20.0000+5.000/",
+            ]
         } else if arg.hasPrefix("--") {
             fail("Unknown option \(arg)", showUsage: true)
         } else {
