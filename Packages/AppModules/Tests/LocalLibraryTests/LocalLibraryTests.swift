@@ -396,6 +396,50 @@ enum Fixtures {
         #expect(library.items.count == 2)
     }
 
+    /// A bookmark that resolves into a Trash is not followed: the item stays unavailable at its own path.
+    @Test func fileMovedIntoATrashIsNotFollowed() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")
+        let library = LocalLibrary(directory: try Fixtures.tempDirectory())
+        library.add([clip])
+        await Fixtures.settle(library)
+        let id = try #require(library.items.first?.id)
+
+        let trash = folder.appending(path: ".Trash")
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: clip, to: trash.appending(path: "a.mov"))
+        await library.refreshAvailability()
+        await Fixtures.settle(library)
+
+        #expect(library.items.map(\.id) == [id])
+        #expect(library.items.first?.url.lastPathComponent == "a.mov")
+        #expect(library.items.first?.url.deletingLastPathComponent().lastPathComponent == folder.lastPathComponent)
+        #expect(library.items.first?.isAvailable == false)
+    }
+
+    /// A bookmark that resolves to a path another item already has does not move its item there.
+    @Test func fileFoundAtAnotherItemsPathDoesNotMove() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let source = try await Fixtures.clip()
+        let a = try Fixtures.copy(source, into: folder, as: "a.mov")
+        let b = try Fixtures.copy(source, into: folder, as: "b.mov")
+        let library = LocalLibrary(directory: try Fixtures.tempDirectory())
+        library.add([a, b])
+        await Fixtures.settle(library)
+        let itemA = try #require(library.items.first { $0.url.lastPathComponent == "a.mov" })
+
+        // B's file goes elsewhere, and A's file takes B's name: A's bookmark now resolves to B's path.
+        try FileManager.default.moveItem(at: b, to: folder.appending(path: "d.mov"))
+        try FileManager.default.moveItem(at: a, to: b)
+        await library.refreshAvailability()
+        await Fixtures.settle(library)
+
+        let after = try #require(library.items.first { $0.id == itemA.id })
+        #expect(after.url.lastPathComponent == "a.mov")
+        #expect(!after.isAvailable)
+        #expect(Set(library.items.map { $0.url.lastPathComponent }) == ["a.mov", "b.mov"])
+    }
+
     /// Moved in Finder after it was queued: the run followed the bookmark to the new path, but the item is still at
     /// the old one. Trying the run's path first, then the job's own, still finds it.
     @Test func replacementOfAFileMovedSinceItWasQueuedFindsTheItemByItsOldPath() async throws {

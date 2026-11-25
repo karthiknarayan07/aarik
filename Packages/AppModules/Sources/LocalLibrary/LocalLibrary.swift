@@ -133,16 +133,16 @@ public final class LocalLibrary {
     /// disk (`refreshChangedFiles`). Nothing is mounted and no UI is shown; a file on a disconnected drive is
     /// simply unavailable until the drive is back.
     public func refreshAvailability() async {
-        await followMovedFiles()
         await refreshExistence()
+        await followMovedFiles()
         await refreshChangedFiles()
     }
 
-    /// Items whose file is gone from its path but whose bookmark finds it elsewhere (renamed or moved in Finder,
-    /// not into a Trash) move there: same id, path and bookmark saved. Bookmarks are resolved off the main actor,
-    /// and only for files missing from their path.
+    /// Items found missing from their path (by `refreshExistence`, which is the only check of the path) whose
+    /// bookmark finds the file elsewhere (renamed or moved in Finder, not into a Trash) move there: same id, path
+    /// and bookmark saved. Bookmarks are resolved off the main actor, and only for those items.
     private func followMovedFiles() async {
-        let candidates = items.compactMap { item in
+        let candidates = items.filter { !$0.isAvailable }.compactMap { item in
             entries[item.id].map { (id: item.id, url: item.url, entry: $0) }
         }
         guard !candidates.isEmpty else { return }
@@ -168,16 +168,14 @@ public final class LocalLibrary {
         if moved { persist() }
     }
 
-    /// For each file missing from its path, where its bookmark finds it now, when that is a different, existing
-    /// path outside any Trash.
+    /// For each file already known to be missing from its path, where its bookmark finds it now, when that is a
+    /// different, existing path outside any Trash.
     @concurrent
     private nonisolated static func moves(of files: [(id: UUID, url: URL, entry: BookmarkStore.Entry)]) async
         -> [(id: UUID, from: URL, to: URL, bookmark: Data?, entry: BookmarkStore.Entry)]
     {
         files.compactMap { file in
-            guard !FileManager.default.fileExists(atPath: file.url.path), file.entry.bookmark != nil else {
-                return nil
-            }
+            guard file.entry.bookmark != nil else { return nil }
             let resolved = BookmarkStore.resolve(file.entry)
             guard !resolved.isTrashed, resolved.url.path != file.url.path,
                 FileManager.default.fileExists(atPath: resolved.url.path)

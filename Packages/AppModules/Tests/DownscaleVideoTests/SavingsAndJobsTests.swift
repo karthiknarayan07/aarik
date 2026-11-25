@@ -130,7 +130,8 @@ import Testing
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
 
         let jobs = JobFactory.makeJobs(
-            for: [lossy, clean], settings: settings, losses: [lossy: PredictedLoss(id: UUID(), lost: ["Cinematic depth data"], keys: ["x"])]
+            for: [lossy, clean], settings: settings,
+            losses: [lossy: PredictedLoss(id: UUID(), lost: ["Cinematic depth data"], keys: ["x"])]
         ).jobs
         let decoded = try jobs.map { try JSONDecoder().decode(DownscaleJobSettings.self, from: $0.settings) }
 

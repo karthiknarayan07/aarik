@@ -107,7 +107,8 @@ extension AppModel {
 
     /// Selects what a context menu acts on, as Finder does when the clicked item isn't part of the selection.
     private func selectContextTargets(clicked item: LibraryItem) {
-        browser.selection = contextTargetIDs(clicked: item)
+        // A clicked tile that is already selected leaves the selection alone, so a hidden selection survives.
+        if !selectedItems.contains(where: { $0.id == item.id }) { browser.selection = [item.id] }
     }
 
     /// Context menu: Add to queue, for the selection or the clicked tile.
