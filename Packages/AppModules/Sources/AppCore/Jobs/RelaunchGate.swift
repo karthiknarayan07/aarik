@@ -3,7 +3,8 @@ import Foundation
 /// Holds an update's install-and-relaunch while the queue is working, then lets it go once the queue is idle.
 ///
 /// Busy means a job is running, or jobs are waiting and the queue isn't paused. A paused queue with waiting jobs is
-/// idle: the user stopped it on purpose, and the saved queue picks up on the next launch.
+/// idle: the user stopped it on purpose, and the waiting jobs are saved with the queue and restored on the next
+/// launch, so a relaunch loses nothing. (Otherwise a paused queue would hold the update forever.)
 @MainActor
 public final class RelaunchGate {
     private var proceed: (@MainActor () -> Void)?
@@ -26,7 +27,10 @@ public final class RelaunchGate {
     /// Returns true when the relaunch must wait: `proceed` then runs once, as soon as the queue is idle. Returns
     /// false when the queue is idle and the caller should relaunch now; `proceed` is not kept.
     public func postpone(until proceed: @escaping @MainActor () -> Void) -> Bool {
-        guard isBusy else { return false }
+        guard isBusy else {
+            self.proceed = nil
+            return false
+        }
         self.proceed = proceed
         return true
     }

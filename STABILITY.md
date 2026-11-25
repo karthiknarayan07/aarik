@@ -1,7 +1,7 @@
 # Stability
 
-How the app keeps long batches and user files safe. Every rule here is enforced in code and covered by a test;
-"planned" items belong to Plan 6 Phase B and do not exist yet. Change a rule only together with its test.
+How the app keeps long batches and user files safe. Every rule here is enforced in code and most are covered by tests (the
+Time Machine exclusion, for one, is not); "planned" items belong to Plan 6 Phase B and do not exist yet. Change a rule only together with its test.
 
 ## File safety (never break these)
 
@@ -24,9 +24,14 @@ How the app keeps long batches and user files safe. Every rule here is enforced 
    `<Application Support>/<bundle id>/Work/<job id>/`. Every removal is checked to be strictly inside `Work`
    (symlinks and `..` resolved), never `Work` itself. The folder is removed on every exit path, swept at launch
    before the queue starts, and excluded from Time Machine.
-7. **Photos library is read-only today.** The app lists and fetches videos (`PhotoInputFetcher`); there is no code
-   that writes to or deletes from the Photos library. Saving back to Photos is planned (Plan 3) and must keep
-   the original until the saved copy is confirmed.
+7. **Photos: the owner's assets are read-only inputs.** `PhotoInputFetcher` only reads them. The one write is
+   `PhotoSaver`: a single `performChanges` adds one new asset (`PhotoKitStore.saveVideo`), then the saver reads
+   it back and checks length, size, a non-empty file, date and location against the source. On a mismatch the new
+   asset is deleted again (`PhotoSaveError.verifyFailed` with its `Cleanup`). A source asset is never edited. The
+   only delete API is `PhotoKitStore.deleteAssets`, one change that goes through the system's own confirmation
+   (declining is reported, not forced); nothing in the app calls it for an original yet, so deleting an original
+   after a saved copy is a planned, user-confirmed step. Package tests use `FakePhotoStore` and never touch the
+   real library; the only code that does is the DEBUG-only `PhotosSpike` (launch argument), not shipped.
 8. **Persisted queue is never overwritten blindly** (`AppCore/Jobs/JobStore.swift`). `jobs.json` is written
    atomically; an unreadable file is moved to `jobs.json.corrupt-<time>`, or, if that fails, left alone and
    the session's queue is not saved (`mustNotSave`).
@@ -46,7 +51,9 @@ How the app keeps long batches and user files safe. Every rule here is enforced 
 - The updater starts only when the build has a feed URL and a public key; Debug builds never touch the network.
 - Installing never interrupts work: `Updater` delegates to `RelaunchGate` (`AppCore/Jobs/RelaunchGate.swift`).
   The relaunch after an update is held while a job is running, or jobs are waiting and the queue is not paused,
-  and runs once when the queue goes idle. A paused queue counts as idle (saved jobs resume next launch).
+  and runs once when the queue goes idle. A paused queue counts as idle: the user paused on purpose, and waiting
+  jobs are saved after every change (`jobs.json`) and restored as queued at next launch, where they start when the
+  queue is resumed (automatically, unless auto-start is off).
   Tests: `RelaunchGateTests`.
 
 ## Resources

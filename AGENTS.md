@@ -44,6 +44,9 @@ Format with `swift format -i <files>`. Do not open or launch the app from an aut
 - No behaviour change without a test. Put decisions in small testable types behind protocols or closures
   (see `RelaunchGate`, the `Trasher` and `exclusiveRename` seams) instead of testing through the UI.
 - UI state is `@MainActor`; engine work is `@concurrent` or in actors. Don't block the main actor.
+- Photos: the user's assets are read-only inputs. New assets are added only through `PhotoSaver` (one
+  `performChanges`, verified after saving, removed again on mismatch); an original is deleted only as a
+  user-confirmed action through the system's delete confirmation. Tests use `FakePhotoStore`, never the real library.
 - No secrets in the repository. The update signing key never goes in `Config`; see `docs/RELEASING.md`.
 - Update `CHANGELOG.md` for user-visible changes. Commits: small, one concern each, imperative subject.
 

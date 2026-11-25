@@ -31,6 +31,11 @@ final class Updater {
         let configured = Self.hasValue(bundle, "SUFeedURL") && Self.hasValue(bundle, "SUPublicEDKey")
         isConfigured = configured
         delegate = RelaunchDelegate(gate: relaunchGate)
+        // A renamed Sparkle callback would silently stop holding the relaunch; fail loudly in development.
+        assert(
+            delegate.responds(
+                to: NSSelectorFromString("updater:shouldPostponeRelaunchForUpdate:untilInvokingBlock:")),
+            "RelaunchDelegate no longer implements Sparkle's postpone-relaunch callback")
         controller = SPUStandardUpdaterController(
             startingUpdater: configured, updaterDelegate: delegate, userDriverDelegate: nil)
         automaticallyChecksForUpdates = configured && controller.updater.automaticallyChecksForUpdates
@@ -57,7 +62,7 @@ final class Updater {
 
 /// Sparkle's delegate (it keeps only a weak reference, so `Updater` owns it). Delays the relaunch after an install
 /// until the queue is idle; the update itself still downloads and installs in the background.
-private final class RelaunchDelegate: NSObject, SPUUpdaterDelegate {
+final class RelaunchDelegate: NSObject, SPUUpdaterDelegate {
     /// Sparkle calls its delegate on the main thread.
     private let gate: RelaunchGate
 

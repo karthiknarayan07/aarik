@@ -29,8 +29,8 @@ Plan 6 Phase B and not in the code yet.
 | Main-thread hangs during a 20-video batch | none over 250 ms (Hangs instrument) |
 | 50-video batch | memory flat: under 10 % growth after warm-up |
 
-These are checked by hand before a release (the checklist is to be added to `docs/RELEASING.md`). Automated regression tests with stored
-baselines are planned (B3).
+These are checked by hand before a release (the checklist is to be added to `docs/RELEASING.md`). Automated
+regression tests with stored baselines are planned (B3).
 
 ## Measure, fix, measure
 
