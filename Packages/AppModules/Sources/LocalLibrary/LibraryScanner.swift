@@ -56,10 +56,17 @@ public actor LibraryScanner {
         -> ScannedFile?
     {
         guard let inventory = try? await inspector.inventory(of: url),
-            let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-            let item = LibraryItemBuilder.build(url: url, inventory: inventory, byteSize: Int64(size))
+            let size = fileSize(url),
+            let item = LibraryItemBuilder.build(url: url, inventory: inventory, byteSize: size)
         else { return nil }
         return ScannedFile(item: item, bookmark: BookmarkStore.makeBookmark(for: url))
+    }
+
+    /// The file's size read from the file system, never from URL resource values: those can stay cached for a path
+    /// after a Replace swapped the file there, which made the library keep showing the original's size.
+    nonisolated static func fileSize(_ url: URL) -> Int64? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+        return (attributes[.size] as? NSNumber)?.int64Value
     }
 
     /// Movie files at or below `urls`, in path order within each folder.

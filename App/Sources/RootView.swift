@@ -95,6 +95,13 @@ private struct DetailView: View {
             case .completed: CompletedView(model: model)
             case .keptAsIs: KeptAsIsView(model: model)
             case .failed: FailedView(model: model)
+            case .overview:
+                // Until the Photos dashboard exists, Overview welcomes and points to adding files.
+                WelcomeView(allowPhotos: nil) {
+                    model.selection = .localFiles
+                    model.isImporterPresented = true
+                }
+                .navigationTitle(SidebarDestination.overview.title)
             case .some(let destination):
                 destination.emptyState
                     .navigationTitle(destination.title)

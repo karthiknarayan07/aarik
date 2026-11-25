@@ -142,21 +142,45 @@ enum Fixtures {
         let smaller = try await Fixtures.clip(width: 320, height: 180)
         try FileManager.default.removeItem(at: clip)
         try FileManager.default.copyItem(at: smaller, to: clip)
-        let newSize = try #require(try clip.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+        let newSize = try #require(
+            try FileManager.default.attributesOfItem(atPath: clip.path)[.size] as? NSNumber
+        ).int64Value
         await library.fileWasReplaced(at: clip, by: clip)
         await Fixtures.settle(library)
 
         let after = try #require(library.items.first)
         #expect(library.items.count == 1)
         #expect(after.id == before.id)
-        #expect(after.byteSize == Int64(newSize))
+        #expect(after.byteSize == newSize)
         #expect(after.inventory["video.dimensions"]?.value == "320x180")
         #expect(after.isAvailable)
         #expect(after != before)
         let entry = try #require(try store.load().first)
         #expect(entry.id == before.id)
-        #expect(entry.byteSize == Int64(newSize))
+        #expect(entry.byteSize == newSize)
         #expect(entry.inventory == after.inventory)
+    }
+
+    /// Regression: URL resource values cached before a Replace must not leave the item at the original's size.
+    @Test func replacedFileSizeIsNotReadFromAStaleURLCache() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(width: 640, height: 360), into: folder, as: "a.mov")
+        let library = LocalLibrary(directory: try Fixtures.tempDirectory())
+        library.add([clip])
+        await Fixtures.settle(library)
+        // Something read the original's size through this URL, so its resource values are now cached.
+        let oldSize = try #require(try clip.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+
+        let smaller = try await Fixtures.clip(width: 320, height: 180)
+        try FileManager.default.removeItem(at: clip)
+        try FileManager.default.copyItem(at: smaller, to: clip)
+        let newSize = try #require(
+            try FileManager.default.attributesOfItem(atPath: clip.path)[.size] as? NSNumber
+        ).int64Value
+        #expect(Int64(oldSize) != newSize)
+        await library.fileWasReplaced(at: clip, by: clip)
+
+        #expect(library.items.first?.byteSize == newSize)
     }
 
     @Test func replacementUnderANewNameMovesTheEntry() async throws {
