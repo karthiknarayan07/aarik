@@ -346,6 +346,25 @@ import Testing
         #expect(relaunched.jobIDs == Set(recent.jobIDs))
     }
 
+    @Test func aFileWrittenBeforeResultsExistedStillLoads() throws {
+        let fixture = try QuickRunFixture()
+        defer { fixture.remove() }
+        let runID = UUID()
+        let jobID = UUID()
+        let old = """
+            [{"runID":"\(runID.uuidString)","createdAt":\(Date().timeIntervalSinceReferenceDate),
+              "jobIDs":["\(jobID.uuidString)"],"skipped":[{"url":"file:///tmp/x.mov","reason":"Already small"}],
+              "notes":[],"notified":false}]
+            """
+        try Data(old.utf8).write(to: fixture.storeURL)
+
+        let record = try #require(QuickRunStore(fileURL: fixture.storeURL).run(runID))
+
+        #expect(record.jobIDs == [jobID])
+        #expect(record.results.isEmpty)
+        #expect(record.skipped.first?.reason == "Already small")
+    }
+
     @Test func markingNotifiedWorksOnce() throws {
         let fixture = try QuickRunFixture()
         defer { fixture.remove() }

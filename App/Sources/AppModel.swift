@@ -7,6 +7,7 @@ import LocalLibrary
 import Observation
 import PhotosLibrary
 import QuickRunService
+import SwiftUI
 
 /// The composition root: the library, the job queue, and the window's shared state.
 @MainActor
@@ -24,6 +25,8 @@ final class AppModel {
     var selection: SidebarDestination? = .localFiles {
         didSet { browser.filter = badgeFilter }
     }
+    /// The sidebar column; the View menu and the toolbar button both change it.
+    var sidebarVisibility = NavigationSplitViewVisibility.automatic
     var isInspectorPresented: Bool {
         didSet { defaults.set(isInspectorPresented, forKey: Keys.inspector) }
     }
@@ -111,6 +114,10 @@ final class AppModel {
 
     /// Application Support/<bundle id>.
     nonisolated static func supportDirectory() -> URL {
+        // `-uiTesting <folder>` keeps a test launch away from the real library and queue.
+        if let folder = UserDefaults.standard.string(forKey: "uiTesting") {
+            return URL(filePath: folder, directoryHint: .isDirectory)
+        }
         let id = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
         return URL.applicationSupportDirectory.appending(path: id, directoryHint: .isDirectory)
     }

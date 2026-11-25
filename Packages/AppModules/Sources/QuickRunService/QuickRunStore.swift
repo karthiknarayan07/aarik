@@ -31,6 +31,18 @@ public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
 
     public var id: UUID { runID }
 
+    /// Reads records saved before `results` or `notified` existed as having none.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        runID = try container.decode(UUID.self, forKey: .runID)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        jobIDs = try container.decode([UUID].self, forKey: .jobIDs)
+        skipped = try container.decode([QuickRunSkip].self, forKey: .skipped)
+        notes = try container.decode([String].self, forKey: .notes)
+        results = try container.decodeIfPresent([UUID: QuickRunResult].self, forKey: .results) ?? [:]
+        notified = try container.decodeIfPresent(Bool.self, forKey: .notified) ?? false
+    }
+
     public init(runID: UUID, createdAt: Date, jobIDs: [UUID], skipped: [QuickRunSkip], notes: [String]) {
         self.runID = runID
         self.createdAt = createdAt

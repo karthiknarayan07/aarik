@@ -17,12 +17,6 @@ final class QueueNotifier {
         }
     }
 
-    /// Posts only while another app is frontmost; in front, the Activity lists already show the result.
-    func postUnlessFrontmost(title: String, body: String) {
-        guard !NSApp.isActive else { return }
-        post(title: title, body: body)
-    }
-
     /// Posts now. With a `category`, the notification offers that category's actions; `userInfo` comes back with
     /// the response.
     func post(title: String, body: String, category: String? = nil, userInfo: [String: String] = [:]) {

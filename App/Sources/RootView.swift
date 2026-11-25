@@ -33,7 +33,7 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $model.sidebarVisibility) {
             SidebarView(model: model)
         } detail: {
             DetailView(model: model)

@@ -1,8 +1,10 @@
 import AppCore
+import AppKit
 import AppUI
 import DownscaleVideo
 import Foundation
 import LocalLibrary
+import QuickRunService
 
 extension AppModel {
     /// Mirrors the queue's jobs and starts it unless it was created paused (auto-start off). Safe to call more
@@ -41,7 +43,10 @@ extension AppModel {
         let quickRunJobs = quickRunStore.jobIDs
         let windowJobs = quickRunJobs.isEmpty ? jobs : jobs.filter { !quickRunJobs.contains($0.id) }
         if let summary = runTracker.observe(windowJobs) {
-            notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))
+            // Quiet only when the app is active with its window on screen; the Activity lists show the result.
+            if NotificationPolicy.shouldPost(appIsActive: NSApp.isActive, windowOnScreen: isMainWindowVisible) {
+                notifier.post(title: "Queue finished", body: ActivityText.notificationBody(summary))
+            }
         }
         reconcileReplacedFiles(jobs)
     }
