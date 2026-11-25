@@ -55,4 +55,19 @@ import Testing
             unexpected([change("video.duration", "1000", "990")], spec: DownscaleSpec(codec: .h264Compatible))
                 == ["video.duration"])
     }
+
+    @Test func h264AcceptsOnlyChangesThatLandOnSDR() {
+        let h264 = DownscaleSpec(codec: .h264Compatible)
+        let wrong = [
+            change("video.transferFunction", "ITU_R_709_2", "ITU_R_2100_HLG"),
+            change("video.colorPrimaries", "ITU_R_709_2", "ITU_R_2020"),
+            change("video.matrix", "ITU_R_709_2", "ITU_R_2020"),
+            change("video.bitDepth", "8", "10"),
+        ]
+        #expect(
+            unexpected(wrong, spec: h264)
+                == ["video.transferFunction", "video.colorPrimaries", "video.matrix", "video.bitDepth"])
+        #expect(
+            unexpected([change("video.transferFunction", "ITU_R_2020_PQ", "ITU_R_2100_HLG")], spec: h264).count == 1)
+    }
 }

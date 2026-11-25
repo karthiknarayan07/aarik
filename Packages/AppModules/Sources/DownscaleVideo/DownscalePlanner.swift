@@ -1,5 +1,4 @@
 import AppCore
-import CoreMedia
 import Foundation
 import MediaEngine
 
@@ -46,14 +45,9 @@ public enum DownscalePlanner {
         "hdr.dolbyVision", "hdr.masteringDisplay", "hdr.contentLightLevel", "hdr.ambientViewingEnvironment",
     ]
 
-    /// What an H.264 output's format items become: H.264 8-bit BT.709 SDR. The values are the inventory's.
-    static let h264Values: [String: String] = [
-        "video.codec": "avc1",
-        "video.colorPrimaries": kCMFormatDescriptionColorPrimaries_ITU_R_709_2 as String,
-        "video.transferFunction": kCMFormatDescriptionTransferFunction_ITU_R_709_2 as String,
-        "video.matrix": kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2 as String,
-        "video.bitDepth": "8",
-    ]
+    /// What an H.264 output's format items become: `avc1`, and the 8-bit BT.709 SDR values the Replace gate
+    /// (`ExpectedChanges`) accepts. The values are the inventory's.
+    static let h264Values = ExpectedChanges.h264SDRValues.merging(["video.codec": "avc1"]) { current, _ in current }
 
     /// What the conversion is expected to change or drop: the dimensions (and the Dolby Vision level) when the
     /// size shrinks, and auxiliary video tracks such as the Cinematic disparity track. For H.264 also the codec,

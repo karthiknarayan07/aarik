@@ -1,23 +1,28 @@
 import AppCore
+import CoreMedia
 
 /// The metadata changes a downscale is expected to make. Anything else that changed means the output is not a
 /// faithful copy of the source.
 public enum ExpectedChanges {
-    /// What an H.264 encode changes on top: it is 8-bit BT.709 SDR whatever the source was. (The `hdr.*` items it
-    /// drops are lost, not changed; the planner predicts those.)
-    public static let h264SDRKeys: Set<String> = [
-        "video.transferFunction", "video.colorPrimaries", "video.matrix", "video.bitDepth",
+    /// What an H.264 encode changes on top, as inventory values: it is 8-bit BT.709 SDR whatever the source was.
+    /// (The `hdr.*` items it drops are lost, not changed; the planner predicts those.)
+    public static let h264SDRValues: [String: String] = [
+        "video.colorPrimaries": kCMFormatDescriptionColorPrimaries_ITU_R_709_2 as String,
+        "video.transferFunction": kCMFormatDescriptionTransferFunction_ITU_R_709_2 as String,
+        "video.matrix": kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2 as String,
+        "video.bitDepth": "8",
     ]
 
     /// The changed items that are not expected: `video.dimensions`, `video.codec`, the Dolby Vision level (profile
-    /// and compatibility equal), `video.frameRate` only when the spec caps the frame rate, and for H.264 the
-    /// `h264SDRKeys`.
+    /// and compatibility equal), `video.frameRate` only when the spec caps the frame rate, and for H.264 a change of
+    /// an `h264SDRValues` item to exactly its SDR value.
     public static func unexpected(in report: MetadataReport, spec: DownscaleSpec) -> [MetadataChange] {
         report.changed.filter { change in
             switch change.key {
             case "video.dimensions", "video.codec": false
             case "video.frameRate": spec.maxFrameRate == nil
-            case _ where h264SDRKeys.contains(change.key): spec.codec != .h264Compatible
+            case _ where h264SDRValues[change.key] != nil:
+                spec.codec != .h264Compatible || h264SDRValues[change.key] != change.to
             case "hdr.dolbyVision": !onlyLevelDiffers(change.from, change.to)
             default: true
             }
