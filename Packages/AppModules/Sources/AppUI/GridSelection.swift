@@ -34,6 +34,15 @@ struct GridSelection<ID: Hashable> {
         focus = id
     }
 
+    /// Selects every item in every section; the first item becomes the anchor and focus when there is none.
+    mutating func selectAll(sections: [[ID]]) {
+        let flat = sections.flatMap { $0 }
+        guard let first = flat.first else { return }
+        selected = Set(flat)
+        if focus == nil { focus = first }
+        if anchor == nil { anchor = first }
+    }
+
     /// Moves a single selection one tile. Up and down keep the column, crossing into the next or previous section.
     mutating func move(_ direction: GridDirection, sections: [[ID]], columns: Int) {
         let sections = sections.filter { !$0.isEmpty }

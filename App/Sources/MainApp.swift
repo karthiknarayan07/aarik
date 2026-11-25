@@ -7,9 +7,10 @@ struct MainApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(model: delegate.model)
-                .frame(minWidth: 760, minHeight: 480)
+                .frame(minWidth: 900, minHeight: 600)
         }
-        .defaultSize(width: 1100, height: 700)
+        .defaultSize(width: 1280, height: 820)
+        .windowResizability(.contentMinSize)
         .commands {
             SidebarCommands()
             InspectorCommands()

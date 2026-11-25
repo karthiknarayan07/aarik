@@ -78,6 +78,8 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View {
                 move(direction)
                 if let focus = state.focus { proxy.scrollTo(focus) }
             }
+            // Edit ▸ Select All reaches the focused grid through the responder chain, so a focused text field keeps its own.
+            .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
             .onKeyPress(.space) {
                 onSpace()
                 return .handled
@@ -96,7 +98,9 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View {
     }
 
     private static var currentModifiers: GridClickModifiers {
-        let flags = NSEvent.modifierFlags
+        // The event being dispatched carries the modifiers held at the click; the global NSEvent.modifierFlags
+        // can already be stale or empty by the time SwiftUI runs the tap action.
+        let flags = NSApp.currentEvent?.modifierFlags ?? []
         var modifiers: GridClickModifiers = []
         if flags.contains(.command) { modifiers.insert(.toggle) }
         if flags.contains(.shift) { modifiers.insert(.extend) }
@@ -107,6 +111,12 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View {
         isFocused = true
         state.selected = selection
         state.click(id, modifiers: modifiers, sections: ids)
+        selection = state.selected
+    }
+
+    private func selectAll() {
+        state.selected = selection
+        state.selectAll(sections: ids)
         selection = state.selected
     }
 

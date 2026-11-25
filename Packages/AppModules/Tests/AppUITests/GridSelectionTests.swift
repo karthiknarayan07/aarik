@@ -30,6 +30,15 @@ import Testing
         #expect(selection.selected == ["a", "b", "c"])
     }
 
+    @Test func selectAllSelectsEveryItemInEverySection() {
+        var selection = GridSelection<String>(selected: ["b"])
+        selection.selectAll(sections: sections)
+        #expect(selection.selected == ["a", "b", "c", "d", "e", "f"])
+        var empty = GridSelection<String>(selected: ["x"])
+        empty.selectAll(sections: [])
+        #expect(empty.selected == ["x"])
+    }
+
     @Test func arrowsMoveWithinRowsAndAcrossSections() {
         var selection = GridSelection<String>()
         selection.move(.right, sections: sections, columns: 3)
