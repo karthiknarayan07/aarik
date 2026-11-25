@@ -56,6 +56,22 @@ public struct PhotoInputFetcher: Sendable {
     public func fetch(
         id: String, into workFolder: URL, progress: @escaping @Sendable (FetchProgress) -> Void = { _ in }
     ) async throws -> FetchedInput {
+        try await fetch(id: id, into: workFolder, originalOnly: false, progress: progress)
+    }
+
+    /// Fetches the original resource of `id` even when the video was edited, for a copy of the original kept
+    /// before a Replace. Its file keeps the original's name, so it sits beside the edited version's export.
+    ///
+    /// - Throws: `PhotoFetchError` only.
+    public func fetchOriginal(
+        id: String, into workFolder: URL, progress: @escaping @Sendable (FetchProgress) -> Void = { _ in }
+    ) async throws -> FetchedInput {
+        try await fetch(id: id, into: workFolder, originalOnly: true, progress: progress)
+    }
+
+    private func fetch(
+        id: String, into workFolder: URL, originalOnly: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws -> FetchedInput {
         let asset: PhotoAsset
         do {
             asset = try await store.asset(id: id)
@@ -63,7 +79,7 @@ public struct PhotoInputFetcher: Sendable {
         } catch {
             throw Self.map(error)
         }
-        let isEdited = asset.hasAdjustments
+        let isEdited = asset.hasAdjustments && !originalOnly
         let url = workFolder.appending(
             path: Self.fileName(for: asset, isEdited: isEdited), directoryHint: .notDirectory)
         // Every delete goes through the containment check: only a file inside the job folder is removed.
