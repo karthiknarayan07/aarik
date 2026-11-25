@@ -262,3 +262,10 @@ public protocol PhotoStore: Sendable {
 - README section on the Photos permission and iCloud space timing.
 - ADR 0002 final.
 - The full test suite and lint pass.
+
+## Rulings during execution
+- Ruling (2026-11-25): the Photos index can't tell Dolby Vision from other HDR (videos only carry ZHDRTYPE 0 or 5).
+  When wiring Task 3, an HDR (type 5) video whose camera make is Apple (ZEXTENDEDATTRIBUTES.ZCAMERAMAKE, if present) is badged
+  `.dolbyVision` — iPhone HDR video is Dolby Vision 8.4 — otherwise `.hdr`. The real inventory at queue time is authoritative.
+  Cost if wrong: a non-DV Apple HDR clip shows a DV badge in the grid until inspected.
+- The Photos index has no bit rates in this library (ZBITRATE empty); estimates keep using size ÷ duration.
