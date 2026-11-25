@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import MediaEngine
 import Testing
 
 @testable import MediaTestSupport
@@ -19,14 +20,11 @@ import Testing
             CMFormatDescriptionGetExtension(
                 desc, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
         #expect(transfer == (kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String))
-        let depth =
-            CMFormatDescriptionGetExtension(
-                desc, extensionKey: kCMFormatDescriptionExtension_Depth) as? Int
-        #expect(depth == 24)
         #expect(CMFormatDescriptionGetMediaSubType(desc) == kCMVideoCodecType_HEVC)
         let duration = try await asset.load(.duration).seconds
         #expect(abs(duration - 1.0) <= 0.05)
         #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(try await MediaInspector().inventory(of: url)["video.bitDepth"]?.value == "10")
     }
 
     @Test func makesSDRClip() async throws {
@@ -43,6 +41,9 @@ import Testing
                 desc, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
         #expect(transfer == (kCMFormatDescriptionTransferFunction_ITU_R_709_2 as String))
         #expect(try await track.load(.naturalSize) == CGSize(width: 1280, height: 720))
+        let inventory = try await MediaInspector().inventory(of: url)
+        #expect(inventory["video.bitDepth"]?.value == "8")
+        #expect(inventory["hdr.dolbyVision"] == nil)
     }
 
     @Test func writesQuickTimeMetadata() async throws {
