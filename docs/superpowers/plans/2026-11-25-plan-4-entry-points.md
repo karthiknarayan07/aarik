@@ -152,3 +152,18 @@ Record the outcomes in `docs/adr/0003-quick-run-entry-points.md` and amend Tasks
 - Settings rows for the menu bar, notifications and the Finder help.
 - The full test suite and lint pass.
 - Manually test every Review Focus item on an ad-hoc build in /Applications.
+
+## Rulings during execution
+
+- **Task 1 spike (ADR 0003, branch `spike/plan-4-entry-points`, throwaway — reuse ideas, not code) amends Tasks 2–6:**
+  - Release signing: fixed globally (`ENABLE_HARDENED_RUNTIME = NO`, 1678d5b).
+  - Task 3: the main window must be a single `Window` scene (or `.handlesExternalEvents(matching: [])`): with
+    `WindowGroup`, an Open With / Dock drop while running opened a second main window. URLs delivered once, cold and warm.
+  - Task 4: use our own `NSStatusItem` + `NSPopover` hosting the SwiftUI panel (the plan's fallback), not
+    MenuBarExtra + a window scan: the scan relies on a private class name. Drop on the status item worked in the spike.
+  - Task 6: Services register correctly but macOS keeps new services off; keep the entry and add a Settings help row
+    that explains and opens System Settings ▸ Keyboard ▸ Keyboard Shortcuts ▸ Services. The Shortcuts Quick Action
+    (Task 5) is the primary Finder path.
+  - Still unverified on a real install: the Shortcuts action (Task 5) and notification click after quit (Task 2);
+    check them in Task 7's manual pass.
+- The app's product name is now "Aarik" (Brand.xcconfig); nothing in Swift names it.
