@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Release app, ad-hoc signs it and packs it into a compressed DMG.
 # Output: build/dist/<product>-<version>.dmg
+# BUILD_NUMBER, when set, overrides CURRENT_PROJECT_VERSION (CFBundleVersion); the release workflow passes its run
+# number so every published build counts up.
 # Names come from Config/Brand.xcconfig and the built Info.plist; nothing here names the brand.
 set -euo pipefail
 
@@ -32,10 +34,19 @@ staging="$root/build/dmg-staging"
 
 mkdir -p "$derived" "$dist"
 
+overrides=(CODE_SIGNING_ALLOWED=NO)
+if [[ -n ${BUILD_NUMBER:-} ]]; then
+  if [[ ! $BUILD_NUMBER =~ ^[0-9]+$ ]]; then
+    echo "make-dmg: BUILD_NUMBER must be a whole number, got '$BUILD_NUMBER'" >&2
+    exit 1
+  fi
+  overrides+=("CURRENT_PROJECT_VERSION=$BUILD_NUMBER")
+fi
+
 echo "==> Building $display_name (Release, arm64)"
 xcodebuild -project "$project" -scheme "$scheme" -configuration Release \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath "$derived" \
-  CODE_SIGNING_ALLOWED=NO build
+  "${overrides[@]}" build
 
 app="$derived/Build/Products/Release/$product_name.app"
 if [[ ! -d $app ]]; then

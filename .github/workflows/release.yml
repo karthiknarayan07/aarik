@@ -1,5 +1,8 @@
 name: Release
 
+# Pushing a tag vX.Y.Z builds the DMG, signs it for Sparkle, uploads it to the GitHub Release and publishes the
+# updated appcast.xml on the gh-pages branch. Owner setup: docs/RELEASING.md.
+
 on:
   push:
     tags: ["v*"]
@@ -7,13 +10,66 @@ on:
 permissions:
   contents: write
 
+# Two releases must never race on appcast.xml.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  # Must match the Sparkle version pinned in App/App.xcodeproj (checked below). The digest is the one GitHub
+  # publishes for the release asset Sparkle-<version>.tar.xz.
+  SPARKLE_VERSION: 2.10.1
+  SPARKLE_TARBALL_SHA256: 1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27
+
 jobs:
   dmg:
     # Assumption: macos-26 is the newest hosted runner with Xcode 26+ (see ci.yml).
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+
+      # Everything that can be wrong with the setup fails here, before anything is built or published.
+      - name: Preflight
+        env:
+          SPARKLE_KEY_PRESENT: ${{ secrets.SPARKLE_ED_PRIVATE_KEY != '' }}
+        run: |
+          # Reads a KEY = value assignment (no [config=...] condition) from an xcconfig file. The value may
+          # itself contain '=' (base64 keys do).
+          xcconfig_value() {
+            awk -v key="$2" '
+              $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+                v = $0; sub(/^[^=]*=/, "", v); sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+$/, "", v)
+                print v; exit
+              }' "$1"
+          }
+
+          version=$(xcconfig_value Config/App.xcconfig MARKETING_VERSION)
+          if [[ "$TAG" != "v$version" ]]; then
+            echo "::error::Tag $TAG does not match MARKETING_VERSION $version in Config/App.xcconfig. Run scripts/bump-version.sh, commit, then tag v<version>."
+            exit 1
+          fi
+
+          if [[ "$SPARKLE_KEY_PRESENT" != "true" ]]; then
+            echo "::error::The repository secret SPARKLE_ED_PRIVATE_KEY is not set. See docs/RELEASING.md."
+            exit 1
+          fi
+
+          if [[ -z "$(xcconfig_value Config/App.xcconfig APP_UPDATE_PUBLIC_KEY)" ]]; then
+            echo "::error::APP_UPDATE_PUBLIC_KEY is empty in Config/App.xcconfig, so this build could never update itself. See docs/RELEASING.md."
+            exit 1
+          fi
+
+          resolved=App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          pinned=$(jq -r '.pins[] | select(.identity == "sparkle") | .state.version' "$resolved")
+          if [[ "$pinned" != "$SPARKLE_VERSION" ]]; then
+            echo "::error::SPARKLE_VERSION ($SPARKLE_VERSION) in release.yml differs from the pinned package version ($pinned)."
+            exit 1
+          fi
+
+          echo "VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Select newest Xcode
         run: |
@@ -26,25 +82,134 @@ jobs:
           xcodebuild -version
 
       - name: Build DMG
-        run: scripts/make-dmg.sh
-
-      # TODO(sparkle): once Sparkle is integrated, sign the DMG with the EdDSA key
-      # (sign_update, key from a repository secret), generate appcast.xml and attach it
-      # to this release.
-
-      - name: Publish GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          # CFBundleVersion: Sparkle compares it, so it must grow with every release.
+          BUILD_NUMBER: ${{ github.run_number }}
         run: |
+          scripts/make-dmg.sh
           shopt -s nullglob
           dmgs=(build/dist/*.dmg)
           if [[ ${#dmgs[@]} -ne 1 ]]; then
-            echo "Expected exactly one DMG in build/dist, found ${#dmgs[@]}" >&2
+            echo "::error::Expected exactly one DMG in build/dist, found ${#dmgs[@]}"
             exit 1
           fi
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${dmgs[0]}" --clobber
-          else
-            gh release create "$TAG" "${dmgs[0]}" --title "$TAG" --generate-notes
+          echo "DMG=$PWD/${dmgs[0]}" >> "$GITHUB_ENV"
+
+      - name: Download Sparkle tools
+        run: |
+          dir="$RUNNER_TEMP/sparkle"
+          mkdir -p "$dir"
+          tarball="$dir/Sparkle-$SPARKLE_VERSION.tar.xz"
+          curl -fsSL --retry 3 -o "$tarball" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          echo "$SPARKLE_TARBALL_SHA256  $tarball" | shasum -a 256 -c -
+          tar -xJf "$tarball" -C "$dir"
+          test -x "$dir/bin/sign_update"
+          test -x "$dir/bin/generate_appcast"
+          echo "SPARKLE_BIN=$dir/bin" >> "$GITHUB_ENV"
+
+      - name: Write release notes
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          # actions/checkout may leave a lightweight copy of the tag; fetch the annotated one.
+          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          text=""
+          if [[ "$(git cat-file -t "refs/tags/$TAG")" == "tag" ]]; then
+            text=$(git for-each-ref --format='%(contents:subject)%0a%0a%(contents:body)' "refs/tags/$TAG")
           fi
+          trimmed=$(printf '%s' "$text" | tr -d '[:space:]')
+          if [[ -z "$trimmed" || "$trimmed" == "$TAG" || "$trimmed" == "$VERSION" ]]; then
+            # The tag message says nothing more than the version: use this version's CHANGELOG section.
+            text=$(awk -v v="$VERSION" '
+              index($0, "## [" v "]") == 1 { found = 1; next }
+              found && /^## / { exit }
+              found { print }' CHANGELOG.md)
+          fi
+          if [[ -z "$(printf '%s' "$text" | tr -d '[:space:]')" ]]; then
+            text="Version $VERSION."
+          fi
+          printf '%s\n' "$text" > "$notes"
+          echo "NOTES=$notes" >> "$GITHUB_ENV"
+          cat "$notes"
+
+      - name: Check out gh-pages
+        run: |
+          pages="$RUNNER_TEMP/pages"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
+            git fetch --no-tags --depth 1 origin gh-pages
+            git worktree add --detach "$pages" FETCH_HEAD
+          else
+            echo "No gh-pages branch yet: starting an orphan one."
+            git worktree add --detach "$pages" HEAD
+            git -C "$pages" checkout --orphan gh-pages
+            git -C "$pages" rm -rfq .
+          fi
+          echo "PAGES=$pages" >> "$GITHUB_ENV"
+
+      - name: Sign the DMG and update appcast.xml
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          # The key lives only in this step: a private temp file, removed however the step ends. Never echo it.
+          keyfile=$(mktemp "$RUNNER_TEMP/sparkle-key.XXXXXX")
+          trap 'rm -f "$keyfile"' EXIT
+          chmod 600 "$keyfile"
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$keyfile"
+          unset SPARKLE_ED_PRIVATE_KEY
+
+          signature=$("$SPARKLE_BIN/sign_update" -p --ed-key-file "$keyfile" "$DMG")
+          echo "EdDSA signature: $signature"
+
+          # generate_appcast reads the existing feed in the folder and adds an item for the new DMG. A .md file
+          # named like the DMG becomes the item's release notes; the minimum macOS comes from the app's
+          # LSMinimumSystemVersion.
+          archives="$RUNNER_TEMP/archives"
+          mkdir -p "$archives"
+          cp "$DMG" "$archives/"
+          base=$(basename "$DMG" .dmg)
+          cp "$NOTES" "$archives/$base.md"
+          if [[ -f "$PAGES/appcast.xml" ]]; then cp "$PAGES/appcast.xml" "$archives/appcast.xml"; fi
+
+          "$SPARKLE_BIN/generate_appcast" \
+            --ed-key-file "$keyfile" \
+            --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/" \
+            --link "https://github.com/$GITHUB_REPOSITORY" \
+            --embed-release-notes \
+            "$archives"
+
+          # generate_appcast signs only when the app's SUPublicEDKey belongs to this private key. Ed25519 signatures
+          # are deterministic, so the item must carry exactly the signature sign_update produced.
+          if ! grep -qF "sparkle:edSignature=\"$signature\"" "$archives/appcast.xml"; then
+            echo "::error::appcast.xml has no matching signature for the DMG. APP_UPDATE_PUBLIC_KEY in Config/App.xcconfig must be the public half of SPARKLE_ED_PRIVATE_KEY."
+            exit 1
+          fi
+          if ! grep -qF "<sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>" "$archives/appcast.xml"; then
+            echo "::error::appcast.xml lacks minimumSystemVersion 26.0; check LSMinimumSystemVersion in the built app."
+            exit 1
+          fi
+          cp "$archives/appcast.xml" "$PAGES/appcast.xml"
+
+      # The DMG goes up before the feed points at it.
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$DMG" --clobber
+          else
+            gh release create "$TAG" "$DMG" --title "$TAG" --notes-file "$NOTES" --verify-tag
+          fi
+
+      - name: Publish appcast.xml to gh-pages
+        run: |
+          cd "$PAGES"
+          touch .nojekyll
+          git add appcast.xml .nojekyll
+          if git diff --cached --quiet; then
+            echo "appcast.xml unchanged"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "appcast: $TAG"
+          git push origin HEAD:refs/heads/gh-pages

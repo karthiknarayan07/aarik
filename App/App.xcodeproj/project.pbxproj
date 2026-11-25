@@ -12,12 +12,14 @@
 		A10000000000000000000103 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000203 /* AppUI */; };
 		A10000000000000000000104 /* LocalLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000204 /* LocalLibrary */; };
 		A10000000000000000000105 /* DownscaleVideo in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000205 /* DownscaleVideo */; };
+		A10000000000000000000106 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000206 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000301 /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000302 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		A10000000000000000000303 /* Brand.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Brand.xcconfig; sourceTree = "<group>"; };
+		A10000000000000000000304 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -43,6 +45,7 @@
 				A10000000000000000000103 /* AppUI in Frameworks */,
 				A10000000000000000000104 /* LocalLibrary in Frameworks */,
 				A10000000000000000000105 /* DownscaleVideo in Frameworks */,
+				A10000000000000000000106 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -54,6 +57,7 @@
 			children = (
 				A10000000000000000000401 /* Sources */,
 				A10000000000000000000402 /* Resources */,
+				A10000000000000000000304 /* Info.plist */,
 				A10000000000000000000602 /* Config */,
 				A10000000000000000000603 /* Products */,
 			);
@@ -103,6 +107,7 @@
 				A10000000000000000000203 /* AppUI */,
 				A10000000000000000000204 /* LocalLibrary */,
 				A10000000000000000000205 /* DownscaleVideo */,
+				A10000000000000000000206 /* Sparkle */,
 			);
 			productName = App;
 			productReference = A10000000000000000000301 /* App.app */;
@@ -134,6 +139,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A10000000000000000000B01 /* XCLocalSwiftPackageReference "../Packages/AppModules" */,
+				A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A10000000000000000000603 /* Products */;
@@ -222,6 +228,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		A10000000000000000000201 /* AppCore */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -242,6 +259,11 @@
 		A10000000000000000000205 /* DownscaleVideo */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DownscaleVideo;
+		};
+		A10000000000000000000206 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
