@@ -73,6 +73,9 @@ public struct Job: Codable, Sendable, Identifiable, Equatable {
     public var settings: Data
     public var state: JobState
     public var createdAt: Date
+    /// What a running job is doing now when its runner says ("Downloading from iCloud…"); nil otherwise. Progress
+    /// restarts from 0 in each phase.
+    public var phase: String?
 
     public init(
         id: UUID = UUID(),
@@ -81,7 +84,8 @@ public struct Job: Codable, Sendable, Identifiable, Equatable {
         sourceBookmark: Data,
         settings: Data,
         state: JobState = .queued,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        phase: String? = nil
     ) {
         self.id = id
         self.toolID = toolID
@@ -90,6 +94,7 @@ public struct Job: Codable, Sendable, Identifiable, Equatable {
         self.settings = settings
         self.state = state
         self.createdAt = createdAt
+        self.phase = phase
     }
 
     /// The file the job worked on: the one its finished run read when that is known, else its recorded path.
@@ -102,4 +107,19 @@ public struct Job: Codable, Sendable, Identifiable, Equatable {
 /// Runs one job. Returns `.completed` or `.keptAsIs`; throwing marks the job failed.
 public protocol JobRunner: Sendable {
     func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState
+
+    /// Like `run(_:progress:)`, for a run with phases of its own (a download, then a conversion): `phase` says
+    /// which one is under way, and `progress` then counts that phase from 0 to 1. The queue calls this one. A
+    /// runner without phases needn't implement it.
+    func run(
+        _ job: Job, progress: @escaping @Sendable (Double) -> Void, phase: @escaping @Sendable (String?) -> Void
+    ) async throws -> JobState
+}
+
+extension JobRunner {
+    public func run(
+        _ job: Job, progress: @escaping @Sendable (Double) -> Void, phase: @escaping @Sendable (String?) -> Void
+    ) async throws -> JobState {
+        try await run(job, progress: progress)
+    }
 }
