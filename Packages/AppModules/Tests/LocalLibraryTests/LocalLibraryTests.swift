@@ -2,6 +2,7 @@ import AVFoundation
 import AppCore
 import Foundation
 import MediaTestSupport
+import Synchronization
 import Testing
 
 @testable import LocalLibrary
@@ -328,6 +329,71 @@ enum Fixtures {
         #expect(saved.count == 2)
         #expect(saved.allSatisfy { $0.modifiedAt != nil })
         #expect(saved.first { $0.path.hasSuffix("b.mov") }?.byteSize == (try Self.size(fine)))
+    }
+
+    /// Counts the inspections a library asks for.
+    final class InspectionCounter: Sendable {
+        private let count = Mutex(0)
+        var value: Int { count.withLock { $0 } }
+        func add() { count.withLock { $0 += 1 } }
+    }
+
+    /// A changed file that can't be read is tried once per change, not on every refresh.
+    @Test func unreadableChangedFileIsTriedOncePerChange() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")
+        let counter = InspectionCounter()
+        let library = LocalLibrary(
+            store: BookmarkStore(directory: try Fixtures.tempDirectory()),
+            availability: { LocalLibrary.checkAvailability(of: $0) },
+            inspect: { url in
+                counter.add()
+                return await LibraryScanner.inspectFile(url)
+            })
+        library.add([clip])
+        await Fixtures.settle(library)
+        let before = try #require(library.items.first)
+
+        // Still being copied in, say: not a readable movie yet.
+        try Data("not a movie yet".utf8).write(to: clip)
+        await library.refreshAvailability()
+        await library.refreshAvailability()
+        #expect(counter.value == 1)
+        #expect(library.items.first == before)
+
+        // It changes again (the copy finished): tried again, and read.
+        try FileManager.default.removeItem(at: clip)
+        try FileManager.default.copyItem(at: try await Fixtures.clip(width: 640, height: 360), to: clip)
+        await library.refreshAvailability()
+        #expect(counter.value == 2)
+        #expect(library.items.first?.inventory["video.dimensions"]?.value == "640x360")
+    }
+
+    /// Renamed or moved in Finder (not into the Trash): the item follows its bookmark to the new path.
+    @Test func fileRenamedInFinderIsFollowedToItsNewPath() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")
+        let store = BookmarkStore(directory: try Fixtures.tempDirectory())
+        let library = LocalLibrary(store: store)
+        library.add([clip])
+        await Fixtures.settle(library)
+        let id = try #require(library.items.first?.id)
+
+        let renamed = folder.appending(path: "renamed.mov")
+        try FileManager.default.moveItem(at: clip, to: renamed)
+        await library.refreshAvailability()
+        await Fixtures.settle(library)
+
+        #expect(library.items.map(\.id) == [id])
+        #expect(library.items.first?.url.lastPathComponent == "renamed.mov")
+        #expect(library.items.first?.isAvailable == true)
+        let entry = try #require(try store.load().first)
+        #expect(URL(filePath: entry.path).lastPathComponent == "renamed.mov")
+        // The old path is free again.
+        try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")
+        library.add([clip])
+        await Fixtures.settle(library)
+        #expect(library.items.count == 2)
     }
 
     /// Moved in Finder after it was queued: the run followed the bookmark to the new path, but the item is still at

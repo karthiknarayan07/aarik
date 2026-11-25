@@ -18,7 +18,8 @@ struct LibraryTile: View {
             sizeLabel: ByteFormat.string(item.byteSize), isAvailable: item.isAvailable, isSelected: isSelected,
             note: presetOverride
         )
-        .task(id: item.url) {
+        // Keyed on the whole item: a re-read in place (same path, new file) or a move loads the new poster.
+        .task(id: item) {
             guard item.isAvailable else { return }
             image = await thumbnails.thumbnail(for: item.url, maxPixel: 320)
         }

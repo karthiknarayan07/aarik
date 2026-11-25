@@ -32,9 +32,14 @@ public final class LocalLibrary {
     @ObservationIgnored private var cancelledWorkers: [Task<Void, Never>] = []
     @ObservationIgnored private var cachedBadgeCounts: (revision: Int, counts: [MediaBadge: Int])?
     @ObservationIgnored private let availability: AvailabilityCheck
+    @ObservationIgnored private let inspect: Inspection
+    /// Changed files that couldn't be read, with the stamp they had then: not tried again until it changes.
+    @ObservationIgnored private var unreadable: [UUID: FileStamp] = [:]
 
     /// Says which files exist (not in a Trash), by item id; a seam so tests can hold a check while items change.
     typealias AvailabilityCheck = @Sendable ([(id: UUID, url: URL)]) async -> [UUID: Bool]
+    /// Reads a changed file again (off the main actor); a seam so tests can count or fail it.
+    typealias Inspection = @Sendable (URL) async -> ScannedFile?
 
     /// Restores what the store remembers; files that are gone come back with `isAvailable == false`.
     public convenience init(store: BookmarkStore, scanner: LibraryScanner = LibraryScanner(), batchSize: Int = 50) {
@@ -44,9 +49,11 @@ public final class LocalLibrary {
 
     init(
         store: BookmarkStore, scanner: LibraryScanner = LibraryScanner(), batchSize: Int = 50,
-        availability: @escaping AvailabilityCheck
+        availability: @escaping AvailabilityCheck,
+        inspect: @escaping Inspection = { await LibraryScanner.inspectFile($0) }
     ) {
         self.store = store
+        self.inspect = inspect
         self.persistence = LibraryPersistence(store: store)
         self.scanner = scanner
         self.batchSize = batchSize
@@ -115,17 +122,72 @@ public final class LocalLibrary {
         items.removeAll { ids.contains($0.id) }
         for id in ids {
             entries[id] = nil
+            unreadable[id] = nil
             if let key = keyByID.removeValue(forKey: id) { pathKeys.remove(key) }
         }
         persist()
     }
 
-    /// Re-checks which files still exist (not in a Trash), off the main actor. Nothing is mounted and no UI is
-    /// shown; a file on a disconnected drive is simply unavailable until the drive is back. Then reads again, in
-    /// place, the files that changed on disk (`refreshChangedFiles`).
+    /// Follows files renamed or moved in Finder to their new paths (`followMovedFiles`), re-checks which files
+    /// still exist (not in a Trash), off the main actor, then reads again, in place, the files that changed on
+    /// disk (`refreshChangedFiles`). Nothing is mounted and no UI is shown; a file on a disconnected drive is
+    /// simply unavailable until the drive is back.
     public func refreshAvailability() async {
+        await followMovedFiles()
         await refreshExistence()
         await refreshChangedFiles()
+    }
+
+    /// Items whose file is gone from its path but whose bookmark finds it elsewhere (renamed or moved in Finder,
+    /// not into a Trash) move there: same id, path and bookmark saved. Bookmarks are resolved off the main actor,
+    /// and only for files missing from their path.
+    private func followMovedFiles() async {
+        let candidates = items.compactMap { item in
+            entries[item.id].map { (id: item.id, url: item.url, entry: $0) }
+        }
+        guard !candidates.isEmpty else { return }
+        let moves = await Self.moves(of: candidates)
+        var moved = false
+        for move in moves {
+            // The item may have changed meanwhile (removed, replaced, moved): only the one still at the old path,
+            // with the entry that was resolved, moves; never onto another item's path.
+            let newKey = LibraryScanner.pathKey(move.to)
+            guard let index = items.firstIndex(where: { $0.id == move.id }), items[index].url == move.from,
+                let entry = entries[move.id], entry == move.entry, !pathKeys.contains(newKey),
+                let item = LibraryItemBuilder.build(
+                    url: move.to, inventory: entry.inventory, byteSize: entry.byteSize, id: move.id)
+            else { continue }
+            if let oldKey = keyByID[move.id] { pathKeys.remove(oldKey) }
+            pathKeys.insert(newKey)
+            keyByID[move.id] = newKey
+            items[index] = item
+            entries[move.id]?.path = move.to.path
+            if let bookmark = move.bookmark { entries[move.id]?.bookmark = bookmark }
+            moved = true
+        }
+        if moved { persist() }
+    }
+
+    /// For each file missing from its path, where its bookmark finds it now, when that is a different, existing
+    /// path outside any Trash.
+    @concurrent
+    private nonisolated static func moves(of files: [(id: UUID, url: URL, entry: BookmarkStore.Entry)]) async
+        -> [(id: UUID, from: URL, to: URL, bookmark: Data?, entry: BookmarkStore.Entry)]
+    {
+        files.compactMap { file in
+            guard !FileManager.default.fileExists(atPath: file.url.path), file.entry.bookmark != nil else {
+                return nil
+            }
+            let resolved = BookmarkStore.resolve(file.entry)
+            guard !resolved.isTrashed, resolved.url.path != file.url.path,
+                FileManager.default.fileExists(atPath: resolved.url.path)
+            else { return nil }
+            return (
+                file.id, file.url, resolved.url,
+                resolved.refreshedBookmark ?? BookmarkStore.makeBookmark(for: resolved.url),
+                file.entry
+            )
+        }
     }
 
     private func refreshExistence() async {
@@ -173,16 +235,22 @@ public final class LocalLibrary {
                 }
                 continue
             }
-            guard !stamp.matches(size: stored.byteSize, modified: stored.modifiedAt) else { continue }
-            await readAgain(file.id, at: file.url, replacing: stored)
+            guard !stamp.matches(size: stored.byteSize, modified: stored.modifiedAt), unreadable[file.id] != stamp
+            else { continue }
+            await readAgain(file.id, at: file.url, stamp: stamp, replacing: stored)
         }
         if dated { persist() }
     }
 
     /// Inspects the item's file again and updates it in place, unless the item moved, went away or was updated
-    /// meanwhile (its entry is no longer `stored`), or the file can't be read.
-    private func readAgain(_ id: UUID, at url: URL, replacing stored: BookmarkStore.Entry) async {
-        guard let scanned = await LibraryScanner.inspectFile(url) else { return }
+    /// meanwhile (its entry is no longer `stored`), or the file can't be read; then `stamp` is remembered, so the
+    /// file isn't tried again until it changes once more.
+    private func readAgain(_ id: UUID, at url: URL, stamp: FileStamp, replacing stored: BookmarkStore.Entry) async {
+        guard let scanned = await inspect(url) else {
+            unreadable[id] = stamp
+            return
+        }
+        unreadable[id] = nil
         guard let index = items.firstIndex(where: { $0.id == id }), items[index].url == url, entries[id] == stored,
             let item = LibraryItemBuilder.build(
                 url: url, inventory: scanned.item.inventory, byteSize: scanned.item.byteSize, id: id)
