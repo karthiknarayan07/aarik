@@ -12,6 +12,10 @@ public struct ClipOptions: Sendable {
     public var height = 2160
     public var fps = 30
     public var seconds = 1.0
+    /// Frames at uneven intervals (alternately 1.5 and 0.5 frame periods apart, the average still `fps`), as a
+    /// screen recording or a dropped-frame capture has; false spaces them evenly. Audio is laid out per frame
+    /// period, so use this without audio (the writer's interleaving then waits on audio forever).
+    public var variableFrameRate = false
     public var hdr: FixtureHDR = .hlg
     /// key → string value, keySpace mdta
     public var quickTimeMetadata: [String: String] = [:]
@@ -257,7 +261,10 @@ public enum FixtureFactory {
                             pixelBuffer, kCVImageBufferAmbientViewingEnvironmentKey, ambient as CFData,
                             .shouldPropagate)
                     }
-                    let pts = CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
+                    let pts =
+                        options.variableFrameRate
+                        ? CMTime(value: CMTimeValue(2 * frame + frame % 2), timescale: CMTimeScale(2 * options.fps))
+                        : CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
                     guard adaptor.append(pixelBuffer, withPresentationTime: pts) else {
                         throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "video append failed")
                     }
