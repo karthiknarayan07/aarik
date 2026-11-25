@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Brainstorming mockups (local only)
+.superpowers/
+
+# Swift / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Real iPhone fixtures contain personal location data: never commit
+Fixtures/iphone/
