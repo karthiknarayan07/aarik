@@ -326,8 +326,10 @@ struct PhotosInspector: View {
                         }
                     }
                     Text(
-                        "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos. "
-                            + "Replacing originals is coming next."
+                        model.photosSaveLocation.choice == .replace
+                            ? "Each video is downloaded from iCloud when its turn comes. When the queue finishes, "
+                                + "Photos asks you to move the originals to Recently Deleted."
+                            : "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)

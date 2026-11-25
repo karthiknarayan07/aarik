@@ -9,6 +9,11 @@ First public release.
 
 ### Added
 
+- **Replace in Photos:** choose Replace Original in Photos and each smaller copy is saved and checked first. When the
+  queue finishes, Photos asks you once to move all the originals to Recently Deleted. If you decline, they are kept
+  and a bar offers to move them later. iCloud space is freed when Recently Deleted is emptied, or after 30 days.
+- **Overview:** totals for your Photos videos and local files, what converting them could free at the current preset,
+  the ten biggest savings (click one to see it in its grid) and the space saved so far.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).
 

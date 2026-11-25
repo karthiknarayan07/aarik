@@ -63,7 +63,13 @@ struct RootView: View {
             Button("Cancel", role: .cancel) {}
             Button("Replace", role: .destructive) { model.confirmReplace() }
         } message: {
-            Text("The original goes to the Trash after the smaller copy is verified.")
+            if model.isPhotosPage {
+                Text(
+                    "The smaller copy is saved to Photos and verified first. Then Photos asks you to move the "
+                        + "originals to Recently Deleted.")
+            } else {
+                Text("The original goes to the Trash after the smaller copy is verified.")
+            }
         }
         .alert(model.alert?.title ?? "", isPresented: alertShown, presenting: model.alert) { _ in
             Button("OK", role: .cancel) {}
@@ -96,13 +102,7 @@ private struct DetailView: View {
             case .completed: CompletedView(model: model)
             case .keptAsIs: KeptAsIsView(model: model)
             case .failed: FailedView(model: model)
-            case .overview:
-                // Until the Photos dashboard exists, Overview welcomes and points to Photos or to adding files.
-                WelcomeView(allowPhotos: { model.allowPhotos() }) {
-                    model.selection = .localFiles
-                    model.isImporterPresented = true
-                }
-                .navigationTitle(SidebarDestination.overview.title)
+            case .overview: OverviewView(model: model)
             case .some(let destination):
                 destination.emptyState
                     .navigationTitle(destination.title)
@@ -112,6 +112,12 @@ private struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Originals waiting to move to Recently Deleted, on every page, in the system's bottom bar.
+        .safeAreaBar(edge: .bottom) {
+            if let content = model.pendingDeletionBar {
+                PendingDeletionBar(content: content, perform: model.performPendingDeletionAction)
+            }
+        }
     }
 }
 

@@ -5,16 +5,17 @@ import Foundation
 import LocalLibrary
 import PhotosLibrary
 
-/// Where the Videos page puts converted copies: a new video in Photos, or a folder on this Mac. (Replacing the
-/// original in Photos comes with the batch delete.)
+/// Where the Videos page puts converted copies: a new video in Photos, a new video with the original moved to
+/// Recently Deleted afterwards, or a folder on this Mac.
 struct PhotosSaveLocation: Equatable {
     enum Choice: String, CaseIterable, Identifiable {
-        case newAsset, folder
+        case newAsset, replace, folder
 
         var id: Self { self }
         var title: String {
             switch self {
             case .newAsset: "Photos, as a new video"
+            case .replace: "Replace Original in Photos"
             case .folder: "Folder…"
             }
         }
@@ -28,6 +29,7 @@ struct PhotosSaveLocation: Equatable {
     var destination: PhotosDestination? {
         switch choice {
         case .newAsset: .newAsset
+        case .replace: .replace
         case .folder: folderBookmark.map { .folder(bookmark: $0) }
         }
     }
@@ -101,13 +103,13 @@ extension AppModel {
     /// Context menu: Add to queue, for the selection or the clicked tile.
     func addPhotosToQueue(clicked item: LibraryItem) {
         if !selectedPhotoItems.contains(where: { $0.id == item.id }) { photosBrowser.selection = [item.id] }
-        guard canAddPhotosToQueue else { return }
-        addPhotosSelectionToQueue()
+        requestAddSelectionToQueue()
     }
 
     func enqueuePhotos(
         _ items: [LibraryItem], settings: DownscaleJobSettings, presets: [UUID: Preset], batch: PhotosBatch
     ) {
+        replaceConsent.videosAdded()
         let jobs = PhotosJobFactory.makeJobs(
             for: items.compactMap { item in
                 item.photosIdentifier.map {
