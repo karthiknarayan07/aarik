@@ -15,6 +15,9 @@ extension AppModel {
     /// so `selectedItems` is empty there.
     var isPhotosPage: Bool { selection == .photosVideos }
 
+    /// The inspector belongs to the library grids; the Activity lists don't show it.
+    var inspectorAvailable: Bool { selection?.showsLibrary == true || isPhotosPage }
+
     /// The grid's sections, built once per change of the library or the query (never per selection change).
     var sections: [MediaSection<LibraryItem>] { Self.sections(of: browser) }
 

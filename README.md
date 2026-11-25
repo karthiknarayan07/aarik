@@ -36,6 +36,25 @@ xattr -dr com.apple.quarantine /Applications/Aarik.app
 
 Because the signature changes with each release, macOS may ask you to grant Photos access again after an update.
 
+## Quick runs
+
+Videos can be sent to the app without opening its window. A quick run converts in the background with your saved
+defaults (Settings: preset and Save to), never asks a question and never replaces an original: if Replace is the
+saved choice, the copy is saved next to the original and the notification says so. Any video that would lose metadata,
+and any the app would keep as is, is skipped. One notification says how many were converted, how much space was saved
+and how many were skipped; "Review skipped files" opens them in Local Files.
+
+**Dock drop and Open With** (right-click a video ▸ Open With, or drop videos on the app's Dock icon) follow one rule:
+
+- If the app's window is open, the files are only added to Local Files. Nothing is queued.
+- If no window is visible (it was closed, or the app wasn't running), the files go through a quick run.
+
+Closing the window keeps Aarik running in the Dock so a quick run can finish; ⌘Q quits. A Dock click brings the
+window back. With auto-start off in Settings, quick-run videos wait until you resume the queue.
+
+The app is listed under Open With as an alternate; it never becomes the default player. Quick runs use the same queue
+as the window, so they never convert two videos at once.
+
 ## Updates
 
 The app checks for new versions in the background and offers to install them (App menu ▸ Check for Updates…). Updates

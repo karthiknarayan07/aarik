@@ -1,8 +1,10 @@
 import AppCore
+import AppKit
 import AppUI
 import DownscaleVideo
 import Foundation
 import LocalLibrary
+import QuickRunService
 
 extension AppModel {
     /// Mirrors the queue's jobs and starts it unless it was created paused (auto-start off). Safe to call more
@@ -10,6 +12,7 @@ extension AppModel {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        await quickRun.start()
         let queue = self.queue
         let loadError = await queue.loadError
         queueLoadFailed = loadError != nil
@@ -51,8 +54,14 @@ extension AppModel {
                     }.map(\.id)))
         }
         pendingOriginals = pendingDeletions.all
-        if let summary = runTracker.observe(jobs) {
-            notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))
+        // A quick run announces itself; the generic "Queue finished" is for the window's jobs.
+        let quickRunJobs = quickRunStore.jobIDs
+        let windowJobs = quickRunJobs.isEmpty ? jobs : jobs.filter { !quickRunJobs.contains($0.id) }
+        if let summary = runTracker.observe(windowJobs) {
+            // Quiet only when the app is active with its window on screen; the Activity lists show the result.
+            if NotificationPolicy.shouldPost(appIsActive: NSApp.isActive, windowOnScreen: isMainWindowVisible) {
+                notifier.post(title: "Queue finished", body: ActivityText.notificationBody(summary))
+            }
             // The run is over: ask Photos, once, to move the originals of its Replace jobs.
             moveOriginalsAfterRun()
         }
