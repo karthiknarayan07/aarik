@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// The video format a downscale writes.
 public enum VideoCodec: String, Codable, Sendable, Hashable, CaseIterable {
@@ -51,4 +52,15 @@ public enum DownscaleError: Error, Equatable, Sendable {
     case sourceAlreadySmall
     case unsupportedSource(String)
     case encoderFailed(String)
+}
+
+extension DownscaleError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .outputExists: "A file with the new name already exists, so nothing was saved."
+        case .sourceAlreadySmall: "The video is already small."
+        case .unsupportedSource: "This kind of video can't be converted yet."
+        case .encoderFailed: "The video couldn't be converted."
+        }
+    }
 }

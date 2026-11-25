@@ -299,8 +299,20 @@ public actor JobQueue {
             if Task.isCancelled { return .requeue }
             // The sentence for the user; the full error (domain, code, user info) only to the log.
             Self.log.error("Job \(id, privacy: .public) failed: \(String(describing: error), privacy: .private)")
-            return .finished(.failed(reason: error.localizedDescription))
+            return .finished(.failed(reason: Self.reason(for: error)))
         }
+    }
+
+    /// The sentence shown for a failure. A Swift error that isn't localized bridges to "The operation couldn't be
+    /// completed. (… error N.)", which names types and codes; it is replaced by a plain sentence.
+    static func reason(for error: any Error) -> String {
+        let description = error.localizedDescription
+        if description.hasPrefix("The operation couldn\u{2019}t be completed")
+            || description.hasPrefix("The operation couldn't be completed")
+        {
+            return "The video couldn't be converted."
+        }
+        return description
     }
 
     private func apply(_ disposition: Disposition, to id: UUID) {

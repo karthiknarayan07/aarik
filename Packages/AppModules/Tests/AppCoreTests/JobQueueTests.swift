@@ -160,7 +160,7 @@ private func waitUntil(
 
     let jobs = await queue.jobs
     #expect(jobs[0].state == .failed(reason: "boom happened"))
-    #expect(jobs[1].state == .failed(reason: Plain().localizedDescription))
+    #expect(jobs[1].state == .failed(reason: "The video couldn't be converted."))
 }
 
 /// A Cocoa error reads as its sentence, not as a dump of its domain, code and user info.
