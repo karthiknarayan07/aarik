@@ -44,7 +44,7 @@ enum LibraryItemBuilder {
     /// or a timed cinematic-video metadata track.
     private static func isCinematic(_ inventory: MetadataInventory) -> Bool {
         inventory.items.contains { item in
-            if item.key.hasPrefix("track."), item.key.hasSuffix(".kind") { return item.value.hasPrefix("vide/") }
+            if item.key.hasPrefix("track."), item.key.hasSuffix(".kind") { return item.value.hasPrefix("auxv/") }
             return item.key.hasPrefix("timed.") && item.key.localizedCaseInsensitiveContains("cinematic-video")
         }
     }

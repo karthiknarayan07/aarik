@@ -120,8 +120,78 @@ enum Fixtures {
         #expect(library.items.first?.isAvailable == true)
 
         try FileManager.default.removeItem(at: clip)
-        library.refreshAvailability()
+        await library.refreshAvailability()
         #expect(library.items.first?.isAvailable == false)
+
+        // Back again (a drive reconnected): available again.
+        try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "gone.mov")
+        await library.refreshAvailability()
+        #expect(library.items.first?.isAvailable == true)
+    }
+
+    @Test func replacedFileUpdatesItsEntryInPlace() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(width: 640, height: 360), into: folder, as: "a.mov")
+        let store = BookmarkStore(directory: try Fixtures.tempDirectory())
+        let library = LocalLibrary(store: store)
+        library.add([clip])
+        await Fixtures.settle(library)
+        let before = try #require(library.items.first)
+
+        // A Replace put a smaller file at the original's path.
+        let smaller = try await Fixtures.clip(width: 320, height: 180)
+        try FileManager.default.removeItem(at: clip)
+        try FileManager.default.copyItem(at: smaller, to: clip)
+        let newSize = try #require(try clip.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+        await library.fileWasReplaced(at: clip, by: clip)
+        await Fixtures.settle(library)
+
+        let after = try #require(library.items.first)
+        #expect(library.items.count == 1)
+        #expect(after.id == before.id)
+        #expect(after.byteSize == Int64(newSize))
+        #expect(after.inventory["video.dimensions"]?.value == "320x180")
+        #expect(after.isAvailable)
+        #expect(after != before)
+        let entry = try #require(try store.load().first)
+        #expect(entry.id == before.id)
+        #expect(entry.byteSize == Int64(newSize))
+        #expect(entry.inventory == after.inventory)
+    }
+
+    @Test func replacementUnderANewNameMovesTheEntry() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.m4v")
+        let library = LocalLibrary(directory: try Fixtures.tempDirectory())
+        library.add([clip])
+        await Fixtures.settle(library)
+        let id = try #require(library.items.first?.id)
+
+        let replacement = folder.appending(path: "a.mov")
+        try FileManager.default.moveItem(at: clip, to: replacement)
+        await library.fileWasReplaced(at: clip, by: replacement)
+
+        #expect(library.items.map(\.id) == [id])
+        #expect(library.items.first?.url.lastPathComponent == "a.mov")
+        // The old path is free again: adding a file there makes a new entry.
+        try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.m4v")
+        library.add([clip])
+        await Fixtures.settle(library)
+        #expect(library.items.count == 2)
+    }
+
+    @Test func replacementOfAFileNotInTheLibraryChangesNothing() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")
+        let other = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "b.mov")
+        let library = LocalLibrary(directory: try Fixtures.tempDirectory())
+        library.add([clip])
+        await Fixtures.settle(library)
+        let before = library.items
+
+        await library.fileWasReplaced(at: other, by: other)
+
+        #expect(library.items == before)
     }
 
     @Test func removeDropsItemsAndPersists() async throws {
@@ -138,7 +208,9 @@ enum Fixtures {
         await Fixtures.settle(library)
         #expect(library.items.map(\.url.lastPathComponent) == ["b.mov"])
         #expect(LocalLibrary(directory: directory).items.map(\.url.lastPathComponent) == ["b.mov"])
+        // Only the library entry goes; both files stay on disk.
         #expect(FileManager.default.fileExists(atPath: removed.url.path))
+        #expect(FileManager.default.fileExists(atPath: folder.appending(path: "b.mov").path))
     }
 
     @Test func bookmarksRoundTrip() async throws {
@@ -191,7 +263,7 @@ enum Fixtures {
         try FileManager.default.trashItem(at: clip, resultingItemURL: &trashed)
         defer { if let trashed { try? FileManager.default.removeItem(at: trashed as URL) } }
 
-        library.refreshAvailability()
+        await library.refreshAvailability()
         #expect(library.items.first?.isAvailable == false)
         let restored = LocalLibrary(store: store)
         await Fixtures.settle(restored)
@@ -315,7 +387,9 @@ enum Fixtures {
         #expect(try #require(build(inventory(fps: "120.00"))).badges == [.sloMo, .sdr])
         #expect(try #require(build(inventory(fps: "60.00"))).badges == [.sdr])
         #expect(
-            try #require(build(inventory(extra: [item("track.2.kind", "vide/hvc1")]))).badges == [.cinematic, .sdr])
+            try #require(build(inventory(extra: [item("track.2.kind", "auxv/dish")]))).badges == [.cinematic, .sdr])
+        // A second ordinary video track is not Cinematic.
+        #expect(try #require(build(inventory(extra: [item("track.2.kind", "vide/hvc1")]))).badges == [.sdr])
         #expect(
             try #require(build(inventory(extra: [item("timed.mdta/com.apple.quicktime.cinematic-video.x", "present")])))
                 .badges == [.cinematic, .sdr])
@@ -407,14 +481,19 @@ enum Fixtures {
         #expect(names(groups[0]) == ["jan-big"])
     }
 
-    @Test func libraryItemEqualityUsesIDOnly() {
+    @Test func libraryItemEqualityComparesWhatCanChangeAndHashesByID() {
         let a = make("a", bytes: 1, date: nil)
-        var b = make("b", bytes: 2, date: nil)
-        b = LibraryItem(
-            id: a.id, url: b.url, byteSize: 2, duration: 1, pixelSize: .zero, frameRate: 1, captureDate: nil,
-            badges: [], isAvailable: false, inventory: MetadataInventory())
-        #expect(a == b)
-        #expect(Set([a, b]).count == 1)
+        var same = a
+        same.isAvailable = a.isAvailable
+        #expect(a == same)
+        var missing = a
+        missing.isAvailable = false
+        #expect(a != missing)
+        let replaced = LibraryItem(
+            id: a.id, url: a.url, byteSize: 2, duration: a.duration, pixelSize: a.pixelSize, frameRate: a.frameRate,
+            captureDate: a.captureDate, badges: a.badges, isAvailable: a.isAvailable, inventory: a.inventory)
+        #expect(a != replaced)
+        #expect(a.hashValue == replaced.hashValue)
     }
 }
 

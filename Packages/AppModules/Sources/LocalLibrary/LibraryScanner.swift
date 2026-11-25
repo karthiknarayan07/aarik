@@ -47,6 +47,14 @@ public actor LibraryScanner {
     }
 
     private func inspect(_ url: URL) async -> ScannedFile? {
+        await Self.inspectFile(url, inspector: inspector)
+    }
+
+    /// Inspects one movie file off the caller's actor; nil if it can't be read as a video.
+    @concurrent
+    nonisolated static func inspectFile(_ url: URL, inspector: MediaInspector = MediaInspector()) async
+        -> ScannedFile?
+    {
         guard let inventory = try? await inspector.inventory(of: url),
             let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
             let item = LibraryItemBuilder.build(url: url, inventory: inventory, byteSize: Int64(size))

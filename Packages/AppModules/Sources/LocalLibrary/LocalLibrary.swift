@@ -107,12 +107,60 @@ public final class LocalLibrary {
         persist()
     }
 
-    /// Re-checks which files still exist.
-    public func refreshAvailability() {
-        for index in items.indices {
-            let url = items[index].url
-            items[index].isAvailable = FileManager.default.fileExists(atPath: url.path) && !BookmarkStore.isInTrash(url)
+    /// Re-checks which files still exist (not in a Trash), off the main actor. Nothing is mounted and no UI is
+    /// shown; a file on a disconnected drive is simply unavailable until the drive is back.
+    public func refreshAvailability() async {
+        let files = items.map { (id: $0.id, url: $0.url) }
+        let available = await Self.availability(of: files)
+        // Items may have changed meanwhile; only those still here are updated, in one change.
+        var updated = items
+        var changed = false
+        for index in updated.indices {
+            guard let isAvailable = available[updated[index].id], updated[index].isAvailable != isAvailable
+            else { continue }
+            updated[index].isAvailable = isAvailable
+            changed = true
         }
+        if changed { items = updated }
+    }
+
+    @concurrent
+    private nonisolated static func availability(of files: [(id: UUID, url: URL)]) async -> [UUID: Bool] {
+        var result: [UUID: Bool] = [:]
+        for file in files {
+            let exists = FileManager.default.fileExists(atPath: file.url.path)
+            result[file.id] = exists && !BookmarkStore.isInTrash(file.url)
+        }
+        return result
+    }
+
+    /// After a Replace put `replacement` where the item for `original` was (usually the same path), updates that
+    /// item in place: same id, the new file's size, metadata, badges and a fresh bookmark. Nothing happens when
+    /// no item has `original`'s path, or when the replacement can't be read (the item is then re-checked).
+    public func fileWasReplaced(at original: URL, by replacement: URL) async {
+        let key = LibraryScanner.pathKey(original)
+        guard let id = keyByID.first(where: { $0.value == key })?.key else { return }
+        let scanned = await LibraryScanner.inspectFile(replacement)
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        guard let scanned else {
+            await refreshAvailability()
+            return
+        }
+        let item = LibraryItemBuilder.build(
+            url: scanned.item.url, inventory: scanned.item.inventory, byteSize: scanned.item.byteSize, id: id)
+        guard let item else { return }
+        let newKey = LibraryScanner.pathKey(item.url)
+        if newKey != key {
+            // Another item already at the new path would make two entries for one file; keep the existing one.
+            guard !pathKeys.contains(newKey) else { return }
+            pathKeys.remove(key)
+            pathKeys.insert(newKey)
+            keyByID[id] = newKey
+        }
+        items[index] = item
+        entries[id] = BookmarkStore.Entry(
+            id: id, path: item.url.path, bookmark: scanned.bookmark, byteSize: item.byteSize, inventory: item.inventory)
+        persist()
     }
 
     // MARK: - Scanning

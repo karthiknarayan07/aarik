@@ -73,7 +73,8 @@ public struct BookmarkStore: Sendable {
         var stale = false
         guard
             let url = try? URL(
-                resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
+                resolvingBookmarkData: bookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
+                bookmarkDataIsStale: &stale)
         else { return Resolved(url: stored, refreshedBookmark: nil, isTrashed: isInTrash(stored)) }
         if isInTrash(url) { return Resolved(url: stored, refreshedBookmark: nil, isTrashed: true) }
         let moved = url.path != entry.path

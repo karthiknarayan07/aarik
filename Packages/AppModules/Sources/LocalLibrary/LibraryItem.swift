@@ -45,6 +45,14 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
         self.inventory = inventory
     }
 
-    public static func == (lhs: LibraryItem, rhs: LibraryItem) -> Bool { lhs.id == rhs.id }
+    /// Every field counts, so a view showing an item redraws when it changes (it went missing, or a Replace
+    /// shrank it).
+    public static func == (lhs: LibraryItem, rhs: LibraryItem) -> Bool {
+        lhs.id == rhs.id && lhs.isAvailable == rhs.isAvailable && lhs.byteSize == rhs.byteSize && lhs.url == rhs.url
+            && lhs.badges == rhs.badges && lhs.duration == rhs.duration && lhs.pixelSize == rhs.pixelSize
+            && lhs.frameRate == rhs.frameRate && lhs.captureDate == rhs.captureDate && lhs.inventory == rhs.inventory
+    }
+
+    /// By id only, which agrees with `==` (equal items share their id).
     public func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
