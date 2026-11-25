@@ -1,4 +1,5 @@
 import AVFoundation
+import AppCore
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -155,14 +156,14 @@ final class DownscaleJob {
 
     func run() async throws {
         guard reader.startReading() else { throw readerError() }
-        while let sample = videoOutput.copyNextSampleBuffer() {
+        while let sample = Signposts.interval(.read, { videoOutput.copyNextSampleBuffer() }) {
             try Task.checkCancellation()
             let time = sample.presentationTimeStamp
             let sampleDuration = sample.duration
             lastSourceEnd = sampleDuration.isValid ? time + sampleDuration : time
             guard limiter.shouldKeep(presentationTime: time), let frame = sample.imageBuffer else { continue }
             try await submitPending(nextTime: time)
-            let scaled = try scaler.scale(frame)
+            let scaled = try Signposts.interval(.transfer) { try scaler.scale(frame) }
             if let ambientViewingEnvironment,
                 CVBufferCopyAttachment(scaled, kCVImageBufferAmbientViewingEnvironmentKey, nil) == nil
             {
@@ -193,7 +194,7 @@ final class DownscaleJob {
         try Task.checkCancellation()
         // Every output has returned nil; anything but `.completed` means some track was cut short.
         guard reader.status == .completed else { throw readerError() }
-        await writer.finishWriting()
+        await Signposts.interval(.write) { await writer.finishWriting() }
         guard writer.status == .completed else { throw writerError() }
     }
 
@@ -211,7 +212,9 @@ final class DownscaleJob {
         guard let pending else { return }
         self.pending = nil
         let frameDuration = nextTime > pending.time ? nextTime - pending.time : CMTime.invalid
-        try encoder.encode(pending.frame, presentationTime: pending.time, duration: frameDuration)
+        try Signposts.interval(.encode) {
+            try encoder.encode(pending.frame, presentationTime: pending.time, duration: frameDuration)
+        }
         if videoInput == nil {
             // The writer needs the encoder's own format description (with its hvcC/avcC and dvvC atoms) as the hint.
             try encoder.completeFrames()
@@ -227,7 +230,7 @@ final class DownscaleJob {
                 try checkWriter()
                 if try !pumpPassthrough(until: nil) { try await Task.sleep(for: .milliseconds(1)) }
             }
-            guard input.append(sample) else { throw writerError() }
+            guard Signposts.interval(.write, { input.append(sample) }) else { throw writerError() }
             let fraction = duration > 0 ? min(sample.presentationTimeStamp.seconds / duration, 1) : 0
             if fraction > reported {
                 reported = fraction
