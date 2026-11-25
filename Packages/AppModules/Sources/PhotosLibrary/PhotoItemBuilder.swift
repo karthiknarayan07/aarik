@@ -7,7 +7,8 @@ import LocalLibrary
 ///
 /// The item's URL is `x-photos-asset:<localIdentifier>` with the identifier percent-encoded, so a `/` in it
 /// survives. Its id is derived from the local identifier, so the same asset keeps the same id across scans.
-/// Frame rate, Dolby Vision and HDR are unknown until the video is inspected, so they are left out.
+/// Frame rate, codec and dynamic range come from Photos' index (`PhotosIndex`) when it could be read; without it
+/// they are unknown and left out.
 public enum PhotoItemBuilder {
     public static let urlScheme = "x-photos-asset"
 
@@ -16,10 +17,35 @@ public enum PhotoItemBuilder {
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
     public static func build(_ asset: PhotoAsset) -> LibraryItem {
-        LibraryItem(
+        build(asset, index: nil)
+    }
+
+    /// The item with what Photos' index knows about the asset: frame rate, the codec (as `video.codec` in the
+    /// inventory, which the codec filter reads) and an HDR or SDR badge.
+    public static func build(_ asset: PhotoAsset, index entry: PhotoIndexEntry?) -> LibraryItem {
+        var inventory = MetadataInventory()
+        if let codec = entry?.codec {
+            inventory.items.append(
+                MetadataItem(key: "video.codec", category: .video, displayName: "Codec", value: codec))
+        }
+        return LibraryItem(
             id: itemID(for: asset.id), url: url(for: asset.id), byteSize: asset.originalByteSize ?? 0,
-            duration: asset.duration, pixelSize: asset.pixelSize, frameRate: 0, captureDate: asset.creationDate,
-            badges: badges(asset), isAvailable: true, inventory: MetadataInventory())
+            duration: asset.duration, pixelSize: asset.pixelSize, frameRate: entry?.fps ?? 0,
+            captureDate: asset.creationDate, badges: badges(asset).union(rangeBadges(entry?.hdrType)),
+            isAvailable: true, inventory: inventory)
+    }
+
+    /// Photos' `ZHDRTYPE` for a video: 0 is SDR and any other value is HDR. No value in the index could be told
+    /// apart as Dolby Vision (known Dolby Vision clips read 5, the only nonzero value seen), so it gives `.hdr`,
+    /// never `.dolbyVision`. Unknown gives no badge.
+    static func rangeBadges(_ hdrType: Int?) -> Set<MediaBadge> {
+        guard let hdrType else { return [] }
+        return hdrType == 0 ? [.sdr] : [.hdr]
+    }
+
+    /// The asset UUID that Photos' index uses: the part of a local identifier before the first `/`.
+    public static func assetUUID(fromLocalIdentifier localIdentifier: String) -> String {
+        String(localIdentifier.prefix { $0 != "/" })
     }
 
     /// Badges known from Photos' own metadata.
