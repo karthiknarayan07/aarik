@@ -117,7 +117,8 @@ private struct PhotosGridView: View {
         }
         .navigationSubtitle(filteredSummary)
         .toolbar { GridToolbar(browser: browser) }
-        .searchable(text: $browser.search, placement: .toolbar, prompt: "Search by name")
+        .assistantSearchable(
+            search: model.assistant.photosSearch, browser: browser, sidebarBadge: nil, shrunkIDs: { [] })
     }
 
     @ViewBuilder private func grid(_ browser: LibraryBrowser) -> some View {

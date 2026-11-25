@@ -34,6 +34,10 @@ public final class LibraryBrowser {
     public var search = ""
     /// Resolution and frame rate, size, length, codec and dynamic range; combined with `filter` and `search`.
     public var quality = QualityFilter()
+    /// Only items captured inside this range; items with no capture date are hidden while it is set.
+    public var captureRange: ClosedRange<Date>?
+    /// Items to hide, for example the ones already shrunk.
+    public var excluded: Set<UUID> = []
     /// The grid's selection. A search can hide some of it; `selectedItems` leaves those out.
     public var selection: Set<UUID> = []
 
@@ -50,6 +54,8 @@ public final class LibraryBrowser {
         let filter: MediaBadge?
         let search: String
         let quality: QualityFilter
+        let captureRange: ClosedRange<Date>?
+        let excluded: Set<UUID>
     }
 
     @ObservationIgnored private var query: Query?
@@ -63,7 +69,8 @@ public final class LibraryBrowser {
     public var snapshot: Snapshot {
         let next = Query(
             revision: collection.revision, grouping: grouping, sort: sort, filter: filter,
-            search: search.trimmingCharacters(in: .whitespacesAndNewlines), quality: quality)
+            search: search.trimmingCharacters(in: .whitespacesAndNewlines), quality: quality,
+            captureRange: captureRange, excluded: excluded)
         if next != query {
             query = next
             current = Self.snapshot(collection.items, query: next)
@@ -95,6 +102,8 @@ public final class LibraryBrowser {
         let collection = items.filter { item in
             (query.filter.map(item.badges.contains) ?? true)
                 && (query.search.isEmpty || item.name.localizedStandardContains(query.search))
+                && !query.excluded.contains(item.id)
+                && (query.captureRange.map { range in item.captureDate.map(range.contains) ?? false } ?? true)
         }
         let (kept, facets) = query.quality.apply(to: collection)
         let groups = LibraryGrouper.groups(kept, by: query.grouping, sort: query.sort, filter: nil)
