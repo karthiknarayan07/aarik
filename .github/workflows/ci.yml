@@ -35,7 +35,7 @@ jobs:
 
       - name: Build packages
         working-directory: Packages/AppModules
-        run: swift build
+        run: swift build -Xswiftc -warnings-as-errors
 
       - name: Test packages
         working-directory: Packages/AppModules
@@ -45,3 +45,27 @@ jobs:
         run: |
           xcodebuild -project App/App.xcodeproj -scheme App -configuration Release \
             -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
+
+  sanitizers:
+    # Thread and address sanitizer runs of the package tests, one job each.
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [thread, address]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -z "$newest" ]]; then
+            echo "No versioned Xcode found under /Applications" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+
+      - name: Test (${{ matrix.sanitizer }} sanitizer)
+        working-directory: Packages/AppModules
+        run: swift test --sanitize=${{ matrix.sanitizer }}
