@@ -426,7 +426,29 @@ private enum Calendars {
         }
         #expect(outputs?.map(\.lastPathComponent) == ["out.mov"])
         #expect(outcome.message == "Finished 1 video.")
+        // The run's one notification is posted by the queue watcher, a moment after the action returns.
+        for _ in 0..<200 where await harness.notifier.notices.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         #expect(await harness.notifier.notices.count == 1)
+    }
+
+    @Test func theAppIsToldAboutQueuedJobsBeforeTheActionWaits() async throws {
+        var url: URL!
+        let harness = try Harness(local: { fixture in
+            let item = try Self.fileItem(fixture, "a.mov")
+            url = item.fileURL
+            return [item]
+        })
+        defer { harness.fixture.remove() }
+        var told: [QuickRunReceipt] = []
+        let shrink = ShrinkVideos(
+            sources: harness.sources, quickRun: harness.quickRun, didQueue: { told.append($0) })
+
+        // Nothing finishes this job, so the action would hang if it waited without telling the app first.
+        let run = Task { await shrink.perform(ShrinkVideosRequest(files: [url])) }
+        for _ in 0..<200 where told.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(told.map(\.queuedJobIDs.count) == [1])
+        await harness.queue.completeAll()
+        _ = await run.value
     }
 
     @Test func notWaitingReturnsAtOnceWithNoOutputs() async throws {

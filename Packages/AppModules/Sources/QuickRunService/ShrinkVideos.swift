@@ -68,15 +68,18 @@ public final class ShrinkVideos {
     private let quickRun: QuickRun
     private let now: @Sendable () -> Date
     private let calendar: Calendar
+    private let didQueue: @MainActor (QuickRunReceipt) -> Void
 
+    /// `didQueue` runs as soon as a run's jobs are in the queue, before the action waits for them.
     public init(
         sources: any ShrinkVideosSources, quickRun: QuickRun, now: @escaping @Sendable () -> Date = { Date() },
-        calendar: Calendar = .current
+        calendar: Calendar = .current, didQueue: @escaping @MainActor (QuickRunReceipt) -> Void = { _ in }
     ) {
         self.sources = sources
         self.quickRun = quickRun
         self.now = now
         self.calendar = calendar
+        self.didQueue = didQueue
     }
 
     public func perform(_ request: ShrinkVideosRequest) async -> ShrinkVideosOutcome {
@@ -111,6 +114,7 @@ public final class ShrinkVideos {
         } else {
             return .needsVideos
         }
+        didQueue(receipt)
         // With auto-start off the jobs wait for the user's Resume, which may never come: don't hold the action.
         guard request.waitForCompletion, receipt.startedQueue else { return .queued(receipt, outputs: nil) }
         return .queued(receipt, outputs: await quickRun.outputs(of: receipt))
