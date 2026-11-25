@@ -2,6 +2,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
+import MediaEngine
 import VideoToolbox
 
 public enum FixtureHDR: Sendable { case sdr, hlg }
@@ -14,6 +15,8 @@ public struct ClipOptions: Sendable {
     public var hdr: FixtureHDR = .hlg
     /// key → string value, keySpace mdta
     public var quickTimeMetadata: [String: String] = [:]
+    /// More file-level items in any key space (written after `quickTimeMetadata`), as the container keeps them.
+    public var fileMetadata: [FixtureMetadataItem] = []
     /// stereo AAC 48 kHz
     public var includeAudio = true
     /// With audio: a second stereo AAC track, disabled, in one alternate group with the first, which falls back to it
@@ -50,6 +53,19 @@ public struct ClipOptions: Sendable {
     public init() {}
 }
 
+/// A file-level metadata item in a given key space, with a UTF-8 string value.
+public struct FixtureMetadataItem: Sendable {
+    public var keySpace: AVMetadataKeySpace
+    public var key: String
+    public var value: String
+
+    public init(keySpace: AVMetadataKeySpace, key: String, value: String) {
+        self.keySpace = keySpace
+        self.key = key
+        self.value = value
+    }
+}
+
 public enum FixtureError: Error, Sendable {
     case writerFailed(String)
     case pixelBufferFailed(Int32)
@@ -65,6 +81,22 @@ public enum FixtureFactory {
     /// Writes a new clip (`fixture.mov`, or `.mp4` / `.m4v` per `options.fileType`) into a fresh temporary
     /// directory and returns its URL.
     public static func makeClip(_ options: ClipOptions = .init()) async throws -> URL {
+        // Tests make many clips at once; a few at a time keeps the hardware encoder from being swamped (an
+        // overloaded encoder misses the requested bit rate by orders of magnitude).
+        await slots.acquire()
+        do {
+            let clip = try await writeClip(options)
+            await slots.release()
+            return clip
+        } catch {
+            await slots.release()
+            throw error
+        }
+    }
+
+    private static let slots = WorkSlots(count: WorkSlots.defaultCount)
+
+    private static func writeClip(_ options: ClipOptions) async throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let ext =
@@ -179,7 +211,7 @@ public enum FixtureFactory {
         }
 
         // File-level QuickTime metadata
-        writer.metadata = quickTimeItems(options.quickTimeMetadata)
+        writer.metadata = quickTimeItems(options.quickTimeMetadata) + options.fileMetadata.map(metadataItem)
 
         do {
             guard writer.startWriting() else {
@@ -282,6 +314,15 @@ public enum FixtureFactory {
             item.dataType = kCMMetadataBaseDataType_UTF8 as String
             return item
         }
+    }
+
+    private static func metadataItem(_ fixture: FixtureMetadataItem) -> AVMetadataItem {
+        let item = AVMutableMetadataItem()
+        item.keySpace = fixture.keySpace
+        item.key = fixture.key as NSString
+        item.value = fixture.value as NSString
+        item.dataType = kCMMetadataBaseDataType_UTF8 as String
+        return item
     }
 
     /// Appends timed-metadata group `index`, covering second `index` (clipped to `totalSeconds`).

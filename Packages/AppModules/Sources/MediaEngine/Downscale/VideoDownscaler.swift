@@ -27,6 +27,25 @@ public struct VideoDownscaler: Sendable {
     public func downscale(
         source: URL, output: URL, spec: DownscaleSpec, progress: @escaping @Sendable (Double) -> Void
     ) async throws {
+        // A few at a time (`WorkSlots`), each with its blocking reads on a queue of its own, never on the
+        // shared pool (`BlockingWorkExecutor`).
+        let slots = WorkSlots.downscales
+        await slots.acquire()
+        let executor = BlockingWorkExecutor(label: "downscale \(output.lastPathComponent)")
+        do {
+            try await withTaskExecutorPreference(executor) {
+                try await run(source: source, output: output, spec: spec, progress: progress)
+            }
+        } catch {
+            await slots.release()
+            throw error
+        }
+        await slots.release()
+    }
+
+    private func run(
+        source: URL, output: URL, spec: DownscaleSpec, progress: @escaping @Sendable (Double) -> Void
+    ) async throws {
         if FileManager.default.fileExists(atPath: output.path) { throw DownscaleError.outputExists }
 
         let asset = AVURLAsset(url: source)
