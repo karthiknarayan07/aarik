@@ -14,13 +14,15 @@ extension AppModel {
         hasStarted = true
         await quickRun.start()
         let queue = self.queue
+        let loadError = await queue.loadError
+        queueLoadFailed = loadError != nil
         updatesTask = Task { [weak self] in
             for await jobs in await queue.updates() {
                 self?.receive(jobs)
             }
         }
-        if let error = await queue.loadError {
-            alert = AppAlert(title: "Couldn't read the queue", message: error)
+        if let loadError {
+            alert = AppAlert(title: "Couldn't read the queue", message: loadError)
         }
         // A queue created paused (auto-start off) waits for Resume.
         if !isQueuePaused { await queue.resume() }
@@ -40,6 +42,18 @@ extension AppModel {
         self.jobs = jobs
         relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused)
         activity = ActivitySummary(jobs: jobs)
+        // A saved copy is only needed while its job can still be put back in the queue.
+        if !queueLoadFailed {
+            pendingDeletions.keepSavedCopies(
+                forJobs: Set(
+                    jobs.filter { job in
+                        switch job.state {
+                        case .completed, .keptAsIs: false
+                        case .queued, .running, .failed: true
+                        }
+                    }.map(\.id)))
+        }
+        pendingOriginals = pendingDeletions.all
         // A quick run announces itself; the generic "Queue finished" is for the window's jobs.
         let quickRunJobs = quickRunStore.jobIDs
         let windowJobs = quickRunJobs.isEmpty ? jobs : jobs.filter { !quickRunJobs.contains($0.id) }
@@ -48,6 +62,8 @@ extension AppModel {
             if NotificationPolicy.shouldPost(appIsActive: NSApp.isActive, windowOnScreen: isMainWindowVisible) {
                 notifier.post(title: "Queue finished", body: ActivityText.notificationBody(summary))
             }
+            // The run is over: ask Photos, once, to move the originals of its Replace jobs.
+            moveOriginalsAfterRun()
         }
         reconcileReplacedFiles(jobs)
     }

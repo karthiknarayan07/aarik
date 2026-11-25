@@ -29,9 +29,15 @@ Time Machine exclusion, for one, is not); "planned" items belong to Plan 6 Phase
    it back and checks length, size, a non-empty file, date and location against the source. On a mismatch the new
    asset is deleted again (`PhotoSaveError.verifyFailed` with its `Cleanup`). A source asset is never edited. The
    only delete API is `PhotoKitStore.deleteAssets`, one change that goes through the system's own confirmation
-   (declining is reported, not forced); nothing in the app calls it for an original yet, so deleting an original
-   after a saved copy is a planned, user-confirmed step. Package tests use `FakePhotoStore` and never touch the
-   real library; the only code that does is the DEBUG-only `PhotosSpike` (launch argument), not shipped.
+   (declining is reported, not forced). The one caller for an original is `OriginalsDeleter`: after Replace jobs
+   finish, or when the user presses the pending-deletion bar's button, it deletes every original in
+   `PendingDeletions` in a single call. An original is recorded there only after its copy is saved and verified (and
+   its backup, when on, is written). Declining keeps the list and nothing asks again by itself until the next run
+   ends. "Moved" rests on the delete succeeding and the id no longer fetching (PhotoKit can't list Recently Deleted).
+   A job put back in the queue after its copy was saved (crash, quit) finds its `SavedCopy` marker in
+   `PendingDeletions` and never saves a second copy; a backup written in a run that is then cancelled is removed
+   again. Package tests use `FakePhotoStore` and never touch the real library; the only code that does is the
+   DEBUG-only `PhotosSpike` (launch argument), not shipped.
 8. **Persisted queue is never overwritten blindly** (`AppCore/Jobs/JobStore.swift`). `jobs.json` is written
    atomically; an unreadable file is moved to `jobs.json.corrupt-<time>`, or, if that fails, left alone and
    the session's queue is not saved (`mustNotSave`).

@@ -26,6 +26,7 @@ public final class FakePhotoStore: PhotoStore {
         var existingAlbums: Set<String> = []
         var saveError: PhotoStoreError?
         var deleteError: (any Error)?
+        var beforeDelete: (@Sendable () -> Void)?
         var savedPixelSize = CGSize(width: 1920, height: 1080)
         var savedDuration: Double?
         var savedByteSize: Int64?
@@ -180,6 +181,13 @@ public final class FakePhotoStore: PhotoStore {
         set { state.withLock { $0.deleteError = newValue } }
     }
 
+    /// Runs at the start of `deleteAssets`, before its checks: lets a test change the library between a caller's
+    /// look and the delete.
+    public var beforeDelete: (@Sendable () -> Void)? {
+        get { state.withLock { $0.beforeDelete } }
+        set { state.withLock { $0.beforeDelete = newValue } }
+    }
+
     /// The pixel size a saved asset reports (default 1920x1080).
     public var savedPixelSize: CGSize {
         get { state.withLock { $0.savedPixelSize } }
@@ -312,6 +320,7 @@ public final class FakePhotoStore: PhotoStore {
     }
 
     public func deleteAssets(ids: [String]) async throws {
+        state.withLock { $0.beforeDelete }?()
         try state.withLock { state in
             state.operations.append(.delete(ids))
             guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
