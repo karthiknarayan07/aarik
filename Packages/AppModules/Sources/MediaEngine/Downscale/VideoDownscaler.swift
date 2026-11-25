@@ -8,8 +8,9 @@ import Foundation
 /// metadata and file attributes through untouched, keeping each track's enabled state, alternate groups and audio
 /// fallbacks.
 public struct VideoDownscaler: Sendable {
-    /// Test seam: runs with the output URL just before the writer starts, to inject a file appearing at the output
-    /// path after the pre-check (another job writing the same name).
+    /// Test seam: runs with the partial file's URL once the writer has started (the partial exists, the final path
+    /// is untouched), to inject a file appearing at the final path after the pre-check (another job writing the
+    /// same name).
     var beforeStartWriting: (@Sendable (URL) -> Void)?
     /// Test seam: runs with the reader once video is finished, before the remaining passthrough samples are drained,
     /// to make the reader stop early (as a read failure would).
@@ -18,8 +19,9 @@ public struct VideoDownscaler: Sendable {
     public init() {}
 
     /// Writes a new `.mov` at `output`. Throws `outputExists` if `output` exists, `sourceAlreadySmall` if the source
-    /// short side is at most `spec.targetShortSide`, and `unsupportedSource` for spatial video, all before writing.
-    /// On any later failure or cancellation the partial output is deleted and the error rethrown.
+    /// short side is at most a non-nil `spec.targetShortSide`, and `unsupportedSource` for spatial video, all before
+    /// writing. Output goes to a hidden partial file that is renamed to `output` only when complete (`outputExists`
+    /// if `output` appeared meanwhile). On any failure or cancellation only the partial is deleted.
     public func downscale(
         source: URL, output: URL, spec: DownscaleSpec, progress: @escaping @Sendable (Double) -> Void
     ) async throws {
@@ -32,21 +34,25 @@ public struct VideoDownscaler: Sendable {
             throw DownscaleError.unsupportedSource("no video track")
         }
         let naturalSize = try await videoTrack.load(.naturalSize)
-        guard Int(min(naturalSize.width, naturalSize.height).rounded()) > spec.targetShortSide else {
+        if let target = spec.targetShortSide, Int(min(naturalSize.width, naturalSize.height).rounded()) <= target {
             throw DownscaleError.sourceAlreadySmall
         }
 
+        let partial = AtomicOutput.partialURL(for: output)
+
         let job = try await DownscaleJob(
-            asset: asset, videoTrack: videoTrack, output: output, spec: spec,
+            asset: asset, videoTrack: videoTrack, output: partial, spec: spec,
             isTenBit: Self.encodesTenBit(bitDepth: inventory["video.bitDepth"]?.value),
             preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, beforeStartWriting: beforeStartWriting,
             beforePassthroughDrain: beforePassthroughDrain, progress: progress)
         do {
             try await job.run()
-            try FileAttributes.copy(from: source, to: output)
+            try FileAttributes.copy(from: source, to: partial)
+            try AtomicOutput.commit(partial: partial, to: output)
         } catch {
-            // Delete the output only if this run created it.
-            if job.abort() { try? FileManager.default.removeItem(at: output) }
+            // The partial's name is unique to this run, so removing it never touches anyone else's file.
+            job.abort()
+            try? FileManager.default.removeItem(at: partial)
             throw error
         }
         progress(1.0)

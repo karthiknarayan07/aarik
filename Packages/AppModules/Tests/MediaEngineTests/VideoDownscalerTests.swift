@@ -192,15 +192,15 @@ import Testing
         #expect(try Data(contentsOf: output) == existing)
     }
 
-    /// A file that appears at the output path after the pre-check (another job writing the same name) makes the
-    /// writer fail to start. That file is not this run's, so it must survive.
+    /// A file that appears at the final path after the pre-check (another job writing the same name) is not this
+    /// run's: it must survive, and the run fails at the exclusive commit.
     @Test(.timeLimit(.minutes(2))) func keepsOutputCreatedByOthersDuringRun() async throws {
         let source = try await FixtureFactory.makeClip(clip())
         let output = outputURL(next: source)
         let other = Data("another job's output".utf8)
         var downscaler = VideoDownscaler()
-        downscaler.beforeStartWriting = { url in try? other.write(to: url) }
-        await #expect(throws: DownscaleError.self) {
+        downscaler.beforeStartWriting = { _ in try? other.write(to: output) }
+        await #expect(throws: DownscaleError.outputExists) {
             try await downscaler.downscale(source: source, output: output, spec: smallSpec) { _ in }
         }
         #expect(try Data(contentsOf: output) == other)

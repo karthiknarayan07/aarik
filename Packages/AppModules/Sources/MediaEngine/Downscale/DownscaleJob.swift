@@ -38,8 +38,6 @@ final class DownscaleJob {
     private var pending: (frame: CVPixelBuffer, time: CMTime)?
     private var lastSourceEnd = CMTime.zero
     private var reported = 0.0
-    /// Set only once `startWriting()` succeeds: from then on the output file is this run's.
-    private var didStartWriting = false
 
     init(
         asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, spec: DownscaleSpec, isTenBit: Bool,
@@ -185,12 +183,10 @@ final class DownscaleJob {
         guard writer.status == .completed else { throw writerError() }
     }
 
-    /// Stops reading and writing after a failure or cancellation. Returns whether this run created the output file
-    /// (`startWriting()` succeeded), which the caller then deletes.
-    func abort() -> Bool {
+    /// Stops reading and writing after a failure or cancellation. The caller deletes the partial file.
+    func abort() {
         reader.cancelReading()
         if writer.status == .writing { writer.cancelWriting() }
-        return didStartWriting
     }
 
     // MARK: - Video
@@ -248,11 +244,8 @@ final class DownscaleJob {
             writer.add(track.input)
         }
         addFallbacksAndGroups(videoInput: input)
-        beforeStartWriting?(output)
-        // `startWriting()` fails (status `.failed`) when a file already exists at the output path, for example one
-        // another job wrote after the pre-check. Only a successful start makes the output this run's.
         guard writer.startWriting() else { throw writerError() }
-        didStartWriting = true
+        beforeStartWriting?(output)
         writer.startSession(atSourceTime: .zero)
         videoInput = input
         return input

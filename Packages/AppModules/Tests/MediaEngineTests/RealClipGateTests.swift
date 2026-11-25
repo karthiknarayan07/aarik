@@ -61,7 +61,7 @@ import Testing
         }
         let spec = DownscaleSpec(targetShortSide: dolbyVision ? 1080 : Self.nonDolbyVisionTarget(shortSide: shortSide))
         let output = try outputURL()
-        print("gate output for \(fixture.rawValue) (short side \(spec.targetShortSide)): \(output.path)")
+        print("gate output for \(fixture.rawValue) (short side \(spec.targetShortSide ?? 0)): \(output.path)")
         try await VideoDownscaler().downscale(source: source, output: output, spec: spec) { _ in }
         return Run(
             source: sourceInventory, output: try await MediaInspector().inventory(of: output), outputURL: output,

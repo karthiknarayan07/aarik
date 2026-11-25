@@ -1,3 +1,4 @@
+import Foundation
 import CoreGraphics
 import MediaEngine
 import Testing
@@ -19,5 +20,19 @@ import Testing
         #expect(
             DownscaleSpec().outputSize(forNaturalSize: CGSize(width: 2160, height: 3840))
                 == CGSize(width: 1080, height: 1920))
+    }
+}
+
+@Suite struct DownscaleSpecCodingTests {
+    @Test func roundTripsThroughJSON() throws {
+        for spec in [DownscaleSpec(), DownscaleSpec(targetShortSide: nil, averageBitRate: 5, maxFrameRate: 30)] {
+            let data = try JSONEncoder().encode(spec)
+            #expect(try JSONDecoder().decode(DownscaleSpec.self, from: data) == spec)
+        }
+    }
+
+    @Test func keepingResolutionOnlyEvensTheSize() {
+        let spec = DownscaleSpec(targetShortSide: nil)
+        #expect(spec.outputSize(forNaturalSize: CGSize(width: 1281, height: 720)) == CGSize(width: 1282, height: 720))
     }
 }
