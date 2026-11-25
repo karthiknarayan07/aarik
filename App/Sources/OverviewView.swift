@@ -34,7 +34,14 @@ struct OverviewView: View {
     var body: some View {
         Group {
             if model.photos.items.isEmpty && model.library.items.isEmpty {
-                OverviewEmptyState(model: model)
+                // Not before Photos has answered, so the welcome doesn't flash ahead of the totals.
+                if model.photos.isAuthorizationKnown
+                    && (!model.photos.authorization.allowsReading || model.photos.hasLoaded)
+                {
+                    OverviewEmptyState(model: model)
+                } else {
+                    ProgressView()
+                }
             } else if let summary {
                 ScrollView {
                     VStack(alignment: .leading) {
@@ -258,6 +265,9 @@ private struct OverviewEmptyState: View {
                 Button("Allow Access to Photos…") { model.allowPhotos() }
                     .buttonStyle(.borderedProminent)
                     .accessibilityHint("Shows the system prompt to allow access to your Photos library")
+            }
+            if model.photos.authorization == .denied {
+                Button("Open Photos Settings…") { PrivacySettings.open(PrivacySettings.photos) }
             }
             Button("Add Local Files…") {
                 model.selection = .localFiles

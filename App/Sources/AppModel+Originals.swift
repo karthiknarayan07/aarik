@@ -16,7 +16,9 @@ enum OriginalsNotice: Equatable {
 extension AppModel {
     /// What the pending-deletion bar shows; nil when there is nothing to say.
     var pendingDeletionBar: PendingDeletionBarContent? {
-        if isMovingOriginals { return PendingDeletionBarContent(count: pendingOriginals.count, status: .working) }
+        let ready = pendingOriginals.filter { $0.blocked == nil }
+        let held = pendingOriginals.compactMap(\.blocked)
+        if isMovingOriginals { return PendingDeletionBarContent(count: ready.count, status: .working) }
         if case .moved(let count) = originalsNotice {
             return PendingDeletionBarContent(count: count, status: .moved(savedBytes: activity.savedBytes))
         }
@@ -27,7 +29,11 @@ extension AppModel {
             case .failed(let reason): .failed(reason)
             case .moved, nil: .ready
             }
-        return PendingDeletionBarContent(count: pendingOriginals.count, status: status)
+        var messages: [String] = []
+        for block in held where !messages.contains(block.message) { messages.append(block.message) }
+        return PendingDeletionBarContent(
+            count: ready.count, status: status, heldCount: held.count, heldMessages: messages,
+            heldCanRetry: held.contains(where: \.canBeRetried), heldNeedsSettings: held.contains(.limitedAccess))
     }
 
     /// The bar's button: moves the originals (Photos asks the user to confirm), or dismisses the result.
@@ -39,8 +45,28 @@ extension AppModel {
         }
     }
 
-    /// Asks Photos, once, to move every pending original to Recently Deleted. Photos shows its own confirmation;
-    /// declining keeps the list (the bar says so) and nothing is deleted later without asking again.
+    /// "Remove from List": forgets the originals that were kept out of the batch. Nothing is deleted.
+    func removeKeptOriginalsFromList() {
+        pendingDeletions.remove(assetIDs: pendingOriginals.filter { $0.blocked != nil }.map(\.assetID))
+        pendingOriginals = pendingDeletions.all
+    }
+
+    /// "Open System Settings…" for an original that limited access hides.
+    func openPhotosAccessSettings() {
+        PrivacySettings.open(PrivacySettings.photos)
+    }
+
+    /// After a queue run: moves the originals, unless the user already declined for all of them (then it waits for
+    /// the user, or for originals from a later run).
+    func moveOriginalsAfterRun() {
+        guard pendingOriginals.contains(where: { $0.blocked == nil && !declinedOriginals.contains($0.assetID) })
+        else { return }
+        moveOriginalsToRecentlyDeleted()
+    }
+
+    /// Asks Photos, once, to move every pending original that passes the checks to Recently Deleted. Photos shows
+    /// its own confirmation; declining keeps the list (the bar says so) and nothing is deleted later without asking
+    /// again.
     func moveOriginalsToRecentlyDeleted() {
         guard !isMovingOriginals, !pendingOriginals.isEmpty else { return }
         isMovingOriginals = true
@@ -51,23 +77,35 @@ extension AppModel {
             do {
                 let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
                 // The jobs say it, and the grid follows by itself: Photos reports the library change.
-                for entry in result.moved {
-                    send { queue in
-                        await queue.updateOutcome(id: entry.jobID) { PhotosDownscaleRunner.markOriginalMoved(&$0) }
-                    }
+                update(result.moved.map(\.jobID)) { PhotosDownscaleRunner.markOriginalMoved(&$0) }
+                update(result.alreadyGone.map(\.jobID)) { PhotosDownscaleRunner.markOriginalGone(&$0) }
+                for (entry, reason) in result.blocked {
+                    let message = reason.message
+                    update([entry.jobID]) { PhotosDownscaleRunner.markOriginalKept(&$0, because: message) }
                 }
+                let moved = result.moved.count
                 if !result.kept.isEmpty {
-                    originalsNotice = .failed("Photos still lists \(result.kept.count) of them. Try again later.")
-                } else if !result.moved.isEmpty {
-                    originalsNotice = .moved(count: result.moved.count)
+                    let first = moved > 0 ? "Moved \(moved). " : ""
+                    originalsNotice = .failed(
+                        "\(first)Photos still lists \(result.kept.count) of them. Try again later.")
+                } else if moved > 0 {
+                    originalsNotice = .moved(count: moved)
                 }
+                declinedOriginals.removeAll()
             } catch is CancellationError {
+                declinedOriginals = Set(pending.all.map(\.assetID))
                 originalsNotice = .declined
             } catch {
                 originalsNotice = .failed(error.localizedDescription)
             }
             pendingOriginals = pending.all
             isMovingOriginals = false
+        }
+    }
+
+    private func update(_ jobIDs: [UUID], _ change: @escaping @Sendable (inout JobOutcome) -> Void) {
+        for id in jobIDs {
+            send { queue in await queue.updateOutcome(id: id, transform: change) }
         }
     }
 

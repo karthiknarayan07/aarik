@@ -69,6 +69,10 @@ final class AppModel {
     var originalsNotice: OriginalsNotice?
     /// True from the delete call until Photos has answered (it waits for the user's confirmation).
     var isMovingOriginals = false
+    /// Originals pending when the user declined the confirmation; a run that adds none doesn't ask again.
+    @ObservationIgnored var declinedOriginals: Set<String> = []
+    /// The saved queue couldn't be read, so its job list is incomplete and saved copies are not pruned by it.
+    @ObservationIgnored var queueLoadFailed = false
     @ObservationIgnored let photoStore: any PhotoStore
     let thumbnails = ThumbnailCache()
     let thumbnailSource: ThumbnailSource

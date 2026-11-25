@@ -2,6 +2,31 @@ import AppCore
 import Foundation
 import Synchronization
 
+/// Why an original is not moved to Recently Deleted for now. It stays on the list until the user removes it.
+public enum PendingBlock: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
+    /// The shrunk copy is no longer in the library.
+    case copyMissing
+    /// The original was edited (or trimmed) after it was shrunk.
+    case originalEdited
+    /// Photos access is limited and the original can't be seen.
+    case limitedAccess
+    /// Photos couldn't say.
+    case unchecked
+
+    /// What the bar and the job say, in a sentence.
+    public var message: String {
+        switch self {
+        case .copyMissing: "Kept the original because the shrunk copy is no longer in your library"
+        case .originalEdited: "Kept the original because it was edited after shrinking"
+        case .limitedAccess: "Can't see this original with limited Photos access"
+        case .unchecked: "Kept the original because it couldn't be checked"
+        }
+    }
+
+    /// Whether looking again later (after a change in System Settings, say) can lift the block.
+    public var canBeRetried: Bool { self == .limitedAccess || self == .unchecked }
+}
+
 /// An original Photos video that a Replace has made redundant: its converted copy is saved and verified, and the
 /// original waits for the batch delete that moves it to Recently Deleted.
 public struct PendingDeletion: Codable, Sendable, Equatable, Hashable {
@@ -11,11 +36,36 @@ public struct PendingDeletion: Codable, Sendable, Equatable, Hashable {
     public let jobID: UUID
     /// The copy's local identifier.
     public let replacedBy: String
+    /// How the original looked when the copy was made and verified. A change since then keeps it from being deleted.
+    /// Nil `originalModified` with no recorded baseline (`hasBaseline` false) skips that check (older records).
+    public let originalModified: Date?
+    public let originalHadAdjustments: Bool
+    public let hasBaseline: Bool
+    /// Set when the last check kept this original out of the batch.
+    public var blocked: PendingBlock?
 
-    public init(assetID: String, jobID: UUID, replacedBy: String) {
+    public init(
+        assetID: String, jobID: UUID, replacedBy: String, originalModified: Date? = nil,
+        originalHadAdjustments: Bool = false, hasBaseline: Bool = true, blocked: PendingBlock? = nil
+    ) {
         self.assetID = assetID
         self.jobID = jobID
         self.replacedBy = replacedBy
+        self.originalModified = originalModified
+        self.originalHadAdjustments = originalHadAdjustments
+        self.hasBaseline = hasBaseline
+        self.blocked = blocked
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        assetID = try container.decode(String.self, forKey: .assetID)
+        jobID = try container.decode(UUID.self, forKey: .jobID)
+        replacedBy = try container.decode(String.self, forKey: .replacedBy)
+        originalModified = try container.decodeIfPresent(Date.self, forKey: .originalModified)
+        originalHadAdjustments = try container.decodeIfPresent(Bool.self, forKey: .originalHadAdjustments) ?? false
+        hasBaseline = try container.decodeIfPresent(Bool.self, forKey: .hasBaseline) ?? false
+        blocked = try container.decodeIfPresent(PendingBlock.self, forKey: .blocked)
     }
 }
 
@@ -97,10 +147,27 @@ public final class PendingDeletions: Sendable {
     public var all: [PendingDeletion] { state.withLock { $0.pending } }
 
     /// Records an original. An original already recorded is replaced (it has only one copy to wait for).
-    public func add(assetID: String, jobID: UUID, replacedBy: String) {
+    public func add(
+        assetID: String, jobID: UUID, replacedBy: String, originalModified: Date? = nil,
+        originalHadAdjustments: Bool = false
+    ) {
         state.withLock { state in
             state.pending.removeAll { $0.assetID == assetID }
-            state.pending.append(PendingDeletion(assetID: assetID, jobID: jobID, replacedBy: replacedBy))
+            state.pending.append(
+                PendingDeletion(
+                    assetID: assetID, jobID: jobID, replacedBy: replacedBy, originalModified: originalModified,
+                    originalHadAdjustments: originalHadAdjustments))
+            save(&state)
+        }
+    }
+
+    /// Sets (or clears) why an original is kept out of the batch.
+    public func setBlock(_ block: PendingBlock?, forAsset assetID: String) {
+        state.withLock { state in
+            guard let index = state.pending.firstIndex(where: { $0.assetID == assetID }),
+                state.pending[index].blocked != block
+            else { return }
+            state.pending[index].blocked = block
             save(&state)
         }
     }

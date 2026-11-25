@@ -115,7 +115,9 @@ private struct DetailView: View {
         // Originals waiting to move to Recently Deleted, on every page, in the system's bottom bar.
         .safeAreaBar(edge: .bottom) {
             if let content = model.pendingDeletionBar {
-                PendingDeletionBar(content: content, perform: model.performPendingDeletionAction)
+                PendingDeletionBar(
+                    content: content, perform: model.performPendingDeletionAction,
+                    removeKept: model.removeKeptOriginalsFromList, openSettings: model.openPhotosAccessSettings)
             }
         }
     }

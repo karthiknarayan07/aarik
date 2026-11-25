@@ -6,6 +6,8 @@ import SwiftUI
 struct PendingDeletionBar: View {
     let content: PendingDeletionBarContent
     let perform: () -> Void
+    var removeKept: () -> Void = {}
+    var openSettings: () -> Void = {}
 
     var body: some View {
         HStack {
@@ -22,6 +24,15 @@ struct PendingDeletionBar: View {
                 ProgressView()
                     .controlSize(.small)
                     .accessibilityLabel("Waiting for Photos")
+            }
+            if content.offersSettings {
+                Button(PendingDeletionBarContent.settingsTitle, action: openSettings)
+                    .buttonStyle(.bordered)
+            }
+            if content.offersRemove {
+                Button(PendingDeletionBarContent.removeTitle, action: removeKept)
+                    .buttonStyle(.bordered)
+                    .accessibilityHint("Takes the kept originals off this list. Nothing is deleted.")
             }
             if let title = content.buttonTitle {
                 Button(title, role: content.isDestructiveAction ? .destructive : nil, action: perform)

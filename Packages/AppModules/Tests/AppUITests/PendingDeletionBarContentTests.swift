@@ -61,9 +61,45 @@ import Testing
         for status in [
             PendingDeletionBarContent.Status.ready, .declined, .working, .moved(savedBytes: 1), .failed("x"),
         ] {
-            let text = PendingDeletionBarContent(count: 2, status: status).accessibilityLabel
+            let content = PendingDeletionBarContent(count: 2, status: status)
+            let text = content.title + " " + content.detail
             #expect(!text.localizedCaseInsensitiveContains("verified in recently deleted"))
             #expect(!text.localizedCaseInsensitiveContains("permanently"))
         }
+    }
+
+    @Test func keptOriginalsAreListedWithAReasonAndCanBeRemovedFromTheList() {
+        let content = PendingDeletionBarContent(
+            count: 0, status: .ready, heldCount: 2,
+            heldMessages: ["Kept the original because it was edited after shrinking"])
+
+        #expect(content.title == "2 originals were kept in Photos")
+        #expect(content.detail == "Kept the original because it was edited after shrinking")
+        #expect(content.offersRemove)
+        #expect(!content.offersSettings)
+        #expect(content.buttonTitle == nil)  // nothing left to move
+        #expect(PendingDeletionBarContent.removeTitle == "Remove from List")
+    }
+
+    @Test func aLimitedAccessHoldOffersSettingsAndAnotherTry() {
+        let content = PendingDeletionBarContent(
+            count: 0, status: .ready, heldCount: 1,
+            heldMessages: ["Can't see this original with limited Photos access"], heldCanRetry: true,
+            heldNeedsSettings: true)
+
+        #expect(content.title == "1 original was kept in Photos")
+        #expect(content.offersSettings)
+        #expect(PendingDeletionBarContent.settingsTitle == "Open System Settings…")
+        #expect(content.buttonTitle == PendingDeletionBarContent.actionTitle)
+    }
+
+    @Test func heldOriginalsAreAddedBelowTheUsualTextWhenOthersAreReady() {
+        let content = PendingDeletionBarContent(
+            count: 3, status: .ready, heldCount: 1,
+            heldMessages: ["Kept the original because the shrunk copy is no longer in your library"])
+
+        #expect(content.title == "3 originals are ready to move to Recently Deleted")
+        #expect(content.detail.hasSuffix("no longer in your library"))
+        #expect(content.detail.contains("iCloud space is freed"))
     }
 }

@@ -11,13 +11,15 @@ extension AppModel {
         guard !hasStarted else { return }
         hasStarted = true
         let queue = self.queue
+        let loadError = await queue.loadError
+        queueLoadFailed = loadError != nil
         updatesTask = Task { [weak self] in
             for await jobs in await queue.updates() {
                 self?.receive(jobs)
             }
         }
-        if let error = await queue.loadError {
-            alert = AppAlert(title: "Couldn't read the queue", message: error)
+        if let loadError {
+            alert = AppAlert(title: "Couldn't read the queue", message: loadError)
         }
         // A queue created paused (auto-start off) waits for Resume.
         if !isQueuePaused { await queue.resume() }
@@ -38,19 +40,21 @@ extension AppModel {
         relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused)
         activity = ActivitySummary(jobs: jobs)
         // A saved copy is only needed while its job can still be put back in the queue.
-        pendingDeletions.keepSavedCopies(
-            forJobs: Set(
-                jobs.filter { job in
-                    switch job.state {
-                    case .completed, .keptAsIs: false
-                    case .queued, .running, .failed: true
-                    }
-                }.map(\.id)))
+        if !queueLoadFailed {
+            pendingDeletions.keepSavedCopies(
+                forJobs: Set(
+                    jobs.filter { job in
+                        switch job.state {
+                        case .completed, .keptAsIs: false
+                        case .queued, .running, .failed: true
+                        }
+                    }.map(\.id)))
+        }
         pendingOriginals = pendingDeletions.all
         if let summary = runTracker.observe(jobs) {
             notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))
             // The run is over: ask Photos, once, to move the originals of its Replace jobs.
-            moveOriginalsToRecentlyDeleted()
+            moveOriginalsAfterRun()
         }
         reconcileReplacedFiles(jobs)
     }

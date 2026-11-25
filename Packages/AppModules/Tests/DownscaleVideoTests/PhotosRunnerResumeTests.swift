@@ -215,6 +215,48 @@ private struct WatchingStore: PhotoStore {
 
     // MARK: - After the delete
 
+    @Test(.timeLimit(.minutes(2))) func theRecordedOriginalCarriesTheBaselineItWasVerifiedAgainst() async throws {
+        let rig = try await PhotosRig()
+        let job = try rig.job(.replace)
+
+        _ = try await rig.runner().run(job) { _ in }
+
+        let entry = try #require(rig.pending.all.first)
+        #expect(entry.hasBaseline)
+        #expect(entry.originalModified == rig.asset.modificationDate)
+        #expect(entry.originalHadAdjustments == rig.asset.hasAdjustments)
+        #expect(entry.blocked == nil)
+    }
+
+    @Test func aKeptOriginalIsSaidOnTheJobAndLaterMovingClearsIt() {
+        var outcome = JobOutcome(
+            output: PhotoAssetURL.url(for: "new-1"), bytesBefore: 100, bytesAfter: 40, report: MetadataReport(),
+            replacedOriginal: false,
+            notes: ["Saved to Photos as a new video", "Original will move to Recently Deleted"])
+
+        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalEdited.message)
+        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalEdited.message)
+
+        #expect(outcome.warnings == ["Kept the original because it was edited after shrinking"])
+        #expect(!outcome.notes.contains("Original will move to Recently Deleted"))
+        #expect(!outcome.replacedOriginal)
+
+        PhotosDownscaleRunner.markOriginalMoved(&outcome)
+        #expect(outcome.warnings.isEmpty)
+        #expect(outcome.replacedOriginal)
+    }
+
+    @Test func anOriginalAlreadyGoneIsSaidAsSuch() {
+        var outcome = JobOutcome(
+            output: PhotoAssetURL.url(for: "new-1"), bytesBefore: 100, bytesAfter: 40, report: MetadataReport(),
+            replacedOriginal: false, notes: ["Original will move to Recently Deleted"])
+
+        PhotosDownscaleRunner.markOriginalGone(&outcome)
+
+        #expect(outcome.notes == ["Original no longer in Photos"])
+        #expect(!outcome.replacedOriginal)
+    }
+
     @Test func markingAnOriginalMovedUpdatesTheOutcome() {
         var outcome = JobOutcome(
             output: PhotoAssetURL.url(for: "new-1"), bytesBefore: 100, bytesAfter: 40, report: MetadataReport(),

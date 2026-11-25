@@ -18,14 +18,31 @@ public struct PendingDeletionBarContent: Equatable, Sendable {
         case failed(String)
     }
 
-    /// Originals the bar is about (those that moved, for `.moved`).
+    /// Originals the bar is about (those that moved, for `.moved`); the ones that can go in the next batch.
     public let count: Int
     public let status: Status
+    /// Originals kept out of the batch, with a reason each: how many, the distinct reasons, whether looking again
+    /// can help (a limited-access block), and whether System Settings is where to fix it.
+    public let heldCount: Int
+    public let heldMessages: [String]
+    public let heldCanRetry: Bool
+    public let heldNeedsSettings: Bool
 
-    public init(count: Int, status: Status) {
+    public init(
+        count: Int, status: Status, heldCount: Int = 0, heldMessages: [String] = [], heldCanRetry: Bool = false,
+        heldNeedsSettings: Bool = false
+    ) {
         self.count = count
         self.status = status
+        self.heldCount = heldCount
+        self.heldMessages = heldMessages
+        self.heldCanRetry = heldCanRetry
+        self.heldNeedsSettings = heldNeedsSettings
     }
+
+    /// Takes the originals off the list without deleting anything.
+    public static let removeTitle = "Remove from List"
+    public static let settingsTitle = "Open System Settings…"
 
     /// Photos frees the space when Recently Deleted is emptied, which it also does by itself after 30 days.
     public static let spaceNote = "iCloud space is freed when Recently Deleted is emptied, or after 30 days."
@@ -34,6 +51,8 @@ public struct PendingDeletionBarContent: Equatable, Sendable {
 
     public var title: String {
         switch status {
+        case .ready where count == 0:
+            heldCount == 1 ? "1 original was kept in Photos" : "\(heldCount) originals were kept in Photos"
         case .ready:
             count == 1
                 ? "1 original is ready to move to Recently Deleted"
@@ -47,21 +66,38 @@ public struct PendingDeletionBarContent: Equatable, Sendable {
     }
 
     public var detail: String {
+        let held = heldMessages.joined(separator: "\n")
+        let base: String =
+            switch status {
+            case .ready: count == 0 ? "" : "The smaller copies are already in your library. \(Self.spaceNote)"
+            case .declined: Self.spaceNote
+            case .working: "Photos asks you to confirm."
+            case .moved(let savedBytes):
+                savedBytes > 0
+                    ? "You've saved \(ByteFormat.string(savedBytes)) in total. \(Self.spaceNote)" : Self.spaceNote
+            case .failed(let reason): reason
+            }
         switch status {
-        case .ready: "The smaller copies are already in your library. \(Self.spaceNote)"
-        case .declined: Self.spaceNote
-        case .working: "Photos asks you to confirm."
-        case .moved(let savedBytes):
-            savedBytes > 0
-                ? "You've saved \(ByteFormat.string(savedBytes)) in total. \(Self.spaceNote)" : Self.spaceNote
-        case .failed(let reason): reason
+        case .ready, .declined, .failed: return [base, held].filter { !$0.isEmpty }.joined(separator: "\n")
+        case .working, .moved: return base
         }
     }
+
+    /// Whether the bar offers "Remove from List" (kept originals can be dismissed; nothing is deleted).
+    public var offersRemove: Bool {
+        guard heldCount > 0 else { return false }
+        switch status {
+        case .ready, .declined, .failed: return true
+        case .working, .moved: return false
+        }
+    }
+
+    public var offersSettings: Bool { heldNeedsSettings && offersRemove }
 
     /// The button's title; nil when there is nothing to press (while waiting).
     public var buttonTitle: String? {
         switch status {
-        case .ready, .declined, .failed: Self.actionTitle
+        case .ready, .declined, .failed: count > 0 || heldCanRetry ? Self.actionTitle : nil
         case .working: nil
         case .moved: "Done"
         }
@@ -76,7 +112,4 @@ public struct PendingDeletionBarContent: Equatable, Sendable {
     }
 
     public var isWorking: Bool { status == .working }
-
-    /// One sentence for VoiceOver.
-    public var accessibilityLabel: String { "\(title). \(detail)" }
 }

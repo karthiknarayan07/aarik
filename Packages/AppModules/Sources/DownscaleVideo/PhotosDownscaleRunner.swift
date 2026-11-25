@@ -73,9 +73,30 @@ public struct PhotosDownscaleRunner: JobRunner {
     static let originalChanged = "The original changed during conversion"
     static let movedNote = "Original moved to Recently Deleted"
 
+    /// Records on a finished job that its original was kept out of the batch, and why.
+    public static func markOriginalKept(_ outcome: inout JobOutcome, because reason: String) {
+        outcome.notes.removeAll { $0 == recentlyDeletedNote }
+        if !outcome.warnings.contains(reason) { outcome.warnings.append(reason) }
+    }
+
+    /// Records on a finished job that its original was already gone from Photos when the batch ran.
+    public static func markOriginalGone(_ outcome: inout JobOutcome) {
+        clearKeptWarnings(&outcome)
+        outcome.notes.removeAll { $0 == recentlyDeletedNote }
+        if !outcome.notes.contains(goneNote) { outcome.notes.append(goneNote) }
+    }
+
+    private static func clearKeptWarnings(_ outcome: inout JobOutcome) {
+        let messages = Set(PendingBlock.allCases.map(\.message))
+        outcome.warnings.removeAll { messages.contains($0) }
+    }
+
+    static let goneNote = "Original no longer in Photos"
+
     /// Records on a finished job that its original was moved to Recently Deleted.
     public static func markOriginalMoved(_ outcome: inout JobOutcome) {
         outcome.replacedOriginal = true
+        clearKeptWarnings(&outcome)
         outcome.notes.removeAll { $0 == recentlyDeletedNote || $0 == movedNote }
         outcome.notes.append(movedNote)
     }
@@ -331,7 +352,9 @@ public struct PhotosDownscaleRunner: JobRunner {
                 }
             }
             try Task.checkCancellation()
-            pendingDeletions.add(assetID: id, jobID: job.id, replacedBy: saved.newID)
+            pendingDeletions.add(
+                assetID: id, jobID: job.id, replacedBy: saved.newID, originalModified: saved.originalModified,
+                originalHadAdjustments: saved.originalHadAdjustments)
             return nil
         } catch is CancellationError {
             if let writtenBackup {
