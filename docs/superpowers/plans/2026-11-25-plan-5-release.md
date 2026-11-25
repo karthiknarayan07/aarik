@@ -72,6 +72,21 @@ Add the owner steps to `docs/RELEASING.md`:
 - enable GitHub Pages
 - tag
 
+### Task 2b: UI smoke tests (XCUITest)
+
+Owner's stack calls for XCUITest. Add an `AppUITests` target to `App.xcodeproj` that runs in CI:
+
+- The app gets a launch argument (`-uiTesting`) that points the library and job store at a temporary directory
+  and seeds it with generated clips from `MediaTestSupport`; it never reads the real library or Photos.
+- Tests:
+  - launch shows the Overview welcome
+  - add files → grid shows them
+  - Quality filter narrows the grid and shows Clear
+  - ⌘A selects all and the footer counts follow
+  - Add to queue → the job lands in Completed as Verified
+  - Settings opens and shows Updates
+- Accessibility identifiers only where labels aren't unique.
+
 ### Task 3: Docs and first release
 
 - README: screenshots of our own app (no personal media, using generated test clips), feature list, FAQ.
