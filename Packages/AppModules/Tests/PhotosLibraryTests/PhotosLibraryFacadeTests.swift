@@ -49,7 +49,9 @@ private actor Gate {
     @Test func startDoesNotAskWhenAccessIsNotDetermined() async {
         let store = FakePhotoStore(assets: [asset(1)], authorization: .notDetermined)
         let photos = library(store)
+        #expect(!photos.isAuthorizationKnown)
         await photos.start()
+        #expect(photos.isAuthorizationKnown)
         #expect(photos.authorization == .notDetermined)
         #expect(photos.items.isEmpty)
         #expect(store.requestCount == 0)

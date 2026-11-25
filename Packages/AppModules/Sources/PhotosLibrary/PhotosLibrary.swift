@@ -25,6 +25,9 @@ public final class PhotosLibrary: MediaCollection {
     /// True while the first load runs.
     public private(set) var isScanning = false
     public private(set) var authorization: PhotoAuthorization = .notDetermined
+    /// False until the first read of `authorization`, so a screen doesn't show the access prompt for a moment
+    /// when access was already given.
+    public private(set) var isAuthorizationKnown = false
     /// True once a fetch has finished, so an empty library can be told from one still loading.
     public private(set) var hasLoaded = false
     /// What went wrong with the last fetch, in plain words; the previous items stay shown.
@@ -55,6 +58,7 @@ public final class PhotosLibrary: MediaCollection {
     /// after the user changed access in System Settings.
     public func start() async {
         authorization = await store.authorization()
+        isAuthorizationKnown = true
         guard authorization.allowsReading else {
             stop()
             items = []
@@ -68,6 +72,7 @@ public final class PhotosLibrary: MediaCollection {
     /// Asks for access (the system prompt shows the first time), then loads when it was given.
     public func requestAccess() async {
         authorization = await store.requestAuthorization()
+        isAuthorizationKnown = true
         await start()
     }
 
