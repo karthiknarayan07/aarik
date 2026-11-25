@@ -50,9 +50,18 @@ struct LocalFilesView: View {
             }
         }
         .navigationTitle(model.selection?.title ?? "Local files")
+        .navigationSubtitle(filteredSummary)
         .toolbar { LocalFilesToolbar(model: model) }
         .searchable(text: $browser.search, placement: .toolbar, prompt: "Search by name")
         .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
+    }
+
+    /// What the quality filters leave, for example "218 videos · 29.8 GB"; empty when none is set.
+    private var filteredSummary: String {
+        let browser = model.browser
+        guard browser.quality.isActive, !model.library.items.isEmpty else { return "" }
+        let snapshot = browser.snapshot
+        return VideoCount.summary(count: snapshot.items.count, bytes: snapshot.totalBytes)
     }
 }
 
@@ -131,6 +140,6 @@ private struct LibraryStatusLine: View {
     }
 
     private func summary(count: Int, bytes: Int64) -> String {
-        "\(count == 1 ? "1 video" : "\(count) videos") · \(ByteFormat.string(bytes))"
+        VideoCount.summary(count: count, bytes: bytes)
     }
 }

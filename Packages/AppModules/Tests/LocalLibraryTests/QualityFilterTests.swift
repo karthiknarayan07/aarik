@@ -164,6 +164,8 @@ import Testing
         #expect(facets.qualities.map(\.count) == [2, 1])
         #expect(facets.sizes.map(\.value) == [.over100MB, .over500MB, .over1GB])
         #expect(facets.sizes.map(\.count) == [2, 2, 1])
+        #expect(facets.qualities.map(\.bytes) == [2_600_000_000, 50_000_000])
+        #expect(facets.sizes.map(\.bytes) == [2_600_000_000, 2_600_000_000, 2_000_000_000])
         #expect(facets.codecs.map(\.value) == [.hevc, .h264])
         #expect(facets.ranges.map(\.value) == [.dolbyVision, .sdr])
         #expect(facets.lengths.map(\.value) == [.underThirtySeconds])

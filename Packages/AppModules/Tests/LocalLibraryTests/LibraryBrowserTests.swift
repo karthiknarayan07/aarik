@@ -132,6 +132,7 @@ import Testing
         #expect(savings() == 300)
         #expect(browser.snapshot.facets.qualities.map(\.value) == [.uhd(.fps60), .fullHD(.fps30)])
         #expect(browser.snapshot.facets.qualities.map(\.count) == [1, 2])
+        #expect(browser.snapshot.facets.qualities.map(\.bytes) == [100, 500])
 
         // The filter is part of the query: the snapshot and the cached savings follow it.
         browser.quality.qualities = [.fullHD(.fps30)]
