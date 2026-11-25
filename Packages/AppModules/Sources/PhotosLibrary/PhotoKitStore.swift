@@ -70,7 +70,7 @@ public final class PhotoKitStore: PhotoStore {
         }
     }
 
-    private static func makeAsset(_ asset: PHAsset) -> PhotoAsset {
+    static func makeAsset(_ asset: PHAsset) -> PhotoAsset {
         let resources = PHAssetResource.assetResources(for: asset)
         let original = resources.first { $0.type == .video } ?? resources.first
         return PhotoAsset(

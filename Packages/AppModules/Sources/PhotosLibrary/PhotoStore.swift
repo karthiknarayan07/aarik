@@ -102,11 +102,34 @@ public enum PhotoStoreError: Error, Sendable, Equatable, LocalizedError {
     case notAuthorized
     /// The asset with this local identifier is gone.
     case notInLibrary(String)
+    /// The video had to come from iCloud and could not (offline, refused, or the download failed). The text is
+    /// what PhotoKit said.
+    case downloadFailed(String)
+    /// Photos has no video to give for the asset, or the export failed; the text says why.
+    case unavailable(String)
 
     public var errorDescription: String? {
         switch self {
         case .notAuthorized: "Access to your Photos library isn't allowed."
         case .notInLibrary: "No longer in your Photos library"
+        case .downloadFailed: "Couldn't download from iCloud. Check that you're online and try again."
+        case .unavailable(let reason): "Photos couldn't provide this video: \(reason)"
+        }
+    }
+}
+
+/// Where a Photos input fetch is. Downloading from iCloud is its own phase: it is usually the longest part (a
+/// clip is fetched at network speed and exported in a fraction of a second), so it gets its own progress rather
+/// than a slice of the job's.
+public enum FetchProgress: Sendable, Equatable {
+    /// Bringing the video from iCloud (or, when it is on this Mac, copying it out), 0 to 1.
+    case downloading(Double)
+    /// Rendering an edited video's current version into the work folder, 0 to 1.
+    case exporting(Double)
+
+    public var fraction: Double {
+        switch self {
+        case .downloading(let value), .exporting(let value): value
         }
     }
 }
@@ -124,4 +147,14 @@ public protocol PhotoStore: Sendable {
     func albums(containing id: String) async throws -> [String]
     /// A thumbnail from what is on this Mac, or nil. Never downloads from iCloud.
     func thumbnail(for id: String, size: CGSize) async -> CGImage?
+    /// The asset's current metadata (including whether it was edited); throws `notInLibrary` when it is gone.
+    func asset(id: String) async throws -> PhotoAsset
+    /// Writes the asset's original video resource to `url`, downloading from iCloud when needed and reporting
+    /// `.downloading` progress. Cancelling the task stops the transfer.
+    func writeOriginal(id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void) async throws
+    /// Writes the current (edited) version to `url` as a passthrough export, downloading from iCloud when needed:
+    /// `.downloading` progress first, then `.exporting`. Cancelling the task stops it.
+    func exportCurrentVersion(
+        id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws
 }
