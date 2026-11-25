@@ -9,6 +9,10 @@ First public release.
 
 ### Added
 
+- **Shrink Videos action:** in Shortcuts, as a Finder Quick Action, by Siri and in Spotlight. It shrinks the videos you
+  give it, or picks them by date range, resolution and source (Local Files or Photos), with the quality, format and
+  destination you choose. Nothing is replaced, videos that would lose metadata are skipped, and one notification says
+  how it went. Settings explains how to add it to Finder.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).
 

@@ -24,6 +24,17 @@ extension AppModel {
         }
         // A queue created paused (auto-start off) waits for Resume.
         if !isQueuePaused { await queue.resume() }
+        hasFinishedStarting = true
+        let waiters = startWaiters
+        startWaiters = []
+        for waiter in waiters { waiter.resume() }
+    }
+
+    /// Returns once `start()` has finished: the work-folder sweep is done and the queue is running, so what an
+    /// entry point adds can't start a job too early.
+    func waitUntilStarted() async {
+        guard !hasFinishedStarting else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
     }
 
     /// Stops scanning (items found so far stay), lets library saves finish, and stops the queue before the app

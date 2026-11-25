@@ -92,6 +92,11 @@ final class AppModel {
     /// The quick runs of the last week, so their jobs get their own notification (see `receive`).
     @ObservationIgnored let quickRunStore: QuickRunStore
     @ObservationIgnored lazy var quickRun = makeQuickRun()
+    /// The Shortcuts, Siri and Spotlight action: files or a selection of the libraries, as one quick run.
+    @ObservationIgnored lazy var shrinkVideosAction = makeShrinkVideosAction()
+    /// Set once `start()` has finished; entry points that arrive earlier (an intent that launched the app) wait.
+    @ObservationIgnored var hasFinishedStarting = false
+    @ObservationIgnored var startWaiters: [CheckedContinuation<Void, Never>] = []
     /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
