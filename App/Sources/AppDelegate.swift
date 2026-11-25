@@ -10,6 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let model: AppModel
     let updater: Updater
     private var isTerminating = false
+    /// Clears Photos input left behind by a crash or quit. It starts as soon as launch begins, overlapping the
+    /// window and menu construction; the queue waits for it.
+    private var workFolderSweep: Task<Void, Never>?
     private var volumeObservers: [any NSObjectProtocol] = []
     /// The main window lives as long as the app; closing it only hides it.
     private var windowController: MainWindowController?
@@ -22,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// Set before launch finishes, so a click on a notification that relaunched the app reaches `didReceive`.
     func applicationWillFinishLaunching(_ notification: Notification) {
         menuFixups.start()
+        let workFolder = WorkFolder.standard()
+        workFolderSweep = Task.detached(priority: .utility) { workFolder.sweep() }
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         let review = UNNotificationAction(
@@ -44,9 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Photos input left behind by a crash or quit is cleared before the queue starts, so a job can't create
         // its folder while the sweep runs. Opened files and notification responses stay buffered until the queue
         // runs, so a quick run can't start it early.
-        let workFolder = WorkFolder.standard()
+        let sweep = workFolderSweep
         Task {
-            await Task.detached(priority: .utility) { workFolder.sweep() }.value
+            await sweep?.value
+            // Quitting during launch: the queue never starts and nothing is routed.
+            guard !isTerminating else { return }
             await model.start()
             routeLaunch()
         }

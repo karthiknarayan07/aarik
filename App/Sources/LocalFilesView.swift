@@ -64,7 +64,10 @@ struct LocalFilesView: View {
         .navigationTitle(model.selection?.title ?? "Local files")
         .navigationSubtitle(filteredSummary)
         .toolbar { LocalFilesToolbar(model: model) }
-        .searchable(text: $browser.search, placement: .toolbar, prompt: "Search by name")
+        .assistantSearchable(
+            search: model.assistant.localSearch, browser: browser, sidebarBadge: model.badgeFilter,
+            shrunkIDs: { model.shrunkIDs(in: model.browser) }
+        )
         .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
     }
 

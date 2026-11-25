@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "LocalLibrary", targets: ["LocalLibrary"]),
         .library(name: "PhotosLibrary", targets: ["PhotosLibrary"]),
         .library(name: "DownscaleVideo", targets: ["DownscaleVideo"]),
+        .library(name: "Assistant", targets: ["Assistant"]),
         .library(name: "QuickRunService", targets: ["QuickRunService"]),
         .executable(name: "devtool", targets: ["devtool"]),
     ],
@@ -42,6 +43,11 @@ let package = Package(
         .target(
             name: "DownscaleVideo",
             dependencies: ["AppUI", "MediaEngine", "AppCore", "PhotosLibrary"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "Assistant",
+            dependencies: ["LocalLibrary", "AppCore", "AppUI", "DownscaleVideo"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -82,6 +88,11 @@ let package = Package(
         .testTarget(
             name: "PhotosLibraryTests",
             dependencies: ["PhotosLibrary", "LocalLibrary", "AppCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "AssistantTests",
+            dependencies: ["Assistant", "LocalLibrary", "AppCore", "DownscaleVideo"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

@@ -46,10 +46,17 @@ final class MenuFixups {
     }
 
     private static func fix(_ menu: NSMenu) {
-        if menu === NSApp.helpMenu {
+        if isHelpMenu(menu) {
             for item in menu.items where item.action == toggleSidebar { menu.removeItem(item) }
         }
         if menu.items.contains(where: isSidebarCommand) { addFullScreenItem(to: menu) }
+    }
+
+    /// `NSApp.helpMenu` when set; otherwise the menu holding the Help item (`showHelp:`), which SwiftUI may not
+    /// have registered as the Help menu.
+    private static func isHelpMenu(_ menu: NSMenu) -> Bool {
+        if let help = NSApp.helpMenu { return menu === help }
+        return menu.items.contains { $0.action == #selector(NSApplication.showHelp(_:)) }
     }
 
     /// Our own sidebar command, recognised by its shortcut (⌃⌘S), not by its title: it sits in the View menu.

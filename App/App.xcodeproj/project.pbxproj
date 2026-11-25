@@ -13,7 +13,8 @@
 		A10000000000000000000104 /* LocalLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000204 /* LocalLibrary */; };
 		A10000000000000000000105 /* DownscaleVideo in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000205 /* DownscaleVideo */; };
 		A10000000000000000000107 /* PhotosLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000207 /* PhotosLibrary */; };
-		A10000000000000000000108 /* QuickRunService in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000208 /* QuickRunService */; };
+		A10000000000000000000108 /* Assistant in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000208 /* Assistant */; };
+		A10000000000000000000109 /* QuickRunService in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000209 /* QuickRunService */; };
 		A10000000000000000000106 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000206 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -48,7 +49,8 @@
 				A10000000000000000000104 /* LocalLibrary in Frameworks */,
 				A10000000000000000000105 /* DownscaleVideo in Frameworks */,
 				A10000000000000000000107 /* PhotosLibrary in Frameworks */,
-				A10000000000000000000108 /* QuickRunService in Frameworks */,
+				A10000000000000000000108 /* Assistant in Frameworks */,
+				A10000000000000000000109 /* QuickRunService in Frameworks */,
 				A10000000000000000000106 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -112,7 +114,8 @@
 				A10000000000000000000204 /* LocalLibrary */,
 				A10000000000000000000205 /* DownscaleVideo */,
 				A10000000000000000000207 /* PhotosLibrary */,
-				A10000000000000000000208 /* QuickRunService */,
+				A10000000000000000000208 /* Assistant */,
+				A10000000000000000000209 /* QuickRunService */,
 				A10000000000000000000206 /* Sparkle */,
 			);
 			productName = App;
@@ -270,7 +273,11 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = PhotosLibrary;
 		};
-		A10000000000000000000208 /* QuickRunService */ = {
+		A10000000000000000000208 /* Assistant */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Assistant;
+		};
+		A10000000000000000000209 /* QuickRunService */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = QuickRunService;
 		};
