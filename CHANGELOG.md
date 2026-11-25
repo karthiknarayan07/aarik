@@ -14,6 +14,9 @@ First public release.
   and a bar offers to move them later. iCloud space is freed when Recently Deleted is emptied, or after 30 days.
 - **Overview:** totals for your Photos videos and local files, what converting them could free at the current preset,
   the ten biggest savings (click one to see it in its grid) and the space saved so far.
+- **Where to start on Overview:** the biggest groups of videos (by quality, year and library) with Show, which opens
+  the right page with filters you can remove. With Apple Intelligence turned on, Smart Picks suggests up to three
+  groups, on this Mac only, and Add These to the Queue goes through the usual checks. Nothing is added by itself.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).
 
