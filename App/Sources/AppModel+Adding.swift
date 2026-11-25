@@ -19,8 +19,8 @@ struct LossReview {
     let settings: DownscaleJobSettings
     /// Each video's preset when it was added (the header's, or its own from the inspector).
     let presets: [UUID: Preset]
-    /// What each lossy file loses, for the jobs' badges.
-    let losses: [URL: [String]]
+    /// What each lossy file loses, for the jobs' badges and the runner's check.
+    let losses: [URL: PredictedLoss<UUID>]
     /// Selected videos found missing just before they would have been added.
     let missing: Int
 }
@@ -82,7 +82,7 @@ extension AppModel {
                 custom: settings.custom, quickTimeFallbacks: fallbacks)
             let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
             let lostByURL = Dictionary(
-                uniqueKeysWithValues: losses.compactMap { loss in byID[loss.id].map { ($0.url, loss.lost) } })
+                uniqueKeysWithValues: losses.compactMap { loss in byID[loss.id].map { ($0.url, loss) } })
             if losses.isEmpty {
                 enqueue(items, settings: settings, presets: presets, losses: lostByURL, missing: missing)
             } else {
@@ -120,13 +120,13 @@ extension AppModel {
     /// Makes the jobs and adds them; says afterwards what was skipped (already queued, unreadable, or found
     /// missing just before).
     private func enqueue(
-        _ items: [LibraryItem], settings: DownscaleJobSettings, presets: [UUID: Preset], losses: [URL: [String]],
-        missing: Int
+        _ items: [LibraryItem], settings: DownscaleJobSettings, presets: [UUID: Preset],
+        losses: [URL: PredictedLoss<UUID>], missing: Int
     ) {
         replaceConsent.videosAdded()
         let batch = JobFactory.makeJobs(
             for: items.map { (url: $0.url, preset: presets[$0.id] ?? settings.preset) }, settings: settings,
-            losses: losses)
+            losses: losses.mapValues(\.lost), lostKeys: losses.mapValues(\.keys))
         let autoStart = AppSettings.autoStartQueue(defaults)
         if autoStart { isQueuePaused = false }
         send { [weak self] queue in

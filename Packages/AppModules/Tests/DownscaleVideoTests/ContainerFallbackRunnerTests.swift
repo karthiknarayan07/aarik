@@ -56,7 +56,20 @@ import Testing
         let losses = LossCheck.losses(
             for: [(id: 1, source: (byteSize, inventory)), (id: 2, source: (byteSize, inventory))], preset: .balanced,
             custom: spec, quickTimeFallbacks: [2])
-        #expect(losses == [PredictedLoss(id: 2, lost: ["Location"])])
+        #expect(losses == [PredictedLoss(id: 2, lost: ["Location"], keys: ["qt.uiso/loci"])])
+    }
+
+    /// Inventories read before ISO user data had names call it "loci"; it is named by its key all the same.
+    @Test func lossCheckNamesIsoUserDataByItsKey() {
+        let old = MetadataInventory(
+            items: inventory.items.map { item in
+                item.key == "qt.uiso/loci"
+                    ? MetadataItem(key: item.key, category: .other, displayName: "loci", value: item.value) : item
+            })
+        #expect(
+            LossCheck.lostNames(
+                byteSize: byteSize, inventory: old, preset: .balanced, custom: spec, fallsBackToQuickTime: true)
+                == ["Location"])
     }
 
     @Test(.timeLimit(.minutes(2))) func containerFallbacksAreFoundForTheFilesThatNeedThem() async throws {
@@ -99,8 +112,42 @@ import Testing
         #expect(outcome.notes == ["Saved as a .mov file because M4V can't hold all of its tracks"])
     }
 
+    /// Regression: a library entry read before ISO user data had names ("loci") still gets a job whose fallback
+    /// loss counts as shown, so it converts and is verified instead of being kept as is.
+    @Test(.timeLimit(.minutes(2))) func fallbackShownFromAnOldInventoryIsVerified() async throws {
+        let source = try await RunnerFixture.source(
+            name: "x.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fresh = try await MediaInspector().inventory(of: source)
+        let old = MetadataInventory(
+            items: fresh.items.map { item in
+                guard item.key.hasPrefix("qt.uiso/") else { return item }
+                let code = String(item.key.dropFirst("qt.uiso/".count))
+                return MetadataItem(key: item.key, category: .other, displayName: code, value: item.value)
+            })
+        let size = try #require(RunnerFixture.size(source))
+        let loss = try #require(
+            LossCheck.losses(
+                for: [(id: 1, source: (byteSize: size, inventory: old), preset: .balanced)], custom: spec,
+                quickTimeFallbacks: [1]
+            ).first)
+        let settings = DownscaleJobSettings(
+            preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: loss.lost,
+            predictedLostKeys: loss.keys)
+
+        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+
+        guard case .completed(let outcome) = state else {
+            Issue.record("expected completed, got \(state)")
+            return
+        }
+        #expect(loss.lost.contains("Location"))
+        #expect(outcome.isVerified)
+    }
+
     /// The add-time probe missed the fallback (or the job predates the prediction): what QuickTime loses was never
-    /// shown, so the copy is not kept.
+    /// shown, so the copy is not made. That is known before encoding, so nothing is encoded.
     @Test(.timeLimit(.minutes(2)), arguments: [[String]?.some([]), nil])
     func fallbackFoundOnlyAtRunTimeKeepsTheOriginalAsIs(_ predictedLost: [String]?) async throws {
         let source = try await RunnerFixture.source(
@@ -109,24 +156,38 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let settings = DownscaleJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: predictedLost)
+        let progressReported = Mutex(false)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in
+            progressReported.withLock { $0 = true }
+        }
 
         #expect(state == .keptAsIs(reason: "Its file format can't keep all of its details"))
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
+        #expect(!progressReported.withLock { $0 })
     }
 
-    @Test func fallbackLossCountsAsShownOnlyWhenEveryNameWasPredicted() {
+    @Test func fallbackLossCountsAsShownOnlyWhenEveryItemWasPredicted() {
         let inventory = MetadataInventory(items: [
             MetadataItem(key: "qt.uiso/loci", category: .location, displayName: "Location", value: "+1+2/"),
             MetadataItem(key: "qt.uiso/date", category: .date, displayName: "Creation date", value: "2026"),
         ])
-        #expect(DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: ["Creation date", "Location", "x"]))
-        #expect(!DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: ["Location"]))
-        #expect(!DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: []))
-        #expect(!DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: nil))
+        func shown(_ names: [String]?, keys: [String]? = nil) -> Bool {
+            DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: names, predictedLostKeys: keys)
+        }
+        // Keys, when the job recorded them, decide.
+        #expect(shown(nil, keys: ["qt.uiso/date", "qt.uiso/loci", "x"]))
+        #expect(!shown(["Location", "Creation date"], keys: ["qt.uiso/loci"]))
+        // Jobs saved before keys were recorded: by name, plain or the four-character code older sheets showed.
+        #expect(shown(["Creation date", "Location", "x"]))
+        #expect(shown(["loci", "date"]))
+        #expect(!shown(["Location"]))
+        #expect(!shown([]))
+        #expect(!shown(nil))
         // Nothing to lose: nothing to have been shown.
-        #expect(DownscaleRunner.fallbackLossWasShown(MetadataInventory(items: []), predictedLost: nil))
+        #expect(
+            DownscaleRunner.fallbackLossWasShown(
+                MetadataInventory(items: []), predictedLost: nil, predictedLostKeys: nil))
     }
 
     @Test(.timeLimit(.minutes(2)), arguments: [SaveDestination.nextToOriginal, .replace])

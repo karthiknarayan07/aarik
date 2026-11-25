@@ -96,6 +96,6 @@ import Testing
         let cinematic = inventory(extra: [item("track.2.kind", "auxv/dish")])
         let losses = LossCheck.losses(
             for: [(id: 1, source: (byteSize, plain)), (id: 2, source: (byteSize, cinematic))], preset: .balanced)
-        #expect(losses == [PredictedLoss(id: 2, lost: ["Cinematic depth data"])])
+        #expect(losses == [PredictedLoss(id: 2, lost: ["Cinematic depth data"], keys: ["track.2.kind"])])
     }
 }

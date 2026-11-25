@@ -5,12 +5,15 @@ import MediaEngine
 /// One video that converting would strip of some metadata, with what it would lose.
 public struct PredictedLoss<ID: Hashable & Sendable>: Sendable, Equatable, Identifiable {
     public let id: ID
-    /// Sentence-case names, each once, in inventory order.
+    /// Sentence-case names, each once, in inventory order: for showing.
     public let lost: [String]
+    /// The lost items' keys, in inventory order: what the run checks against (names can change between reads).
+    public let keys: [String]
 
-    public init(id: ID, lost: [String]) {
+    public init(id: ID, lost: [String], keys: [String]) {
         self.id = id
         self.lost = lost
+        self.keys = keys
     }
 }
 
@@ -27,6 +30,19 @@ public enum LossCheck {
             fallsBackToQuickTime: fallsBackToQuickTime)
         guard case .convert(_, _, let predicted) = decision else { return [] }
         return names(of: predicted.lost)
+    }
+
+    /// The items converting would lose (`lostNames` before naming); empty when nothing would be lost or the video
+    /// would be kept as is.
+    static func lostItems(
+        byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec?,
+        fallsBackToQuickTime: Bool
+    ) -> [MetadataItem] {
+        let decision = SavingsCalculator.decision(
+            byteSize: byteSize, inventory: inventory, preset: preset, custom: custom,
+            fallsBackToQuickTime: fallsBackToQuickTime)
+        guard case .convert(_, _, let predicted) = decision else { return [] }
+        return predicted.lost
     }
 
     /// The videos that would lose something, in the order given; videos that lose nothing are left out. The ones
@@ -46,10 +62,10 @@ public enum LossCheck {
         quickTimeFallbacks: Set<ID> = []
     ) -> [PredictedLoss<ID>] {
         sources.compactMap { entry in
-            let lost = lostNames(
+            let lost = lostItems(
                 byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: entry.preset,
                 custom: custom, fallsBackToQuickTime: quickTimeFallbacks.contains(entry.id))
-            return lost.isEmpty ? nil : PredictedLoss(id: entry.id, lost: lost)
+            return lost.isEmpty ? nil : PredictedLoss(id: entry.id, lost: names(of: lost), keys: lost.map(\.key))
         }
     }
 
@@ -72,17 +88,10 @@ public enum LossCheck {
         return result
     }
 
-    /// Readable names for predicted losses: an auxiliary video track and its track metadata (the only track
-    /// metadata the planner predicts lost) are one entry, "Cinematic depth data"; everything else uses its display
-    /// name. Each name appears once.
+    /// Readable names for predicted losses, each once (`MetadataNames.plainNames`): named by key, so an older
+    /// inventory ("loci") and a fresh read ("Location") agree; an auxiliary video track and its track metadata are
+    /// one entry, "Cinematic depth data".
     static func names(of items: [MetadataItem]) -> [String] {
-        var seen = Set<String>()
-        return items.map(name(of:)).filter { seen.insert($0).inserted }
-    }
-
-    private static func name(of item: MetadataItem) -> String {
-        let isAuxiliaryKind =
-            item.key.hasPrefix("track.") && item.key.hasSuffix(".kind") && item.value.hasPrefix("auxv/")
-        return isAuxiliaryKind || item.key.hasPrefix("trackmeta.") ? "Cinematic depth data" : item.displayName
+        MetadataNames.plainNames(of: items)
     }
 }

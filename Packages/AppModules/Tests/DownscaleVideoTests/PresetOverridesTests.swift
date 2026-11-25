@@ -115,7 +115,7 @@ import Testing
             for: [(id: 1, source: source, preset: .high), (id: 2, source: source, preset: .smaller)],
             quickTimeFallbacks: [2])
 
-        #expect(losses == [PredictedLoss(id: 2, lost: ["Location"])])
+        #expect(losses == [PredictedLoss(id: 2, lost: ["Location"], keys: ["qt.uiso/loci"])])
     }
 
     @Test func jobsCarryEachVideosPreset() throws {
@@ -131,12 +131,13 @@ import Testing
 
         let batch = JobFactory.makeJobs(
             for: [(url: urls[0], preset: .high), (url: urls[1], preset: .smaller)], settings: settings,
-            losses: [urls[1]: ["Location"]])
+            losses: [urls[1]: ["Location"]], lostKeys: [urls[1]: ["qt.uiso/loci"]])
 
         let decoded = try batch.jobs.map { try JSONDecoder().decode(DownscaleJobSettings.self, from: $0.settings) }
         #expect(batch.jobs.map(\.source) == urls)
         #expect(decoded.map(\.preset) == [.high, .smaller])
         #expect(decoded.map(\.saveTo) == [.replace, .replace])
         #expect(decoded.map(\.predictedLost) == [[], ["Location"]])
+        #expect(decoded.map(\.predictedLostKeys) == [[], ["qt.uiso/loci"]])
     }
 }
