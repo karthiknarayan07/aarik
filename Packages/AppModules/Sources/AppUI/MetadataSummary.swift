@@ -23,11 +23,12 @@ public struct MetadataSummary: View {
             }
             .accessibilityLabel(keptTitle)
             ForEach(report.changed, id: \.key) { change in
-                Label("\(change.displayName): \(change.from) → \(change.to)", systemImage: "arrow.right.circle")
-                    .accessibilityLabel("\(change.displayName) changes from \(change.from) to \(change.to)")
+                let line = MetadataSummaryLines.change(change, in: report)
+                Label("\(line.name): \(line.from) → \(line.to)", systemImage: "arrow.right.circle")
+                    .accessibilityLabel(MetadataNames.changeSentence(change, auxiliaryTracks: line.auxiliary))
             }
-            ForEach(report.lost, id: \.key) { item in
-                Label("\(item.displayName) is lost", systemImage: "exclamationmark.triangle")
+            ForEach(MetadataSummaryLines.lost(in: report), id: \.self) { name in
+                Label("\(name) is lost", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
             }
         }
@@ -39,7 +40,24 @@ public struct MetadataSummary: View {
     }
 
     private var keptNames: String {
-        var seen = Set<String>()
-        return report.kept.map(\.displayName).filter { seen.insert($0).inserted }.joined(separator: ", ")
+        MetadataNames.plainNames(of: report.kept, context: report.lost).joined(separator: ", ")
+    }
+}
+
+/// The plain lines of a report (`MetadataNames`): what is lost, each once, and how a change reads.
+enum MetadataSummaryLines {
+    static func lost(in report: MetadataReport) -> [String] {
+        MetadataNames.plainNames(of: report.lost, context: report.kept)
+    }
+
+    static func change(_ change: MetadataChange, in report: MetadataReport)
+        -> (name: String, from: String, to: String, auxiliary: Set<Int>)
+    {
+        let auxiliary = MetadataNames.auxiliaryTracks(in: report.kept + report.lost)
+        return (
+            MetadataNames.plainName(key: change.key, displayName: change.displayName, auxiliaryTracks: auxiliary),
+            MetadataNames.plainValue(key: change.key, value: change.from),
+            MetadataNames.plainValue(key: change.key, value: change.to), auxiliary
+        )
     }
 }

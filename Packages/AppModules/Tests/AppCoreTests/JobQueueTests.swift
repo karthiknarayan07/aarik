@@ -160,7 +160,34 @@ private func waitUntil(
 
     let jobs = await queue.jobs
     #expect(jobs[0].state == .failed(reason: "boom happened"))
-    #expect(jobs[1].state == .failed(reason: String(describing: Plain())))
+    #expect(jobs[1].state == .failed(reason: "The video couldn't be converted."))
+}
+
+/// A Cocoa error reads as its sentence, not as a dump of its domain, code and user info.
+@Test func cocoaErrorFailsWithItsLocalizedDescription() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let job = makeJob(name: "sdr-4k")
+    var starts = runner.started.makeAsyncIterator()
+    let error = CocoaError(
+        .fileReadNoPermission,
+        userInfo: [NSFilePathErrorKey: "/tmp/sdr-4k.mov", "AVAssetPropertyKeys": ["duration", "tracks"]])
+
+    await queue.enqueue([job])
+    _ = await starts.next()
+    await runner.finish(job.id, .failure(error))
+    await waitUntil(queue) { if case .failed = $0.first?.state { true } else { false } }
+
+    guard case .failed(let reason) = await queue.jobs.first?.state else {
+        Issue.record("expected failed")
+        return
+    }
+    #expect(reason == error.localizedDescription)
+    #expect(reason.contains("sdr-4k.mov"))
+    #expect(!reason.contains("Domain"))
+    #expect(!reason.contains("AVAssetPropertyKeys"))
 }
 
 @Test func unknownToolFails() async throws {

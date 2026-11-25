@@ -14,21 +14,6 @@ enum AssetMetadataReader {
         "com.apple.quicktime.content.identifier": "Live Photo identifier",
     ]
 
-    /// Names for the ISO user data an MPEG-4 writer makes of QuickTime items (`uiso/<key>`).
-    private static let isoUserDataNames: [String: (name: String, category: MetadataCategory)] = [
-        "loci": ("Location", .location),
-        "date": ("Creation date", .date),
-        "titl": ("Title", .other),
-        "auth": ("Author", .other),
-        "dscp": ("Description", .other),
-        "cprt": ("Copyright", .other),
-        "perf": ("Performer", .other),
-        "gnre": ("Genre", .other),
-        "yrrc": ("Year", .other),
-        "albm": ("Album", .other),
-        "kywd": ("Keywords", .other),
-    ]
-
     static func items(of asset: AVAsset) async throws -> [MetadataItem] {
         let items = try await items(from: asset.load(.metadata), keyPrefix: "qt.") { keyString in
             (category(of: keyString), displayName(of: keyString))
@@ -38,7 +23,8 @@ enum AssetMetadataReader {
 
     private static func namingISOUserData(_ item: MetadataItem) -> MetadataItem {
         let prefix = "qt.\(AVMetadataKeySpace.isoUserData.rawValue)/"
-        guard item.key.hasPrefix(prefix), let known = isoUserDataNames[String(item.key.dropFirst(prefix.count))]
+        guard item.key.hasPrefix(prefix),
+            let known = MetadataNames.isoUserData[String(item.key.dropFirst(prefix.count))]
         else { return item }
         return MetadataItem(key: item.key, category: known.category, displayName: known.name, value: item.value)
     }

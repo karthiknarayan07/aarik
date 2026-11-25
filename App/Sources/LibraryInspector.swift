@@ -92,7 +92,8 @@ private struct ItemSummaryHeader: View {
                     .foregroundStyle(.orange)
             }
         }
-        .task(id: item.url) {
+        // Keyed on the whole item: a re-read in place (same path, new file) or a move loads the new poster.
+        .task(id: item) {
             image = nil
             guard item.isAvailable else { return }
             image = await thumbnails.thumbnail(for: item.url, maxPixel: 640)

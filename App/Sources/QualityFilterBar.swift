@@ -151,10 +151,3 @@ private func optionTitle<Value>(_ name: String, _ option: QualityFacets.Option<V
     guard option.count > 0 else { return "\(name) — none" }
     return "\(name) — \(VideoCount.summary(count: option.count, bytes: option.bytes))"
 }
-
-/// "1 video · 1.2 GB" / "218 videos · 29.8 GB", shared by the filter menus, the window subtitle and the status line.
-enum VideoCount {
-    static func summary(count: Int, bytes: Int64) -> String {
-        "\(count == 1 ? "1 video" : "\(count) videos") · \(ByteFormat.string(bytes))"
-    }
-}

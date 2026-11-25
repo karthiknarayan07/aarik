@@ -15,17 +15,22 @@ public struct DownscaleJobSettings: Codable, Sendable, Equatable {
     public var saveTo: SaveDestination
     /// When set, wins over `preset`.
     public var custom: DownscaleSpec?
-    /// What the planner predicted, when the job was added, that converting loses (display names); empty for
-    /// nothing. Nil for jobs saved before this was recorded.
+    /// What the planner predicted, when the job was added, that converting loses (display names, as shown);
+    /// empty for nothing. Nil for jobs saved before this was recorded.
     public var predictedLost: [String]?
+    /// The keys of the items in `predictedLost`: what the runner checks a loss against. Nil for jobs saved before
+    /// keys were recorded (the runner then compares names).
+    public var predictedLostKeys: [String]?
 
     public init(
-        preset: Preset, saveTo: SaveDestination, custom: DownscaleSpec? = nil, predictedLost: [String]? = nil
+        preset: Preset, saveTo: SaveDestination, custom: DownscaleSpec? = nil, predictedLost: [String]? = nil,
+        predictedLostKeys: [String]? = nil
     ) {
         self.preset = preset
         self.saveTo = saveTo
         self.custom = custom
         self.predictedLost = predictedLost
+        self.predictedLostKeys = predictedLostKeys
     }
 }
 

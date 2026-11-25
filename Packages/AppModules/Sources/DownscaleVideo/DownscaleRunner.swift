@@ -66,13 +66,11 @@ public struct DownscaleRunner: JobRunner {
         let inventory = try await MediaInspector().inventory(of: source)
 
         // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
-        // that loses only when it was shown before the job was added. Found only now (the add-time probe failed,
-        // or the job predates predictions), it stays out of the prediction, so the check after the run finds it
-        // unpredicted and keeps the original as is: never a silent loss.
+        // that loses, which was shown before the job was added. Found only now (the add-time probe failed, or the
+        // job predates predictions), that loss was never shown: keep the original as is, without encoding. Never
+        // a silent loss; the check after the run stays as the backstop. The planner speaks first, so a video kept
+        // for another reason (already small, too little saved) says that reason.
         let container = try await OutputContainer.decide(for: source)
-        let fallbackPredicted =
-            container.fallsBackToQuickTime
-            && Self.fallbackLossWasShown(inventory, predictedLost: settings.predictedLost)
 
         // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
         // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
@@ -81,10 +79,16 @@ public struct DownscaleRunner: JobRunner {
         let predicted: MetadataReport
         let decision = DownscalePlanner.decide(
             inventory: inventory, byteSize: byteSize, spec: requested,
-            fallsBackToQuickTime: fallbackPredicted)
+            fallsBackToQuickTime: container.fallsBackToQuickTime)
         switch decision {
         case .keptAsIs(let reason): return .keptAsIs(reason: reason)
         case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
+        }
+        if container.fallsBackToQuickTime,
+            !Self.fallbackLossWasShown(
+                inventory, predictedLost: settings.predictedLost, predictedLostKeys: settings.predictedLostKeys)
+        {
+            return .keptAsIs(reason: Self.formatCantKeepDetails)
         }
 
         let folder = try Self.outputFolder(for: settings.saveTo, source: source)
@@ -159,13 +163,22 @@ public struct DownscaleRunner: JobRunner {
                 report: report, replacedOriginal: replaced, warnings: warnings, notes: notes, source: source))
     }
 
-    /// Whether what leaving MPEG-4 for QuickTime loses was shown before the job was added: every name is in
-    /// `predictedLost`. A job without a prediction (saved before predictions were recorded) showed nothing.
-    static func fallbackLossWasShown(_ inventory: MetadataInventory, predictedLost: [String]?) -> Bool {
-        let names = LossCheck.names(of: OutputContainer.lostInQuickTimeFallback(inventory))
-        if names.isEmpty { return true }
+    /// Whether what leaving MPEG-4 for QuickTime loses was shown before the job was added: every lost item's key
+    /// is in `predictedLostKeys`, or, for a job saved before keys were recorded, every item is named in
+    /// `predictedLost` (by its plain name, or by the four-character code older sheets showed for ISO user data).
+    /// A job without a prediction showed nothing.
+    static func fallbackLossWasShown(
+        _ inventory: MetadataInventory, predictedLost: [String]?, predictedLostKeys: [String]?
+    ) -> Bool {
+        let lost = OutputContainer.lostInQuickTimeFallback(inventory)
+        if lost.isEmpty { return true }
+        if let predictedLostKeys { return Set(lost.map(\.key)).isSubset(of: predictedLostKeys) }
         guard let predictedLost else { return false }
-        return Set(names).isSubset(of: predictedLost)
+        let shown = Set(predictedLost)
+        return lost.allSatisfy { item in
+            shown.contains(MetadataNames.plainName(of: item))
+                || MetadataNames.isoUserDataCode(forKey: item.key).map(shown.contains) == true
+        }
     }
 
     static let formatCantKeepDetails = "Its file format can't keep all of its details"
@@ -262,11 +275,15 @@ public struct DownscaleRunner: JobRunner {
         return report.lost.filter { !predictedLost.contains($0.key) }
     }
 
-    /// One line per item lost beyond what was predicted, then one per unexpected change.
+    /// One line per thing lost beyond what was predicted (plain names, each once: a Cinematic track and its
+    /// metadata are one line), then one per unexpected change.
     static func warnings(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec) -> [String] {
-        let lost = unpredictedLosses(report, predicted: predicted).map { "\($0.displayName) is lost" }
+        let context = report.kept + report.lost
+        let lost = MetadataNames.plainNames(of: unpredictedLosses(report, predicted: predicted), context: context)
+            .map { "\($0) is lost" }
+        let auxiliary = MetadataNames.auxiliaryTracks(in: context)
         let changed = ExpectedChanges.unexpected(in: report, spec: spec).map {
-            "\($0.displayName) changed from \($0.from) to \($0.to)"
+            MetadataNames.changeSentence($0, auxiliaryTracks: auxiliary)
         }
         return lost + changed
     }

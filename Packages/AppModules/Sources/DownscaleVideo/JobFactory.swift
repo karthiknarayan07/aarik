@@ -14,16 +14,20 @@ public enum JobFactory {
     /// `losses`, each job also records what it is predicted to lose (`losses[url]`, none when absent) for the queue's
     /// badge. A file that can't be bookmarked is skipped and listed in `skipped`; the others still get jobs.
     public static func makeJobs(
-        for sources: [URL], settings: DownscaleJobSettings, losses: [URL: [String]]? = nil, now: Date = Date()
+        for sources: [URL], settings: DownscaleJobSettings, losses: [URL: PredictedLoss<UUID>]? = nil,
+        now: Date = Date()
     ) -> JobBatch {
-        makeJobs(for: sources.map { (url: $0, preset: settings.preset) }, settings: settings, losses: losses, now: now)
+        makeJobs(
+            for: sources.map { (url: $0, preset: settings.preset) }, settings: settings, losses: losses, now: now)
     }
 
     /// `makeJobs(for:settings:losses:now:)` with a preset per file (the inspector's per-video choice) in place of
     /// `settings.preset`.
+    ///
+    /// Each loss carries the names for showing and the keys the runner checks against.
     public static func makeJobs(
-        for sources: [(url: URL, preset: Preset)], settings: DownscaleJobSettings, losses: [URL: [String]]? = nil,
-        now: Date = Date()
+        for sources: [(url: URL, preset: Preset)], settings: DownscaleJobSettings,
+        losses: [URL: PredictedLoss<UUID>]? = nil, now: Date = Date()
     ) -> JobBatch {
         var batch = JobBatch(jobs: [], skipped: [])
         for (url, preset) in sources {
@@ -33,7 +37,8 @@ public enum JobFactory {
             }
             var settings = settings
             settings.preset = preset
-            settings.predictedLost = losses.map { $0[url] ?? [] }
+            settings.predictedLost = losses.map { $0[url]?.lost ?? [] }
+            settings.predictedLostKeys = losses.map { $0[url]?.keys ?? [] }
             guard let encoded = try? JSONEncoder().encode(settings) else {
                 batch.skipped.append(url)
                 continue

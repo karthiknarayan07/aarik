@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Runs jobs one at a time, in order, persisting after every state change.
 ///
@@ -25,6 +26,7 @@ public actor JobQueue {
     /// Progress alone is published at most once per interval; state changes go out at once (each also carries
     /// the latest progress).
     private let progressInterval: Duration
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "AppCore", category: "queue")
     private var lastPublished: ContinuousClock.Instant?
     /// Publishes progress held back by `progressInterval` once the interval is up; a state change publishes it
     /// sooner and cancels this.
@@ -222,8 +224,10 @@ public actor JobQueue {
         }
     }
 
+    /// Runs on the held task: once a state change cancelled it, it publishes nothing, even if a newer held
+    /// publish is waiting.
     private func publishHeldProgress() {
-        guard heldProgress != nil, !stopped else { return }
+        guard !Task.isCancelled, heldProgress != nil, !stopped else { return }
         publish()
     }
 
@@ -293,9 +297,22 @@ public actor JobQueue {
             if cancelled { return .remove }
             // Only a cancelled worker (shutdown) is not a failure.
             if Task.isCancelled { return .requeue }
-            let reason = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-            return .finished(.failed(reason: reason))
+            // The sentence for the user; the full error (domain, code, user info) only to the log.
+            Self.log.error("Job \(id, privacy: .public) failed: \(String(describing: error), privacy: .private)")
+            return .finished(.failed(reason: Self.reason(for: error)))
         }
+    }
+
+    /// The sentence shown for a failure. A Swift error that isn't localized bridges to "The operation couldn't be
+    /// completed. (… error N.)", which names types and codes; it is replaced by a plain sentence.
+    static func reason(for error: any Error) -> String {
+        let description = error.localizedDescription
+        if description.hasPrefix("The operation couldn\u{2019}t be completed")
+            || description.hasPrefix("The operation couldn't be completed")
+        {
+            return "The video couldn't be converted."
+        }
+        return description
     }
 
     private func apply(_ disposition: Disposition, to id: UUID) {
