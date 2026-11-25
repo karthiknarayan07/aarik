@@ -66,3 +66,17 @@
   - no hangs over 250 ms in the Hangs instrument during a 20-video batch
 - A sustained 50-video batch: memory flat (no growth beyond 10 % after warm-up), originals intact on every failure.
 - ASan and TSan CI green.
+
+## Owner decisions (2026-11-25, via question tool)
+
+- **Battery:** keep converting on battery, pause automatically at 20 % ("Paused: battery low"), resume when plugged in
+  or above 25 %. Goes into Task B2 (IOPowerSources / `ProcessInfo` power state, behind a testable protocol).
+- **Speed:** a Settings choice **Quiet / Balanced / Fastest**, default Balanced.
+  - Quiet: one video at a time, background QoS.
+  - Balanced: today's `WorkSlots`, half the cores, at least 2.
+  - Fastest: all performance cores.
+  Thermal rules still apply on top: `.serious` → 1, `.critical` → pause. Goes into Task B2.
+- **Quit while converting:** ask "Stop converting and quit?"; the interrupted video and the rest of the queue resume on
+  next launch. Task B2.
+- **First release (v0.1.0):** everything planned — local files, Photos, quick runs (Dock, menu bar, Finder, Shortcuts)
+  and this hardening — shipped once all plans are done and tested.
