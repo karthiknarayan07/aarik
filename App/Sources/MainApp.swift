@@ -5,9 +5,11 @@ struct MainApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        WindowGroup {
+        // One window, never a group: an Open With or Dock drop while running must not open a second one.
+        Window(AppModel.displayName, id: MainWindow.id) {
             RootView(model: delegate.model)
                 .frame(minWidth: 900, minHeight: 600)
+                .tracksMainWindow(delegate.model)
         }
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
