@@ -65,81 +65,17 @@ public struct DownscaleRunner: JobRunner {
         let byteSize = identity.size
         let inventory = try await MediaInspector().inventory(of: source)
 
-        // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
-        // that loses, which was shown before the job was added. Found only now (the add-time probe failed, or the
-        // job predates predictions), that loss was never shown: keep the original as is, without encoding. Never
-        // a silent loss; the check after the run stays as the backstop. The planner speaks first, so a video kept
-        // for another reason (already small, too little saved) says that reason.
-        let container = try await OutputContainer.decide(for: source)
-
-        // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
-        // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
-        let requested = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
-        let spec: DownscaleSpec
-        let predicted: MetadataReport
-        let decision = DownscalePlanner.decide(
-            inventory: inventory, byteSize: byteSize, spec: requested,
-            fallsBackToQuickTime: container.fallsBackToQuickTime)
-        switch decision {
+        let result = try await convert(
+            source: source, byteSize: byteSize, inventory: inventory, settings: settings,
+            outputFolder: { try Self.outputFolder(for: settings.saveTo, source: source) }, progress: progress)
+        let converted: Conversion
+        switch result {
         case .keptAsIs(let reason): return .keptAsIs(reason: reason)
-        case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
+        case .converted(let value): converted = value
         }
-        if container.fallsBackToQuickTime,
-            !Self.fallbackLossWasShown(
-                inventory, predictedLost: settings.predictedLost, predictedLostKeys: settings.predictedLostKeys)
-        {
-            return .keptAsIs(reason: Self.formatCantKeepDetails)
-        }
-
-        let folder = try Self.outputFolder(for: settings.saveTo, source: source)
-        defer { folder.stop() }
-        let label = Self.label(for: spec, settings: settings)
-
-        let output: URL
-        do {
-            output = try await encode(
-                source: source, spec: spec, label: label, directory: folder.url,
-                pathExtension: container.pathExtension, progress: progress)
-        } catch DownscaleError.sourceAlreadySmall {
-            return .keptAsIs(reason: "Already small")
-        }
-
-        // From here the output exists and is ours: any way out that doesn't keep it removes it.
-        let outputSize: Int64
-        let outputInventory: MetadataInventory
-        do {
-            // Cancelled once the output exists: remove it and leave the original alone.
-            try Self.stopIfCancelled(removing: output)
-            // The estimate can overstate the saving (heavy audio counted as video). If the real output is not at
-            // least 10% smaller, remove our own output and keep the original untouched.
-            outputSize = try sizeOf(output)
-            if outputSize >= byteSize * 9 / 10 {
-                try? FileManager.default.removeItem(at: output)
-                return .keptAsIs(reason: "Would save less than 10%")
-            }
-            outputInventory = try await inspect(output)
-            try Self.stopIfCancelled(removing: output)
-        } catch {
-            try? FileManager.default.removeItem(at: output)
-            throw error
-        }
-        let report = MetadataDiff.report(source: inventory, output: outputInventory)
-
-        // In another container, anything lost beyond the prediction is a loss nobody was told about: never keep
-        // such a copy, wherever it was to be saved.
-        if Self.changesContainer(source: source, output: output),
-            !Self.unpredictedLosses(report, predicted: predicted).isEmpty
-        {
-            try? FileManager.default.removeItem(at: output)
-            return .keptAsIs(reason: Self.formatCantKeepDetails)
-        }
-        var warnings = Self.warnings(report, predicted: predicted, spec: spec)
-        var notes: [String] = []
-        if container.fallsBackToQuickTime {
-            notes.append(
-                "Saved as a .\(container.pathExtension) file because \(source.pathExtension.uppercased()) can't hold "
-                    + "all of its tracks")
-        }
+        let output = converted.output
+        var warnings = converted.warnings
+        var notes = converted.notes
 
         var finalURL = output
         var replaced = false
@@ -159,8 +95,117 @@ public struct DownscaleRunner: JobRunner {
         }
         return .completed(
             JobOutcome(
-                output: finalURL, bytesBefore: byteSize, bytesAfter: outputSize,
-                report: report, replacedOriginal: replaced, warnings: warnings, notes: notes, source: source))
+                output: finalURL, bytesBefore: byteSize, bytesAfter: converted.outputSize,
+                report: converted.report, replacedOriginal: replaced, warnings: warnings, notes: notes,
+                source: source))
+    }
+
+    // MARK: - Planning, encoding and checking
+
+    /// A converted output that passed the size check and the metadata comparison; it is the caller's to keep or
+    /// remove.
+    struct Conversion {
+        let output: URL
+        let outputSize: Int64
+        let outputInventory: MetadataInventory
+        let report: MetadataReport
+        /// What was lost beyond the prediction or changed unexpectedly; empty means verified.
+        let warnings: [String]
+        /// Sentences that explain the result and are not problems.
+        let notes: [String]
+    }
+
+    enum ConversionResult {
+        /// Nothing was written: the original stays as it is, for this reason.
+        case keptAsIs(String)
+        case converted(Conversion)
+    }
+
+    /// The part of a run that doesn't depend on where the video came from: plan, encode into the folder
+    /// `outputFolder` gives, remove the output when it saves too little, and compare its metadata with the source's.
+    /// Any way out that doesn't hand back the output has removed it. `source` is read in place, never changed.
+    func convert(
+        source: URL, byteSize: Int64, inventory: MetadataInventory, settings: DownscaleJobSettings,
+        outputFolder: () throws -> (url: URL, stop: () -> Void), progress: @escaping @Sendable (Double) -> Void
+    ) async throws -> ConversionResult {
+        // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
+        // that loses, which was shown before the job was added. Found only now (the add-time probe failed, or the
+        // job predates predictions), that loss was never shown: keep the original as is, without encoding. Never
+        // a silent loss; the check after the run stays as the backstop. The planner speaks first, so a video kept
+        // for another reason (already small, too little saved) says that reason.
+        let container = try await OutputContainer.decide(for: source)
+
+        // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
+        // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
+        let requested = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
+        let spec: DownscaleSpec
+        let predicted: MetadataReport
+        let decision = DownscalePlanner.decide(
+            inventory: inventory, byteSize: byteSize, spec: requested,
+            fallsBackToQuickTime: container.fallsBackToQuickTime)
+        switch decision {
+        case .keptAsIs(let reason): return .keptAsIs(reason)
+        case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
+        }
+        if container.fallsBackToQuickTime,
+            !Self.fallbackLossWasShown(
+                inventory, predictedLost: settings.predictedLost, predictedLostKeys: settings.predictedLostKeys)
+        {
+            return .keptAsIs(Self.formatCantKeepDetails)
+        }
+
+        let folder = try outputFolder()
+        defer { folder.stop() }
+        let label = Self.label(for: spec, settings: settings)
+
+        let output: URL
+        do {
+            output = try await encode(
+                source: source, spec: spec, label: label, directory: folder.url,
+                pathExtension: container.pathExtension, progress: progress)
+        } catch DownscaleError.sourceAlreadySmall {
+            return .keptAsIs("Already small")
+        }
+
+        // From here the output exists and is ours: any way out that doesn't keep it removes it.
+        let outputSize: Int64
+        let outputInventory: MetadataInventory
+        do {
+            // Cancelled once the output exists: remove it and leave the original alone.
+            try Self.stopIfCancelled(removing: output)
+            // The estimate can overstate the saving (heavy audio counted as video). If the real output is not at
+            // least 10% smaller, remove our own output and keep the original untouched.
+            outputSize = try sizeOf(output)
+            if outputSize >= byteSize * 9 / 10 {
+                try? FileManager.default.removeItem(at: output)
+                return .keptAsIs("Would save less than 10%")
+            }
+            outputInventory = try await inspect(output)
+            try Self.stopIfCancelled(removing: output)
+        } catch {
+            try? FileManager.default.removeItem(at: output)
+            throw error
+        }
+        let report = MetadataDiff.report(source: inventory, output: outputInventory)
+
+        // In another container, anything lost beyond the prediction is a loss nobody was told about: never keep
+        // such a copy, wherever it was to be saved.
+        if Self.changesContainer(source: source, output: output),
+            !Self.unpredictedLosses(report, predicted: predicted).isEmpty
+        {
+            try? FileManager.default.removeItem(at: output)
+            return .keptAsIs(Self.formatCantKeepDetails)
+        }
+        var notes: [String] = []
+        if container.fallsBackToQuickTime {
+            notes.append(
+                "Saved as a .\(container.pathExtension) file because \(source.pathExtension.uppercased()) can't hold "
+                    + "all of its tracks")
+        }
+        return .converted(
+            Conversion(
+                output: output, outputSize: outputSize, outputInventory: outputInventory, report: report,
+                warnings: Self.warnings(report, predicted: predicted, spec: spec), notes: notes))
     }
 
     /// Whether what leaving MPEG-4 for QuickTime loses was shown before the job was added: every lost item's key
