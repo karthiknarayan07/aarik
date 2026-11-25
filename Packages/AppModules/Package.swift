@@ -69,7 +69,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DownscaleVideoTests",
-            dependencies: ["DownscaleVideo"],
+            dependencies: ["DownscaleVideo", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
