@@ -7,18 +7,27 @@ and the iPhone metadata? Synthetic clips can't answer that, so the gate needs a 
 
 Put the clips in `Fixtures/iphone/` using exactly these names. Each should be 2 to 3 seconds long. Turn on Location
 Services for the Camera app first (Settings > Privacy & Security > Location Services > Camera), so the clips carry
-location metadata.
+location metadata. The `dv-4k30` test fails if its clip has no location.
+
+Record every clip in 4K wherever the camera mode allows it (Settings > Camera > Record Video > 4K). The two Dolby
+Vision clips must be 4K; the tests fail otherwise. Some modes can't record 4K, and that's fine: Slo-mo is usually
+1080p (4K only at 120 fps on recent Pro models), Cinematic is 1080p on older models, Spatial Video is 1080p, and a
+Live Photo's video is smaller still. The tests shrink those clips to a size below their own (a short side of 720
+pixels, or half the short side for clips that are 720 pixels or smaller), so none is skipped as "already small".
 
 | File | What to record |
 | --- | --- |
 | `dv-4k60.mov` | Normal Video mode, 4K at 60 fps, HDR (Dolby Vision) on. |
 | `dv-4k30.mov` | Normal Video mode, 4K at 30 fps, HDR (Dolby Vision) on. This one also checks the iPhone metadata. |
 | `cinematic.mov` | Cinematic mode video (the one with the focus-change effect). |
-| `spatial-audio.mov` | Normal video recorded with spatial audio (Audio Mix or Spatial Audio on, if your iPhone offers it). |
+| `spatial-audio.mov` | Normal video with spatial audio: Settings > Camera > Record Sound > Spatial Audio, where your iPhone offers it. |
 | `slomo.mov` | Slo-mo video (for example 1080p at 240 fps). |
 | `live-photo.mov` | The video part of a Live Photo (see below on how to get it). |
 | `sdr.mov` | A normal clip with HDR video turned off (Settings > Camera > Record Video > HDR Video off). |
-| `spatial-video.mov` | Spatial Video (iPhone 15 Pro or later, Spatial Video on). Aarik should refuse this one. |
+| `spatial-video.mov` | Spatial Video (iPhone 15 Pro or later, Spatial Video on). Aarik should refuse this one (see below). |
+
+A spatial video stores two views, one per eye, in one track. Aarik's encoder writes a single view, so shrinking it
+would silently drop one eye and leave a flat video. Aarik refuses spatial video instead, and the test checks that.
 
 `Fixtures/iphone/` is git-ignored because the clips contain your location. They will never be committed. Don't
 move them anywhere else in the repo.
@@ -41,8 +50,15 @@ Rename each file to the name in the table.
    cd Packages/AarikKit && swift test --filter RealClipGateTests
    ```
 
-   Each test prints where it wrote its output file. The `cinematicReportsLosses` test also prints which metadata
-   was lost, which goes into the decision record.
+   For the gate run itself, set `AARIK_GATE=1` so a missing clip fails instead of being skipped:
+
+   ```
+   cd Packages/AarikKit && AARIK_GATE=1 swift test --filter RealClipGateTests
+   ```
+
+   Each test prints the path of its output file. Outputs are left in place, in a new `aarik-gate-…` folder in the
+   temporary folder, so you can check them in the next steps. The `cinematicReportsLosses` test also prints what
+   was kept, changed and lost, which goes into the decision record.
 
 2. Check that every frame of each Dolby Vision output still carries Dolby Vision data. From the repo root, for
    each output from `dv-4k60` and `dv-4k30`:
@@ -53,7 +69,18 @@ Rename each file to the name in the table.
 
    It must exit with success (status 0).
 
-3. Manual check: open each Dolby Vision output in QuickTime Player, and import it into Photos. Both should show
+3. Compare each Dolby Vision output's per-frame Dolby Vision data with its source, to see whether the camera's own
+   data was kept or regenerated:
+
+   ```
+   scripts/dv-compare.sh Fixtures/iphone/dv-4k30.mov <output>
+   ```
+
+   Exit status 0 is PASS and 1 is FAIL. Status 3 (INCONCLUSIVE) means this ffprobe can't show the per-frame
+   brightness and trim data, so only part of the comparison ran. Paste the output into the decision record either
+   way.
+
+4. Manual check: open each Dolby Vision output in QuickTime Player, and import it into Photos. Both should show
    it as HDR / Dolby Vision, and it should look like the original. Tell Claude what you see.
 
 The result is recorded in `docs/adr/0001-dolby-vision-downscale-route.md`.

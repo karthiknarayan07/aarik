@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Counts video frames and how many carry a Dolby Vision RPU (per-frame metadata).
-# Prints: frames=<N> rpu_frames=<M> config=<profile/level/compat>
-# Exit 0 only if N > 0 and every frame has an RPU. Dev-only: needs ffprobe (brew install ffmpeg).
+# Prints: frames=<N> nb_frames=<frame count the stream declares, or N/A> rpu_frames=<M> config=<profile/level/compat>
+# Exit 0 only if N > 0, every frame has an RPU, N matches nb_frames (when declared) and ffprobe reported no
+# errors. Dev-only: needs ffprobe (brew install ffmpeg).
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
