@@ -17,7 +17,7 @@ struct RootView: View {
         Binding {
             model.lossReview != nil
         } set: {
-            if !$0 { model.lossReview = nil }
+            if !$0 { model.cancelLossReview() }
         }
     }
 
@@ -78,7 +78,7 @@ struct RootView: View {
                     } set: {
                         model.lossReview = $0
                     },
-                    cancel: { model.lossReview = nil }, convert: model.confirmLossReview)
+                    cancel: model.cancelLossReview, convert: model.confirmLossReview)
             }
         }
     }

@@ -42,12 +42,13 @@ extension AppModel {
         reconcileReplacedFiles(jobs)
     }
 
-    /// A Replace put a smaller file where a library item was: update that item in place. Jobs finished before
-    /// this session are taken as already reflected.
+    /// A Replace put a smaller file where a library item was: update that item in place. The item is found by
+    /// the file the run actually read (the job's path, or where its bookmark found the file after a move). Jobs
+    /// finished before this session are taken as already reflected.
     private func reconcileReplacedFiles(_ jobs: [Job]) {
         let replaced = jobs.compactMap { job -> (id: UUID, source: URL, output: URL)? in
             guard case .completed(let outcome) = job.state, outcome.replacedOriginal else { return nil }
-            return (job.id, job.source, outcome.output)
+            return (job.id, job.sourceUsed, outcome.output)
         }
         guard var handled = reconciledReplaceIDs else {
             reconciledReplaceIDs = Set(replaced.map(\.id))

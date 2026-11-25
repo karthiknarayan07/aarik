@@ -33,7 +33,9 @@ public enum ActivityText {
 
     /// What adding to the queue skipped, or nil when it skipped nothing: "2 videos are already in the queue."
     /// and "1 video couldn't be added because it's missing or can't be read."
-    public static func addNotice(alreadyQueued: Int, unreadable: Int) -> String? {
+    public static func addNotice(alreadyQueued: Int, unreadable: Int, missing: Int = 0) -> String? {
+        // A file that went missing just before it was added and one that can't be read are the same to the user.
+        let unreadable = unreadable + missing
         var sentences: [String] = []
         if alreadyQueued > 0 {
             sentences.append("\(videos(alreadyQueued)) \(alreadyQueued == 1 ? "is" : "are") already in the queue.")
@@ -89,6 +91,15 @@ private struct ReportPopover: View {
                     ForEach(outcome.warnings, id: \.self) { warning in
                         Label(warning, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
+                    }
+                }
+                .font(.callout)
+                Divider()
+            }
+            if !outcome.notes.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(outcome.notes, id: \.self) { note in
+                        Label(note, systemImage: "info.circle")
                     }
                 }
                 .font(.callout)

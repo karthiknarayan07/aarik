@@ -1,4 +1,5 @@
 import AppCore
+import AppUI
 import DownscaleVideo
 import Foundation
 import LocalLibrary
@@ -35,8 +36,8 @@ final class AppModel {
     var activity = ActivitySummary(jobs: [])
     var isQueuePaused = false
     var isConfirmingReplace = false
-    /// The first Replace in a session asks for confirmation; later ones don't.
-    var hasConfirmedReplace = false
+    /// The first Replace in a session asks for confirmation; later ones don't, once videos were added with it.
+    @ObservationIgnored var replaceConsent = ReplaceConsent()
     /// Videos that would lose metadata, waiting for the user's decision before they are added (spec 8.4).
     var lossReview: LossReview?
     /// A message for the user: something couldn't be added, was already queued, or the saved queue was unreadable.

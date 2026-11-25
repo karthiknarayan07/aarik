@@ -19,6 +19,8 @@ struct LossReview {
     let settings: DownscaleJobSettings
     /// What each lossy file loses, for the jobs' badges.
     let losses: [URL: [String]]
+    /// Selected videos found missing just before they would have been added.
+    let missing: Int
 }
 
 extension AppModel {
@@ -34,43 +36,55 @@ extension AppModel {
     /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
     func requestAddSelectionToQueue() {
         guard canAddSelectionToQueue else { return }
-        if saveLocation.choice == .replace, !hasConfirmedReplace {
+        if saveLocation.choice == .replace, replaceConsent.needsAsking {
             isConfirmingReplace = true
         } else {
             addSelectionToQueue()
         }
     }
 
+    /// The confirmation holds only once videos are added: cancelling the loss sheet asks again next time.
     func confirmReplace() {
-        hasConfirmedReplace = true
+        replaceConsent.confirm()
         addSelectionToQueue()
     }
 
     /// Re-checks which files are still there, then adds one job per available selected video with the current
-    /// preset, Advanced spec and Save to choice. Videos that would lose metadata are listed for the user first
-    /// (`lossReview`); the rest go straight in.
+    /// preset, Advanced spec and Save to choice. Videos that would lose metadata (in the conversion, or because an
+    /// MPEG-4 file has to be saved as QuickTime) are listed for the user first (`lossReview`); the rest go
+    /// straight in.
     func addSelectionToQueue() {
-        guard let destination = saveLocation.destination else { return }
+        guard let destination = saveLocation.destination else {
+            replaceConsent.abandon()
+            return
+        }
         let settings = DownscaleJobSettings(preset: preset, saveTo: destination, custom: advanced.spec)
         let selected = Set(selectedItems.map(\.id))
+        let wasAvailable = Set(queueableItems.map(\.id))
         Task {
             await library.refreshAvailability()
             let items = queueableItems.filter { selected.contains($0.id) }
-            guard !items.isEmpty else { return }
+            let missing = library.items.count(where: { wasAvailable.contains($0.id) && !$0.isAvailable })
+            guard !items.isEmpty else {
+                replaceConsent.abandon()
+                showAddNotice(alreadyQueued: 0, unreadable: 0, missing: missing)
+                return
+            }
+            let fallbacks = await LossCheck.quickTimeFallbacks(among: items.map { (id: $0.id, url: $0.url) })
             let losses = LossCheck.losses(
                 for: items.map { (id: $0.id, source: $0.savingsSource) }, preset: settings.preset,
-                custom: settings.custom)
+                custom: settings.custom, quickTimeFallbacks: fallbacks)
             let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
             let lostByURL = Dictionary(
                 uniqueKeysWithValues: losses.compactMap { loss in byID[loss.id].map { ($0.url, loss.lost) } })
             if losses.isEmpty {
-                enqueue(items, settings: settings, losses: lostByURL)
+                enqueue(items, settings: settings, losses: lostByURL, missing: missing)
             } else {
                 lossReview = LossReview(
                     entries: losses.compactMap { loss in
                         byID[loss.id].map { .init(id: loss.id, name: $0.url.lastPathComponent, lost: loss.lost) }
                     },
-                    items: items, settings: settings, losses: lostByURL)
+                    items: items, settings: settings, losses: lostByURL, missing: missing)
             }
         }
     }
@@ -81,23 +95,44 @@ extension AppModel {
         lossReview = nil
         let skipped = Set(review.entries.filter(\.skip).map(\.id))
         let items = review.items.filter { !skipped.contains($0.id) }
-        if !items.isEmpty { enqueue(items, settings: review.settings, losses: review.losses) }
+        if items.isEmpty {
+            replaceConsent.abandon()
+        } else {
+            enqueue(items, settings: review.settings, losses: review.losses, missing: review.missing)
+        }
     }
 
-    /// Makes the jobs and adds them; says afterwards what was skipped (already queued, or unreadable).
-    private func enqueue(_ items: [LibraryItem], settings: DownscaleJobSettings, losses: [URL: [String]]) {
+    /// Cancel on the loss sheet: nothing is added, and a Replace confirmed just before doesn't count.
+    func cancelLossReview() {
+        guard lossReview != nil else { return }
+        lossReview = nil
+        replaceConsent.abandon()
+    }
+
+    /// Makes the jobs and adds them; says afterwards what was skipped (already queued, unreadable, or found
+    /// missing just before).
+    private func enqueue(
+        _ items: [LibraryItem], settings: DownscaleJobSettings, losses: [URL: [String]], missing: Int
+    ) {
+        replaceConsent.videosAdded()
         let batch = JobFactory.makeJobs(for: items.map(\.url), settings: settings, losses: losses)
         let autoStart = AppSettings.autoStartQueue(defaults)
         if autoStart { isQueuePaused = false }
         send { [weak self] queue in
             let added = await queue.enqueue(batch.jobs)
             if autoStart { await queue.resume() }
-            let notice = ActivityText.addNotice(
-                alreadyQueued: batch.jobs.count - added.count, unreadable: batch.skipped.count)
-            if let notice {
-                await MainActor.run { self?.alert = AppAlert(title: "Some videos weren't added", message: notice) }
+            let alreadyQueued = batch.jobs.count - added.count
+            await MainActor.run {
+                self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: batch.skipped.count, missing: missing)
             }
         }
         notifier.requestAuthorizationOnce()
+    }
+
+    private func showAddNotice(alreadyQueued: Int, unreadable: Int, missing: Int) {
+        guard
+            let notice = ActivityText.addNotice(alreadyQueued: alreadyQueued, unreadable: unreadable, missing: missing)
+        else { return }
+        alert = AppAlert(title: "Some videos weren't added", message: notice)
     }
 }

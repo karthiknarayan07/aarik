@@ -42,3 +42,35 @@ private func outcome(before: Int64, after: Int64) -> JobOutcome {
         ActivityText.addNotice(alreadyQueued: 0, unreadable: 2)
             == "2 videos couldn't be added because they're missing or can't be read.")
 }
+
+@Test func addNoticeCountsVideosThatWentMissingBeforeTheyWereAdded() {
+    #expect(ActivityText.addNotice(alreadyQueued: 0, unreadable: 0, missing: 0) == nil)
+    #expect(
+        ActivityText.addNotice(alreadyQueued: 0, unreadable: 0, missing: 1)
+            == "1 video couldn't be added because it's missing or can't be read.")
+    // A file found missing and one that couldn't be bookmarked are the same to the user.
+    #expect(
+        ActivityText.addNotice(alreadyQueued: 1, unreadable: 1, missing: 2)
+            == "1 video is already in the queue. 3 videos couldn't be added because they're missing or can't be read.")
+}
+
+@Test func replaceIsConfirmedOnlyOnceVideosAreAdded() {
+    var consent = ReplaceConsent()
+    #expect(consent.needsAsking)
+    // The user confirms Replace, then cancels the metadata-loss sheet: nothing was added.
+    consent.confirm()
+    consent.abandon()
+    #expect(consent.needsAsking)
+    // Confirmed and added: later Replaces in the session don't ask again.
+    consent.confirm()
+    consent.videosAdded()
+    #expect(!consent.needsAsking)
+    consent.abandon()
+    #expect(!consent.needsAsking)
+}
+
+@Test func addingWithoutAConfirmationGrantsNothing() {
+    var consent = ReplaceConsent()
+    consent.videosAdded()
+    #expect(consent.needsAsking)
+}

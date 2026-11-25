@@ -52,6 +52,13 @@ private struct CompletedRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                ForEach(outcome.notes, id: \.self) { note in
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
             }
             Spacer()
             ReportBadge(outcome: outcome)
