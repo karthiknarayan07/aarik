@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var volumeObservers: [any NSObjectProtocol] = []
     /// The main window lives as long as the app; closing it only hides it.
     private var windowController: MainWindowController?
+    private let menuFixups = MenuFixups()
     /// Files opened (Dock drop, Open With) before launch finished; delivered once it has, exactly once.
     private var openedFiles = LaunchBuffer<URL>()
     /// Quick-run notification responses that arrived before launch finished (a click that relaunched the app).
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// Set before launch finishes, so a click on a notification that relaunched the app reaches `didReceive`.
     func applicationWillFinishLaunching(_ notification: Notification) {
+        menuFixups.start()
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         let review = UNNotificationAction(
@@ -40,11 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         if !files.isEmpty { model.openFiles(files) }
         for runID in responses { Task { await model.reviewQuickRun(runID) } }
-        // SwiftUI fills in its menus just after launch.
-        Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            MenuFixups.apply()
-        }
+        menuFixups.sweep()
         #if DEBUG
             if PhotosSpike.isRequested { PhotosSpike.start() }
         #endif
@@ -92,7 +90,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// Files may have been moved, deleted or restored while the app was in the background.
     func applicationDidBecomeActive(_ notification: Notification) {
-        MenuFixups.apply()
         refreshLibrary()
     }
 

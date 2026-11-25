@@ -114,10 +114,13 @@ final class AppModel {
 
     /// Application Support/<bundle id>.
     nonisolated static func supportDirectory() -> URL {
-        // `-uiTesting <folder>` keeps a test launch away from the real library and queue.
-        if let folder = UserDefaults.standard.string(forKey: "uiTesting") {
-            return URL(filePath: folder, directoryHint: .isDirectory)
-        }
+        // `-uiTesting <folder>` keeps a test launch away from the real library and queue. Debug builds only, and only
+        // from the launch arguments: a Release build can't be pointed elsewhere, by argument or by a stored setting.
+        #if DEBUG
+            if let folder = LaunchArguments.value(of: "-uiTesting", in: ProcessInfo.processInfo.arguments) {
+                return URL(filePath: folder, directoryHint: .isDirectory)
+            }
+        #endif
         let id = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
         return URL.applicationSupportDirectory.appending(path: id, directoryHint: .isDirectory)
     }

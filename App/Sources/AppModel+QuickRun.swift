@@ -56,11 +56,11 @@ extension AppModel {
 /// Posts a finished run's notification. It stays quiet only when the app is active with its window on screen: a
 /// Dock drop activates a windowless app, and that run's notification is the only feedback.
 struct QuickRunNotifier: QuickRunNotifying {
-    /// Unowned: the model owns the quick run that owns this.
-    unowned let model: AppModel
+    /// Weak: the model owns the quick run that owns this.
+    weak let model: AppModel?
 
     func post(_ notice: QuickRunNotice) async {
-        await model.postQuickRunNotice(notice)
+        await model?.postQuickRunNotice(notice)
     }
 }
 
