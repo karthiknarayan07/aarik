@@ -20,9 +20,19 @@ struct MenuBarPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(AppModel.displayName, systemImage: "film.stack")
-                .font(.headline)
+            Label {
+                Text(AppModel.displayName)
+            } icon: {
+                let icon = StatusIconState(model.activity, isPaused: model.isQueuePaused)
+                if let value = icon.variableValue {
+                    Image(systemName: icon.symbolName, variableValue: value)
+                } else {
+                    Image(systemName: icon.symbolName)
+                }
+            }
+            .font(.headline)
             currentJob
+            runStatus
             Divider()
             HStack {
                 Button(model.isQueuePaused ? "Resume Queue" : "Pause Queue") { model.toggleQueuePaused() }
@@ -39,12 +49,31 @@ struct MenuBarPanel: View {
         .padding(16)
         .frame(width: 300, alignment: .leading)
         .dropDestination(for: URL.self) { urls, _ in
-            let movies = MovieDropFilter.movies(in: urls)
-            guard !movies.isEmpty else { return false }
-            model.runQuickly(movies)
+            // Names only here; the files are checked off the main thread before the run starts.
+            guard MovieDropFilter.mightContainMovie(urls) else { return false }
+            model.runFromMenuBar(urls)
             return true
         } isTargeted: {
             isDropTargeted = $0
+        }
+    }
+
+    /// The run started from the menu bar: what it is doing, then how it ended, with its skipped files one click away.
+    @ViewBuilder private var runStatus: some View {
+        if let status = model.quickRunStatus {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    if case .checking = status.phase { ProgressView().controlSize(.small) }
+                    Text(status.text)
+                }
+                if status.skippedCount > 0, let runID = status.runID {
+                    Button("Show Skipped…") {
+                        close()
+                        Task { await model.reviewQuickRun(runID) }
+                    }
+                    .accessibilityHint("Opens the main window with the skipped videos selected")
+                }
+            }
         }
     }
 
@@ -109,7 +138,7 @@ struct MenuBarPanel: View {
         panel.begin { response in
             guard response == .OK else { return }
             let urls = panel.urls
-            Task { @MainActor in model.runQuickly(urls) }
+            Task { @MainActor in model.runFromMenuBar(urls) }
         }
     }
 }

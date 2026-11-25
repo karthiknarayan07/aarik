@@ -6,6 +6,7 @@ import QuickRunService
 final class StatusItemDropView: NSView {
     private weak var button: NSStatusBarButton?
     private let onDrop: ([URL]) -> Void
+    private var verdicts = DragVerdictCache()
 
     init(button: NSStatusBarButton, onDrop: @escaping ([URL]) -> Void) {
         self.button = button
@@ -23,14 +24,23 @@ final class StatusItemDropView: NSView {
         StatusItemHitTest.passesThrough(NSApp.currentEvent?.type) ? nil : super.hitTest(point)
     }
 
+    /// Whether the drag in progress looks like it holds a movie. Worked out from the file names once per drag, so
+    /// the many updates while the pointer moves over the icon never touch the disk.
+    private func accepts(_ sender: any NSDraggingInfo) -> Bool {
+        verdicts.verdict(forSession: sender.draggingSequenceNumber) {
+            MovieDropFilter.mightContainMovie(MovieDropFilter.fileURLs(on: sender.draggingPasteboard))
+        }
+    }
+
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        let accepts = !MovieDropFilter.movies(on: sender.draggingPasteboard).isEmpty
+        verdicts.reset()
+        let accepts = accepts(sender)
         button?.isHighlighted = accepts
         return accepts ? .copy : []
     }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        MovieDropFilter.movies(on: sender.draggingPasteboard).isEmpty ? [] : .copy
+        accepts(sender) ? .copy : []
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
@@ -41,11 +51,12 @@ final class StatusItemDropView: NSView {
         button?.isHighlighted = false
     }
 
+    /// Accepts on the names alone; the files themselves are checked off the main thread before the run starts.
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         button?.isHighlighted = false
-        let movies = MovieDropFilter.movies(on: sender.draggingPasteboard)
-        guard !movies.isEmpty else { return false }
-        onDrop(movies)
+        let urls = MovieDropFilter.fileURLs(on: sender.draggingPasteboard)
+        guard MovieDropFilter.mightContainMovie(urls) else { return false }
+        onDrop(urls)
         return true
     }
 }

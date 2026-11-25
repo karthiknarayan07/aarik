@@ -40,6 +40,7 @@ extension AppModel {
         self.jobs = jobs
         relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused)
         activity = ActivitySummary(jobs: jobs)
+        clearStaleQuickRunStatus(jobs: jobs)
         // A quick run announces itself; the generic "Queue finished" is for the window's jobs.
         let quickRunJobs = quickRunStore.jobIDs
         let windowJobs = quickRunJobs.isEmpty ? jobs : jobs.filter { !quickRunJobs.contains($0.id) }
