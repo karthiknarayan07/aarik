@@ -78,7 +78,11 @@ final class HEVCEncoder {
                 throw DownscaleError.encoderFailed("VTSessionSetProperty \(key) failed: \(status)")
             }
         }
-        VTCompressionSessionPrepareToEncodeFrames(session)
+        let prepared = VTCompressionSessionPrepareToEncodeFrames(session)
+        guard prepared == noErr else {
+            VTCompressionSessionInvalidate(session)
+            throw DownscaleError.encoderFailed("VTCompressionSessionPrepareToEncodeFrames: \(prepared)")
+        }
     }
 
     deinit {

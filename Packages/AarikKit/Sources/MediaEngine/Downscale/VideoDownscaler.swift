@@ -6,6 +6,10 @@ import Foundation
 /// Re-encodes the primary video track at a smaller size (HEVC at the source bit depth, HDR and Dolby Vision kept) and
 /// passes audio, timed metadata, file-level metadata and file attributes through untouched.
 public struct VideoDownscaler: Sendable {
+    /// Test seam: runs with the output URL just before the writer starts, to inject a file appearing at the output
+    /// path after the pre-check (another job writing the same name).
+    var beforeStartWriting: (@Sendable (URL) -> Void)?
+
     public init() {}
 
     /// Writes a new `.mov` at `output`. Throws `outputExists` if `output` exists, `sourceAlreadySmall` if the source
@@ -30,7 +34,8 @@ public struct VideoDownscaler: Sendable {
         let job = try await DownscaleJob(
             asset: asset, videoTrack: videoTrack, output: output, spec: spec,
             isTenBit: inventory["video.bitDepth"]?.value != "8",
-            preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, progress: progress)
+            preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, beforeStartWriting: beforeStartWriting,
+            progress: progress)
         do {
             try await job.run()
             try FileAttributes.copy(from: source, to: output)
@@ -64,6 +69,8 @@ private final class DownscaleJob {
     private let encoder: HEVCEncoder
     private let duration: Double
     private let progress: @Sendable (Double) -> Void
+    private let output: URL
+    private let beforeStartWriting: (@Sendable (URL) -> Void)?
     /// Decode and scale format: 10-bit for a 10-bit source, 8-bit for an 8-bit one.
     private let pixelFormat: OSType
 
@@ -72,11 +79,16 @@ private final class DownscaleJob {
     private var pending: (frame: CVPixelBuffer, time: CMTime)?
     private var lastSourceEnd = CMTime.zero
     private var reported = 0.0
+    /// Set only once `startWriting()` succeeds: from then on the output file is this run's.
+    private var didStartWriting = false
 
     init(
         asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, spec: DownscaleSpec, isTenBit: Bool,
-        preservesDolbyVision: Bool, progress: @escaping @Sendable (Double) -> Void
+        preservesDolbyVision: Bool, beforeStartWriting: (@Sendable (URL) -> Void)?,
+        progress: @escaping @Sendable (Double) -> Void
     ) async throws {
+        self.output = output
+        self.beforeStartWriting = beforeStartWriting
         let pixelFormat =
             isTenBit
             ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
@@ -108,6 +120,9 @@ private final class DownscaleJob {
             track: videoTrack,
             outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat])
         videoOutput.alwaysCopiesSampleData = false
+        guard reader.canAdd(videoOutput) else {
+            throw DownscaleError.unsupportedSource("the video track cannot be decoded")
+        }
         reader.add(videoOutput)
 
         writer = try AVAssetWriter(outputURL: output, fileType: .mov)
@@ -117,9 +132,13 @@ private final class DownscaleJob {
         for track in try await asset.load(.tracks) where [.audio, .metadata].contains(track.mediaType) {
             let readerOutput = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
             readerOutput.alwaysCopiesSampleData = false
-            reader.add(readerOutput)
             let hint = try await track.load(.formatDescriptions).first
             let input = AVAssetWriterInput(mediaType: track.mediaType, outputSettings: nil, sourceFormatHint: hint)
+            // A track either end refuses (an odd format) is skipped, so it shows up as lost in the report; adding it
+            // anyway would raise an Objective-C exception. Both checks run before the reader output is added, so a
+            // skipped track leaves no reader output undrained.
+            guard reader.canAdd(readerOutput), writer.canAdd(input) else { continue }
+            reader.add(readerOutput)
             input.expectsMediaDataInRealTime = false
             input.metadata = try await track.load(.metadata)
             if let language = try await track.load(.languageCode) { input.languageCode = language }
@@ -150,24 +169,24 @@ private final class DownscaleJob {
         try await appendEncoded()
         guard let videoInput else { throw DownscaleError.unsupportedSource("no video frames") }
         videoInput.markAsFinished()
-        for track in passthrough {
-            while !track.isFinished {
-                try Task.checkCancellation()
-                try checkWriter()
-                if try !track.pump(until: nil) { try await Task.sleep(for: .milliseconds(1)) }
-            }
+        // Feed every unfinished track on each pass: the writer interleaves its inputs, so one track can stay not
+        // ready until another catches up. Draining one track at a time can hang.
+        while passthrough.contains(where: { !$0.isFinished }) {
+            try Task.checkCancellation()
+            try checkWriter()
+            if try !pumpPassthrough(until: nil) { try await Task.sleep(for: .milliseconds(1)) }
         }
         try Task.checkCancellation()
         await writer.finishWriting()
         guard writer.status == .completed else { throw writerError() }
     }
 
-    /// Stops reading and writing after a failure or cancellation. Returns whether the writer had started, that is,
-    /// whether this run created the output file (which the caller then deletes).
+    /// Stops reading and writing after a failure or cancellation. Returns whether this run created the output file
+    /// (`startWriting()` succeeded), which the caller then deletes.
     func abort() -> Bool {
         reader.cancelReading()
         if writer.status == .writing { writer.cancelWriting() }
-        return writer.status != .unknown
+        return didStartWriting
     }
 
     // MARK: - Video
@@ -209,15 +228,23 @@ private final class DownscaleJob {
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: hint)
         input.expectsMediaDataInRealTime = false
         input.transform = transform
+        guard writer.canAdd(input) else {
+            throw DownscaleError.unsupportedSource("the writer refused the encoded video format")
+        }
         writer.add(input)
+        let referent = AVAssetTrack.AssociationType.metadataReferent.rawValue
         for track in passthrough {
-            if track.isTimedMetadata {
-                track.input.addTrackAssociation(
-                    withTrackOf: input, type: AVAssetTrack.AssociationType.metadataReferent.rawValue)
+            // `writer.canAdd(track.input)` was checked when the track was set up.
+            if track.isTimedMetadata, track.input.canAddTrackAssociation(withTrackOf: input, type: referent) {
+                track.input.addTrackAssociation(withTrackOf: input, type: referent)
             }
             writer.add(track.input)
         }
+        beforeStartWriting?(output)
+        // `startWriting()` fails (status `.failed`) when a file already exists at the output path, for example one
+        // another job wrote after the pre-check. Only a successful start makes the output this run's.
         guard writer.startWriting() else { throw writerError() }
+        didStartWriting = true
         writer.startSession(atSourceTime: .zero)
         videoInput = input
         return input

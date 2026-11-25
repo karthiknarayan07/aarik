@@ -16,7 +16,11 @@ public struct ClipOptions: Sendable {
     public var quickTimeMetadata: [String: String] = [:]
     /// stereo AAC 48 kHz
     public var includeAudio = true
-    /// one mebx track, identifier `mdta/com.aarik.test.timed`
+    /// How much longer than the video the audio runs (with audio only); the timed metadata spans the audio length.
+    public var audioTailSeconds = 0.0
+    /// Adds the timed-metadata track before the audio track (default: audio first).
+    public var timedMetadataBeforeAudio = false
+    /// one mebx track, identifier `mdta/com.aarik.test.timed`, one group per second of the clip (and audio tail)
     public var includeTimedMetadataTrack = false
     /// 0 or 90 → preferredTransform
     public var rotationDegrees = 0
@@ -95,7 +99,6 @@ public enum FixtureFactory {
                     AVEncoderBitRateKey: 128_000,
                 ])
             input.expectsMediaDataInRealTime = false
-            writer.add(input)
             audioInput = input
         }
 
@@ -121,9 +124,13 @@ public enum FixtureFactory {
             input.expectsMediaDataInRealTime = false
             input.addTrackAssociation(
                 withTrackOf: videoInput, type: AVAssetTrack.AssociationType.metadataReferent.rawValue)
-            writer.add(input)
             metadataInput = input
             metadataAdaptor = AVAssetWriterInputMetadataAdaptor(assetWriterInput: input)
+        }
+
+        let passthroughInputs = [audioInput, metadataInput].compactMap(\.self)
+        for input in options.timedMetadataBeforeAudio ? passthroughInputs.reversed() : passthroughInputs {
+            writer.add(input)
         }
 
         // File-level QuickTime metadata
@@ -142,52 +149,55 @@ public enum FixtureFactory {
             }
             writer.startSession(atSourceTime: .zero)
 
-            // Timed metadata: one group spanning the clip.
-            if let metadataAdaptor, let metadataInput {
-                let item = AVMutableMetadataItem()
-                item.identifier = AVMetadataIdentifier(rawValue: timedMetadataIdentifier)
-                item.dataType = kCMMetadataBaseDataType_UTF8 as String
-                item.value = "aarik-timed-0" as NSString
-                let range = CMTimeRange(
-                    start: .zero, duration: CMTime(seconds: options.seconds, preferredTimescale: 600))
-                try await waitUntilReady(metadataInput, writer: writer)
-                guard metadataAdaptor.append(AVTimedMetadataGroup(items: [item], timeRange: range)) else {
-                    throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "metadata append failed")
+            // Frames, with audio (which may run on past the last frame) and timed metadata interleaved. Timed
+            // metadata is one group per second over the audio length (one group for a clip of a second or less).
+            let frameCount = max(1, Int((options.seconds * Double(options.fps)).rounded()))
+            let audioFrameCount =
+                audioInput == nil
+                ? 0 : Int(((options.seconds + options.audioTailSeconds) * Double(options.fps)).rounded())
+            let timedSeconds = options.seconds + (audioInput == nil ? 0 : options.audioTailSeconds)
+            let groupCount = max(1, Int(timedSeconds.rounded(.up)))
+            var groupsWritten = 0
+            var audioSamplesWritten = 0
+            for frame in 0..<max(frameCount, audioFrameCount) {
+                if let metadataAdaptor, let metadataInput, groupsWritten < groupCount,
+                    Double(frame) / Double(options.fps) >= Double(groupsWritten)
+                {
+                    try await appendTimedGroup(
+                        groupsWritten, totalSeconds: timedSeconds, adaptor: metadataAdaptor, input: metadataInput,
+                        writer: writer)
+                    groupsWritten += 1
+                    if groupsWritten == groupCount { metadataInput.markAsFinished() }
+                }
+                if frame < frameCount {
+                    try await waitUntilReady(videoInput, writer: writer)
+                    guard let pool = adaptor.pixelBufferPool else {
+                        throw FixtureError.writerFailed("no pixel buffer pool")
+                    }
+                    var pixelBuffer: CVPixelBuffer?
+                    let cv = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer)
+                    guard cv == kCVReturnSuccess, let pixelBuffer else { throw FixtureError.pixelBufferFailed(cv) }
+                    fill(pixelBuffer, frame: frame, hlg: hlg)
+                    let pts = CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
+                    guard adaptor.append(pixelBuffer, withPresentationTime: pts) else {
+                        throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "video append failed")
+                    }
+                    if frame == frameCount - 1 { videoInput.markAsFinished() }
+                }
+                if let audioInput {
+                    try await appendAudio(
+                        frame: frame, fps: options.fps, input: audioInput, writer: writer,
+                        written: &audioSamplesWritten)
+                }
+            }
+            if let metadataAdaptor, let metadataInput, groupsWritten < groupCount {
+                for index in groupsWritten..<groupCount {
+                    try await appendTimedGroup(
+                        index, totalSeconds: timedSeconds, adaptor: metadataAdaptor, input: metadataInput,
+                        writer: writer)
                 }
                 metadataInput.markAsFinished()
             }
-
-            // Frames (and interleaved audio)
-            let frameCount = max(1, Int((options.seconds * Double(options.fps)).rounded()))
-            var audioSamplesWritten = 0
-            for frame in 0..<frameCount {
-                try await waitUntilReady(videoInput, writer: writer)
-                guard let pool = adaptor.pixelBufferPool else {
-                    throw FixtureError.writerFailed("no pixel buffer pool")
-                }
-                var pixelBuffer: CVPixelBuffer?
-                let cv = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer)
-                guard cv == kCVReturnSuccess, let pixelBuffer else { throw FixtureError.pixelBufferFailed(cv) }
-                fill(pixelBuffer, frame: frame, hlg: hlg)
-                let pts = CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
-                guard adaptor.append(pixelBuffer, withPresentationTime: pts) else {
-                    throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "video append failed")
-                }
-
-                if let audioInput {
-                    let target = (frame + 1) * sampleRate / options.fps
-                    let count = target - audioSamplesWritten
-                    if count > 0 {
-                        try await waitUntilReady(audioInput, writer: writer)
-                        let buffer = try makeAudioBuffer(startSample: audioSamplesWritten, count: count)
-                        guard audioInput.append(buffer) else {
-                            throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "audio append failed")
-                        }
-                        audioSamplesWritten = target
-                    }
-                }
-            }
-            videoInput.markAsFinished()
             audioInput?.markAsFinished()
 
             await writer.finishWriting()
@@ -215,6 +225,41 @@ public enum FixtureFactory {
     }
 
     // MARK: - Helpers
+
+    /// Appends timed-metadata group `index`, covering second `index` (clipped to `totalSeconds`).
+    private static func appendTimedGroup(
+        _ index: Int, totalSeconds: Double, adaptor: AVAssetWriterInputMetadataAdaptor, input: AVAssetWriterInput,
+        writer: AVAssetWriter
+    ) async throws {
+        let item = AVMutableMetadataItem()
+        item.identifier = AVMetadataIdentifier(rawValue: timedMetadataIdentifier)
+        item.dataType = kCMMetadataBaseDataType_UTF8 as String
+        item.value = "aarik-timed-\(index)" as NSString
+        let start = Double(index)
+        let end = min(start + 1, totalSeconds)
+        let range = CMTimeRange(
+            start: CMTime(seconds: start, preferredTimescale: 600),
+            end: CMTime(seconds: end, preferredTimescale: 600))
+        try await waitUntilReady(input, writer: writer)
+        guard adaptor.append(AVTimedMetadataGroup(items: [item], timeRange: range)) else {
+            throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "metadata append failed")
+        }
+    }
+
+    /// Appends audio up to the end of video frame `frame`.
+    private static func appendAudio(
+        frame: Int, fps: Int, input: AVAssetWriterInput, writer: AVAssetWriter, written: inout Int
+    ) async throws {
+        let target = (frame + 1) * sampleRate / fps
+        let count = target - written
+        guard count > 0 else { return }
+        try await waitUntilReady(input, writer: writer)
+        let buffer = try makeAudioBuffer(startSample: written, count: count)
+        guard input.append(buffer) else {
+            throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "audio append failed")
+        }
+        written = target
+    }
 
     private static func waitUntilReady(_ input: AVAssetWriterInput, writer: AVAssetWriter) async throws {
         while !input.isReadyForMoreMediaData {

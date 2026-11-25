@@ -86,4 +86,33 @@ import Testing
         #expect(getxattr(url.path, "com.aarik.test", &buf, 1, 0, 0) == 1)
         #expect(buf == Array("x".utf8))
     }
+
+    @Test func audioTailRunsPastVideoWithTimedMetadataSpanningIt() async throws {
+        var options = ClipOptions()
+        options.width = 640
+        options.height = 360
+        options.includeTimedMetadataTrack = true
+        options.audioTailSeconds = 3
+        let url = try await FixtureFactory.makeClip(options)
+        let asset = AVURLAsset(url: url)
+        func duration(_ type: AVMediaType) async throws -> Double {
+            let track = try #require(try await asset.loadTracks(withMediaType: type).first)
+            return try await track.load(.timeRange).duration.seconds
+        }
+        let video = try await duration(.video)
+        #expect(abs(video - 1) <= 0.05)
+        #expect(abs(try await duration(.audio) - (video + 3)) <= 0.05)
+        #expect(abs(try await duration(.metadata) - 4) <= 0.05)
+    }
+
+    @Test func timedMetadataTrackCanPrecedeAudio() async throws {
+        var options = ClipOptions()
+        options.width = 640
+        options.height = 360
+        options.includeTimedMetadataTrack = true
+        options.timedMetadataBeforeAudio = true
+        let url = try await FixtureFactory.makeClip(options)
+        let types = try await AVURLAsset(url: url).load(.tracks).map(\.mediaType)
+        #expect(types == [.video, .metadata, .audio])
+    }
 }

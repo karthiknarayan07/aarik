@@ -136,6 +136,20 @@ import Testing
         #expect(try Data(contentsOf: output) == existing)
     }
 
+    /// A file that appears at the output path after the pre-check (another job writing the same name) makes the
+    /// writer fail to start. That file is not this run's, so it must survive.
+    @Test(.timeLimit(.minutes(2))) func keepsOutputCreatedByOthersDuringRun() async throws {
+        let source = try await FixtureFactory.makeClip(clip())
+        let output = outputURL(next: source)
+        let other = Data("another job's output".utf8)
+        var downscaler = VideoDownscaler()
+        downscaler.beforeStartWriting = { url in try? other.write(to: url) }
+        await #expect(throws: DownscaleError.self) {
+            try await downscaler.downscale(source: source, output: output, spec: smallSpec) { _ in }
+        }
+        #expect(try Data(contentsOf: output) == other)
+    }
+
     @Test(.timeLimit(.minutes(2))) func cancelRemovesPartialOutput() async throws {
         let source = try await FixtureFactory.makeClip(clip { $0.seconds = 4 })
         let output = outputURL(next: source)
@@ -191,5 +205,23 @@ import Testing
             let value = try #require(sourceInventory[key]?.value)
             #expect(outputInventory[key]?.value == value, "\(key)")
         }
+    }
+
+    /// Regression: once video is finished, the passthrough drain must feed every track. Draining one track at a time
+    /// hangs: with the timed-metadata track first, its input runs ahead of the audio and stays not ready while the
+    /// audio is never fed. (With audio first, macOS 27.2 does not throttle audio against metadata, so no hang.)
+    @Test(.timeLimit(.minutes(2))) func audioTailWithTimedMetadataCompletes() async throws {
+        let source = try await FixtureFactory.makeClip(
+            clip {
+                $0.includeTimedMetadataTrack = true
+                $0.timedMetadataBeforeAudio = true
+                $0.audioTailSeconds = 10
+            })
+        let output = try await downscale(source, spec: smallSpec)
+        let video = try await duration(of: output, .video)
+        let audio = try await duration(of: output, .audio)
+        #expect(abs(audio - (video + 10)) <= 0.05, "audio \(audio) vs video \(video)")
+        let inventory = try await MediaInspector().inventory(of: output)
+        #expect(inventory["timed.mdta/com.aarik.test.timed"]?.value == "present")
     }
 }
