@@ -3,8 +3,8 @@ import AarikCore
 import CoreMedia
 import Foundation
 
-/// Re-encodes the primary video track at a smaller size (HEVC Main10, HDR and Dolby Vision kept) and passes audio,
-/// timed metadata, file-level metadata and file attributes through untouched.
+/// Re-encodes the primary video track at a smaller size (HEVC at the source bit depth, HDR and Dolby Vision kept) and
+/// passes audio, timed metadata, file-level metadata and file attributes through untouched.
 public struct VideoDownscaler: Sendable {
     public init() {}
 
@@ -27,13 +27,10 @@ public struct VideoDownscaler: Sendable {
             throw DownscaleError.sourceAlreadySmall
         }
 
-        let transfer = inventory["video.transferFunction"]?.value
-        let isDolbyVisionHLG =
-            inventory["hdr.dolbyVision"] != nil
-            && transfer == (kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String)
         let job = try await DownscaleJob(
             asset: asset, videoTrack: videoTrack, output: output, spec: spec,
-            preservesDolbyVision: isDolbyVisionHLG, progress: progress)
+            isTenBit: inventory["video.bitDepth"]?.value != "8",
+            preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, progress: progress)
         do {
             try await job.run()
             try FileAttributes.copy(from: source, to: output)
@@ -55,7 +52,6 @@ public struct VideoDownscaler: Sendable {
 /// One downscale run: reader → scaler → encoder → writer, with passthrough tracks interleaved by time.
 /// Used from a single task only.
 private final class DownscaleJob {
-    private static let pixelFormat = kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
     /// How far passthrough samples may run ahead of the latest video frame before the writer has to ask for them.
     private static let passthroughLead = CMTime(seconds: 1, preferredTimescale: 600)
 
@@ -68,6 +64,8 @@ private final class DownscaleJob {
     private let encoder: HEVCEncoder
     private let duration: Double
     private let progress: @Sendable (Double) -> Void
+    /// Decode and scale format: 10-bit for a 10-bit source, 8-bit for an 8-bit one.
+    private let pixelFormat: OSType
 
     private var limiter: FrameRateLimiter
     private var videoInput: AVAssetWriterInput?
@@ -76,9 +74,13 @@ private final class DownscaleJob {
     private var reported = 0.0
 
     init(
-        asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, spec: DownscaleSpec, preservesDolbyVision: Bool,
-        progress: @escaping @Sendable (Double) -> Void
+        asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, spec: DownscaleSpec, isTenBit: Bool,
+        preservesDolbyVision: Bool, progress: @escaping @Sendable (Double) -> Void
     ) async throws {
+        let pixelFormat =
+            isTenBit
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        self.pixelFormat = pixelFormat
         let (naturalSize, transform, descriptions, frameRate) = try await videoTrack.load(
             .naturalSize, .preferredTransform, .formatDescriptions, .nominalFrameRate)
         let size = spec.outputSize(forNaturalSize: naturalSize)
@@ -89,12 +91,13 @@ private final class DownscaleJob {
         encoder = try HEVCEncoder(
             .init(
                 width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
+                isTenBit: isTenBit,
                 expectedFrameRate: frameRate > 0 ? min(Double(frameRate), spec.maxFrameRate ?? .infinity) : nil,
                 colorPrimaries: color(kCMFormatDescriptionExtension_ColorPrimaries),
                 transferFunction: color(kCMFormatDescriptionExtension_TransferFunction),
                 matrix: color(kCMFormatDescriptionExtension_YCbCrMatrix),
                 preservesDolbyVision: preservesDolbyVision))
-        scaler = try FrameScaler(width: Int(size.width), height: Int(size.height), pixelFormat: Self.pixelFormat)
+        scaler = try FrameScaler(width: Int(size.width), height: Int(size.height), pixelFormat: pixelFormat)
         self.transform = transform
         self.progress = progress
         limiter = FrameRateLimiter(maxFrameRate: spec.maxFrameRate)
@@ -103,7 +106,7 @@ private final class DownscaleJob {
         reader = try AVAssetReader(asset: asset)
         videoOutput = AVAssetReaderTrackOutput(
             track: videoTrack,
-            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Self.pixelFormat])
+            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat])
         videoOutput.alwaysCopiesSampleData = false
         reader.add(videoOutput)
 

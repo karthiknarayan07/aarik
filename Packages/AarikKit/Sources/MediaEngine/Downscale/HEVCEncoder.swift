@@ -4,20 +4,23 @@ import Foundation
 import Synchronization
 import VideoToolbox
 
-/// HEVC Main10 encoding with a `VTCompressionSession`, so any VideoToolbox property can be set.
+/// HEVC Main or Main10 encoding with a `VTCompressionSession`, so any VideoToolbox property can be set.
 /// Compressed frames are collected in decode order and handed out with `takeEncoded()`.
 final class HEVCEncoder {
     struct Configuration {
         var width: Int
         var height: Int
         var averageBitRate: Int
+        /// Main10 for a 10-bit source, Main for an 8-bit one, so the bit depth is kept.
+        var isTenBit: Bool
         var expectedFrameRate: Double?
         /// Raw `kCMFormatDescriptionExtension_*` values copied from the source format description.
         var colorPrimaries: CFString?
         var transferFunction: CFString?
         var matrix: CFString?
-        /// Dolby Vision route A: `HDRMetadataInsertionMode = Auto` and `PreserveDynamicHDRMetadata = true`.
-        /// Set only for a Dolby Vision HLG source.
+        /// Mirrors the source's Dolby Vision presence. True (route A): `HDRMetadataInsertionMode = Auto` and
+        /// `PreserveDynamicHDRMetadata = true`. False: `HDRMetadataInsertionMode = None`, so a source without Dolby
+        /// Vision does not gain it (the encoder default is `Auto`).
         var preservesDolbyVision: Bool
     }
 
@@ -36,7 +39,10 @@ final class HEVCEncoder {
         self.session = session
 
         var properties: [(CFString, CFTypeRef)] = [
-            (kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_HEVC_Main10_AutoLevel),
+            (
+                kVTCompressionPropertyKey_ProfileLevel,
+                configuration.isTenBit ? kVTProfileLevel_HEVC_Main10_AutoLevel : kVTProfileLevel_HEVC_Main_AutoLevel
+            ),
             (kVTCompressionPropertyKey_AverageBitRate, configuration.averageBitRate as CFNumber),
             (kVTCompressionPropertyKey_RealTime, kCFBooleanFalse),
         ]
@@ -52,12 +58,21 @@ final class HEVCEncoder {
         if let value = configuration.matrix {
             properties.append((kVTCompressionPropertyKey_YCbCrMatrix, value))
         }
+        // Optional properties: a session that reports one unsupported goes on without it.
+        var optional: Set<String> = []
         if configuration.preservesDolbyVision {
             properties.append((kVTCompressionPropertyKey_HDRMetadataInsertionMode, kVTHDRMetadataInsertionMode_Auto))
             properties.append((kVTCompressionPropertyKey_PreserveDynamicHDRMetadata, kCFBooleanTrue))
+        } else {
+            // An 8-bit or SDR encode inserts no Dolby Vision anyway, so "unsupported" is ignored here. The SDR test
+            // covers this path; HLG without Dolby Vision is not testable on macOS 27.2, where every synthetic HLG
+            // clip carries Dolby Vision (the encoder adds a dvvC atom on its own).
+            properties.append((kVTCompressionPropertyKey_HDRMetadataInsertionMode, kVTHDRMetadataInsertionMode_None))
+            optional.insert(kVTCompressionPropertyKey_HDRMetadataInsertionMode as String)
         }
         for (key, value) in properties {
             let status = VTSessionSetProperty(session, key: key, value: value)
+            if status == kVTPropertyNotSupportedErr, optional.contains(key as String) { continue }
             guard status == noErr else {
                 VTCompressionSessionInvalidate(session)
                 throw DownscaleError.encoderFailed("VTSessionSetProperty \(key) failed: \(status)")

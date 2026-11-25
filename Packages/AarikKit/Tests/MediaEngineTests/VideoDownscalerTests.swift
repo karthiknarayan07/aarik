@@ -77,6 +77,11 @@ import Testing
         let transfer = try #require(sourceInventory["video.transferFunction"]?.value)
         #expect(transfer == (kCMFormatDescriptionTransferFunction_ITU_R_709_2 as String))
         #expect(outputInventory["video.transferFunction"]?.value == transfer)
+        #expect(sourceInventory["video.bitDepth"]?.value == "8")
+        #expect(outputInventory["video.bitDepth"]?.value == "8")
+        let report = MetadataDiff.report(source: sourceInventory, output: outputInventory)
+        #expect(report.lost.isEmpty, "lost: \(report.lost.map(\.key))")
+        #expect(Set(report.changed.map(\.key)).isSubset(of: ["video.dimensions"]), "changed: \(report.changed)")
     }
 
     @Test(.timeLimit(.minutes(2))) func unknownQuickTimeKeysSurvive() async throws {
