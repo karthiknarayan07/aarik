@@ -40,17 +40,18 @@ public final class AssistantSearch {
     /// Translates `text` and applies the result to `browser`. `shrunkIDs` are the items with a finished
     /// conversion, hidden by "not yet shrunk"; `sidebarBadge` is the media type the sidebar page already imposes.
     public func submit(
-        _ text: String, browser: LibraryBrowser, sidebarBadge: MediaBadge?, shrunkIDs: Set<UUID>,
+        _ text: String, browser: LibraryBrowser, sidebarBadge: MediaBadge?, shrunkIDs: Set<UUID>?,
         today: Date = .now
     ) async {
         guard isVisible else { return }
         generation += 1
         let mine = generation
         isWorking = true
-        let result = await translator.translate(text, today: today)
+        var result = await translator.translate(text, today: today)
         guard mine == generation else { return }
         isWorking = false
-        guard isVisible else { return }
+        // A cancelled request changes nothing: the text, tokens and results stay as they are.
+        guard result.failure != .cancelled, isVisible else { return }
 
         if result.failure != nil || (result.filters.isEmpty && result.dropped.isEmpty) {
             // Nothing usable from the model: a plain name search, as if the assistant didn't exist.
@@ -62,7 +63,17 @@ public final class AssistantSearch {
             note = result.dropped.joined(separator: " ")
             return
         }
-        self.shrunkIDs = shrunkIDs
+        if shrunkIDs == nil, result.filters.notYetShrunk {
+            // Videos in Photos have no finished conversions to tell apart yet.
+            result.filters.notYetShrunk = false
+            result.dropped.append("Ignored \u{201C}not yet shrunk\u{201D}: it isn\u{2019}t available for these videos.")
+            result.echo = result.filters.echo
+        }
+        guard !result.filters.isEmpty else {
+            note = result.dropped.joined(separator: " ")
+            return
+        }
+        self.shrunkIDs = shrunkIDs ?? []
         filters = result.filters
         apply(browser: browser, sidebarBadge: sidebarBadge)
         note = ([result.echo] + result.dropped).joined(separator: " ")

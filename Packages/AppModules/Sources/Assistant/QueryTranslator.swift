@@ -1,6 +1,7 @@
 import Foundation
 import FoundationModels
 import LocalLibrary
+import NaturalLanguage
 
 /// What the model fills in for a plain-words query. Every field maps onto one of the app's own filters, and the
 /// translator checks each value: anything the app doesn't have is dropped with a note.
@@ -137,6 +138,8 @@ public struct QueryTranslator: Sendable {
             return Self.map(query, text: input, today: today, calendar: calendar)
         } catch let error as AssistantError {
             return TranslatedQuery(failure: error)
+        } catch is CancellationError {
+            return TranslatedQuery(failure: .cancelled)
         } catch {
             return TranslatedQuery(failure: .failed)
         }
@@ -190,12 +193,15 @@ public struct QueryTranslator: Sendable {
         mapLength(query, into: &filters.quality, notes: &notes)
         mapCodecsAndRanges(query, into: &filters.quality, notes: &notes)
         mapDates(query, into: &filters, notes: &notes, calendar: calendar)
-        if !hasTemporalCue(text), let range = filters.captureRange,
+        if isEnglish(text, locale: calendar.locale ?? .current), !hasTemporalCue(text),
+            let range = filters.captureRange,
             range.contains(today) || calendar.isDate(range.upperBound, inSameDayAs: today)
         {
-            // The small on-device model sometimes answers with today's date when none was asked for.
+            // The small on-device model sometimes answers with today's date when none was asked for. The check
+            // reads English time words, so it only runs for English requests; other languages keep the range.
             filters.since = nil
             filters.until = nil
+            notes.append("Ignored a date range that wasn\u{2019}t in your request.")
         }
         filters.notYetShrunk = query.notYetShrunk
         filters.nameText = clean(query.nameText, limit: maximumNameLength)
@@ -206,8 +212,22 @@ public struct QueryTranslator: Sendable {
         "today", "yesterday", "week", "month", "year", "summer", "winter", "spring", "autumn", "fall", "last",
         "this", "past", "since", "before", "after", "ago", "recent", "january", "february", "march", "april", "may",
         "june", "july", "august", "september", "october", "november", "december", "jan", "feb", "mar", "apr", "jun",
-        "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+        "jul", "aug", "sep", "sept", "oct", "nov", "dec", "tonight", "recently", "next", "weekend", "latest",
+        "newest", "earliest", "oldest", "until", "during", "between", "earlier", "decade", "weeks", "months", "years",
+        "days", "day", "morning", "night", "midnight",
     ]
+
+    /// Whether the request is written in English: the recognized language, or the locale's when the text is too
+    /// short to tell.
+    static func isEnglish(_ text: String, locale: Locale) -> Bool {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        // Short text such as "4K" is a guess for the recognizer; then the locale decides.
+        if let best = recognizer.languageHypotheses(withMaximum: 1).first, best.value >= 0.6 {
+            return best.key == .english
+        }
+        return locale.language.languageCode?.identifier == "en"
+    }
 
     /// Whether the request itself speaks of a time: a year, a month, a season or a relative phrase.
     static func hasTemporalCue(_ text: String) -> Bool {

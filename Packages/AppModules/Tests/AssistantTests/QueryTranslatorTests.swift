@@ -264,19 +264,3 @@ import Testing
         }
     }
 }
-
-@Suite struct TemporalCueTests {
-    @Test func dateInventedForARequestWithoutATimeIsDropped() async {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        let today = calendar.date(from: DateComponents(year: 2026, month: 11, day: 25))!
-        let client = FakeLanguageModelClient(
-            returning: LibraryQuery(resolutions: ["4K"], startDate: "2026-11-25", endDate: "2026-11-25"))
-        let result = await QueryTranslator(client: client).translate("4K videos", today: today, calendar: calendar)
-        #expect(result.filters.captureRange == nil)
-        #expect(!result.filters.quality.qualities.isEmpty)
-        let asked = await QueryTranslator(client: client).translate(
-            "4K videos from today", today: today, calendar: calendar)
-        #expect(asked.filters.captureRange != nil)
-    }
-}

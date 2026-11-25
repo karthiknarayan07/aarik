@@ -102,9 +102,18 @@ public struct OutcomeExplainer: Sendable {
         return try? JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
     }
 
-    /// Takes file names and paths out of text that is about to be sent.
+    /// Takes file names and paths out of text that is about to be sent. Whole names and paths go first; then
+    /// names without their extension, only as whole words of four or more letters (so "video" in "Video track
+    /// was kept" stays unless the file is called exactly that); then anything that looks like a path or a movie
+    /// file name. Text such as "H.264/AAC" is left alone.
     private struct Redactor {
         let literals: [String]
+        let stems: [NSRegularExpression]
+
+        static let pathPattern = try? NSRegularExpression(
+            pattern: #"(?<![\w.])/(?:[^\s/]+/)*[^\s/]*"#)
+        static let moviePattern = try? NSRegularExpression(
+            pattern: #"\S+\.(?:mov|mp4|m4v|hevc|mkv|avi)\b"#, options: .caseInsensitive)
 
         init(job: Job, outcome: JobOutcome?) {
             var urls = [job.source, job.sourceUsed]
@@ -116,19 +125,26 @@ public struct OutcomeExplainer: Sendable {
             for url in urls {
                 literals.append(url.path)
                 literals.append(url.deletingLastPathComponent().path)
+                literals.append(url.lastPathComponent)
             }
-            for url in urls { literals.append(url.lastPathComponent) }
-            for url in urls { literals.append(url.deletingPathExtension().lastPathComponent) }
             self.literals = Array(Set(literals.filter { $0.count > 1 })).sorted { $0.count > $1.count }
+            let stems = Set(urls.map { $0.deletingPathExtension().lastPathComponent }.filter { $0.count >= 4 })
+            self.stems = stems.sorted { $0.count > $1.count }.compactMap {
+                try? NSRegularExpression(
+                    pattern: #"(?<!\w)"# + NSRegularExpression.escapedPattern(for: $0) + #"(?!\w)"#,
+                    options: .caseInsensitive)
+            }
         }
 
         func callAsFunction(_ text: String) -> String {
             var result = text
             for literal in literals { result = result.replacingOccurrences(of: literal, with: "the file") }
-            result = result.replacingOccurrences(
-                of: #"\S*/\S+|\S+\.(mov|mp4|m4v|hevc|mkv|avi)\b"#, with: "the file",
-                options: [.regularExpression, .caseInsensitive])
-            return result
+            for expression in stems + [Self.moviePattern, Self.pathPattern].compactMap({ $0 }) {
+                result = expression.stringByReplacingMatches(
+                    in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "the file")
+            }
+            // Free text is capped, so a long error message can't carry much.
+            return String(result.prefix(300))
         }
     }
 
@@ -157,10 +173,14 @@ public final class OutcomeExplanations {
         let text: String
     }
 
+    private struct Running {
+        let prompt: String
+        let task: Task<String, Never>
+    }
+
     private let explainer: OutcomeExplainer
     private var entries: [UUID: Entry] = [:]
-    /// Jobs being explained right now.
-    public private(set) var inFlight: Set<UUID> = []
+    @ObservationIgnored private var running: [UUID: Running] = [:]
 
     public init(explainer: OutcomeExplainer) {
         self.explainer = explainer
@@ -169,13 +189,22 @@ public final class OutcomeExplanations {
     /// The remembered explanation for a job, if any.
     public func cached(for id: UUID) -> String? { entries[id]?.text }
 
+    /// Two asks for the same job at once (the row's popover and the report's) share one model call.
     public func explain(job: Job, outcome: JobOutcome?) async -> String {
         let prompt = OutcomeExplainer.prompt(job: job, outcome: outcome, report: outcome?.report)
         if let entry = entries[job.id], entry.prompt == prompt { return entry.text }
-        inFlight.insert(job.id)
-        defer { inFlight.remove(job.id) }
-        let explanation = await explainer.explanation(job: job, outcome: outcome, report: outcome?.report)
-        if explanation.isGenerated { entries[job.id] = Entry(prompt: prompt, text: explanation.text) }
-        return explanation.text
+        if let current = running[job.id], current.prompt == prompt { return await current.task.value }
+        let explainer = self.explainer
+        let id = job.id
+        let task = Task { [weak self] () -> String in
+            let explanation = await explainer.explanation(job: job, outcome: outcome, report: outcome?.report)
+            if let self {
+                if explanation.isGenerated { entries[id] = Entry(prompt: prompt, text: explanation.text) }
+                running[id] = nil
+            }
+            return explanation.text
+        }
+        running[id] = Running(prompt: prompt, task: task)
+        return await task.value
     }
 }

@@ -64,3 +64,37 @@ func hangForever() async throws -> Any {
     await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
     return ()
 }
+
+/// Records whether a cooperative request saw its cancellation.
+final class CancellationProbe: Sendable {
+    private let state = Mutex((started: false, cancelled: false))
+
+    var started: Bool { state.withLock(\.started) }
+    var wasCancelled: Bool { state.withLock(\.cancelled) }
+
+    /// Waits until cancelled, checking `Task.isCancelled` and `Task.checkCancellation()` as a well-behaved
+    /// model call does, and throws what it was cancelled with.
+    func waitUntilCancelled() async throws -> Any {
+        state.withLock { $0.started = true }
+        do {
+            while true {
+                if Task.isCancelled { throw CancellationError() }
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(5))
+            }
+        } catch {
+            state.withLock { $0.cancelled = true }
+            throw error
+        }
+    }
+
+    /// Polls until the request saw its cancellation, or `limit` passes.
+    func waitForCancellation(within limit: Duration = .seconds(2)) async -> Bool {
+        let deadline = ContinuousClock.now + limit
+        while ContinuousClock.now < deadline {
+            if wasCancelled { return true }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return wasCancelled
+    }
+}

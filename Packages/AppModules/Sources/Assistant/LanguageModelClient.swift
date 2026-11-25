@@ -7,6 +7,8 @@ public enum AssistantError: Error, Sendable, Equatable {
     case unavailable
     case emptyInput
     case timedOut
+    /// The caller gave up (for example the user typed again). Not a failure of the model.
+    case cancelled
     case guardrail
     case contextTooLong
     case rateLimited

@@ -66,7 +66,7 @@ private struct WhyText: View {
             }
         }
         .font(.callout)
-        .task(id: job.id) {
+        .task(id: job) {
             text = await assistant.explanations.explain(job: job, outcome: outcome)
         }
     }

@@ -10,7 +10,7 @@ extension View {
     /// unavailable this is the plain name search and nothing else.
     func assistantSearchable(
         search: AssistantSearch, browser: LibraryBrowser, sidebarBadge: MediaBadge?,
-        shrunkIDs: @escaping @MainActor () -> Set<UUID>
+        shrunkIDs: (@MainActor () -> Set<UUID>)?
     ) -> some View {
         modifier(
             AssistantSearchable(search: search, browser: browser, sidebarBadge: sidebarBadge, shrunkIDs: shrunkIDs))
@@ -21,7 +21,7 @@ private struct AssistantSearchable: ViewModifier {
     let search: AssistantSearch
     @Bindable var browser: LibraryBrowser
     let sidebarBadge: MediaBadge?
-    let shrunkIDs: @MainActor () -> Set<UUID>
+    let shrunkIDs: (@MainActor () -> Set<UUID>)?
 
     private var tokens: Binding<[FilterToken]> {
         Binding(
@@ -40,10 +40,10 @@ private struct AssistantSearchable: ViewModifier {
             .toolbar {
                 if search.isVisible {
                     ToolbarItem {
-                        Button("Ask in plain words", systemImage: "sparkles") { ask() }
+                        Button("Ask in Plain Words", systemImage: "sparkles") { ask() }
                             .disabled(browser.search.trimmingCharacters(in: .whitespaces).isEmpty || search.isWorking)
                             .help("Turn what you typed into filters, on this Mac")
-                            .accessibilityLabel("Ask in plain words")
+                            .accessibilityLabel("Ask in Plain Words")
                     }
                 }
             }
@@ -66,7 +66,7 @@ private struct AssistantSearchable: ViewModifier {
     private func ask() {
         let text = browser.search
         let sidebarBadge = sidebarBadge
-        let shrunk = shrunkIDs()
+        let shrunk = shrunkIDs?()
         Task { await search.submit(text, browser: browser, sidebarBadge: sidebarBadge, shrunkIDs: shrunk) }
     }
 }
