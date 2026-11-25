@@ -61,13 +61,16 @@ enum AppSettings {
         return location
     }
 
+    /// Never mounts a volume or shows UI: a folder on a disconnected drive just doesn't resolve.
     static func resolve(_ bookmark: Data) -> URL? {
         var stale = false
         return
             (try? URL(
-                resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil,
+                resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutMounting, .withoutUI],
+                relativeTo: nil, bookmarkDataIsStale: &stale))
+            ?? (try? URL(
+                resolvingBookmarkData: bookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
                 bookmarkDataIsStale: &stale))
-            ?? (try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale))
     }
 }
 

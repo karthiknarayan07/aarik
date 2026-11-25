@@ -1,6 +1,6 @@
 # Real iPhone clips for the Dolby Vision gate
 
-Aarik's first release depends on one question: does shrinking a 4K iPhone clip to 1080p keep genuine Dolby Vision
+The app's first release depends on one question: does shrinking a 4K iPhone clip to 1080p keep genuine Dolby Vision
 and the iPhone metadata? Synthetic clips can't answer that, so the gate needs a few short clips from a real iPhone.
 
 ## What to record
@@ -24,10 +24,10 @@ pixels, or half the short side for clips that are 720 pixels or smaller), so non
 | `slomo.mov` | Slo-mo video (for example 1080p at 240 fps). |
 | `live-photo.mov` | The video part of a Live Photo (see below on how to get it). |
 | `sdr.mov` | A normal clip with HDR video turned off (Settings > Camera > Record Video > HDR Video off). |
-| `spatial-video.mov` | Spatial Video (iPhone 15 Pro or later, Spatial Video on). Aarik should refuse this one (see below). |
+| `spatial-video.mov` | Spatial Video (iPhone 15 Pro or later, Spatial Video on). The app should refuse this one (see below). |
 
-A spatial video stores two views, one per eye, in one track. Aarik's encoder writes a single view, so shrinking it
-would silently drop one eye and leave a flat video. Aarik refuses spatial video instead, and the test checks that.
+A spatial video stores two views, one per eye, in one track. The app's encoder writes a single view, so shrinking it
+would silently drop one eye and leave a flat video. The app refuses spatial video instead, and the test checks that.
 
 `Fixtures/iphone/` is git-ignored because the clips contain your location. They will never be committed. Don't
 move them anywhere else in the repo.

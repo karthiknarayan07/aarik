@@ -8,12 +8,48 @@ import SwiftUI
 extension Job {
     var displayName: String { source.lastPathComponent }
 
+    private var downscaleSettings: DownscaleJobSettings? {
+        guard toolID == DownscaleTool.toolID else { return nil }
+        return try? JSONDecoder().decode(DownscaleJobSettings.self, from: settings)
+    }
+
     /// "Balanced", "Custom"; nil for a job of another tool.
     var presetLabel: String? {
-        guard toolID == DownscaleTool.toolID,
-            let settings = try? JSONDecoder().decode(DownscaleJobSettings.self, from: settings)
-        else { return nil }
-        return settings.custom == nil ? settings.preset.displayName : "Custom"
+        downscaleSettings.map { $0.custom == nil ? $0.preset.displayName : "Custom" }
+    }
+
+    /// What the job was predicted to lose when it was added; nil when unknown (an older job, another tool).
+    var predictedLost: [String]? { downscaleSettings?.predictedLost }
+}
+
+/// **All kept** or **N will be lost** for a waiting job; click for what will be lost.
+struct PredictedLossBadge: View {
+    let lost: [String]
+    @State private var isShowingDetails = false
+
+    private var title: String { lost.isEmpty ? "All kept" : "\(lost.count) will be lost" }
+
+    var body: some View {
+        Button {
+            isShowingDetails.toggle()
+        } label: {
+            Label(title, systemImage: lost.isEmpty ? "checkmark.circle" : "exclamationmark.triangle")
+                .foregroundStyle(lost.isEmpty ? Color.secondary : Color.orange)
+        }
+        .buttonStyle(.borderless)
+        .disabled(lost.isEmpty)
+        .help(lost.isEmpty ? "All metadata is kept" : "Show what will be lost")
+        .accessibilityLabel(lost.isEmpty ? "All metadata kept" : "\(title). Show what will be lost")
+        .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(lost, id: \.self) { name in
+                    Label("\(name) is lost", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
+            }
+            .font(.callout)
+            .padding()
+        }
     }
 }
 

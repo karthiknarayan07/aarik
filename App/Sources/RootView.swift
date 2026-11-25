@@ -5,11 +5,19 @@ import UniformTypeIdentifiers
 struct RootView: View {
     @Bindable var model: AppModel
 
-    private var queueErrorShown: Binding<Bool> {
+    private var alertShown: Binding<Bool> {
         Binding {
-            model.queueError != nil
+            model.alert != nil
         } set: {
-            if !$0 { model.queueError = nil }
+            if !$0 { model.alert = nil }
+        }
+    }
+
+    private var lossReviewShown: Binding<Bool> {
+        Binding {
+            model.lossReview != nil
+        } set: {
+            if !$0 { model.lossReview = nil }
         }
     }
 
@@ -57,10 +65,21 @@ struct RootView: View {
         } message: {
             Text("The original goes to the Trash after the smaller copy is verified.")
         }
-        .alert("Couldn't add to the queue", isPresented: queueErrorShown) {
+        .alert(model.alert?.title ?? "", isPresented: alertShown, presenting: model.alert) { _ in
             Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.queueError ?? "")
+        } message: { alert in
+            Text(alert.message)
+        }
+        .sheet(isPresented: lossReviewShown) {
+            if let review = model.lossReview {
+                LossConfirmationSheet(
+                    review: Binding {
+                        model.lossReview ?? review
+                    } set: {
+                        model.lossReview = $0
+                    },
+                    cancel: { model.lossReview = nil }, convert: model.confirmLossReview)
+            }
         }
     }
 }

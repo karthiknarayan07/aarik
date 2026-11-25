@@ -62,3 +62,28 @@ extension LibraryItem {
         InspectorSource(byteSize: byteSize, inventory: inventory, isAvailable: isAvailable)
     }
 }
+
+extension AppModel {
+    /// Whether Remove from library has anything to remove: visible selected items on a library screen.
+    var canRemoveSelectionFromLibrary: Bool {
+        selection?.showsLibrary == true && !selectedItems.isEmpty
+    }
+
+    /// Removes the visible selected items from the library. The files themselves are never touched.
+    func removeSelectionFromLibrary() {
+        guard canRemoveSelectionFromLibrary else { return }
+        removeFromLibrary(Set(selectedItems.map(\.id)))
+    }
+
+    /// From a tile's context menu: the visible selection when the tile is part of it, else just that tile.
+    func removeFromLibrary(clicked item: LibraryItem) {
+        let selected = Set(selectedItems.map(\.id))
+        removeFromLibrary(selected.contains(item.id) ? selected : [item.id])
+    }
+
+    private func removeFromLibrary(_ ids: Set<UUID>) {
+        library.remove(ids)
+        browser.selection.subtract(ids)
+        if let url = quickLookURL, !library.items.contains(where: { $0.url == url }) { quickLookURL = nil }
+    }
+}

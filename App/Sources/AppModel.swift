@@ -37,7 +37,10 @@ final class AppModel {
     var isConfirmingReplace = false
     /// The first Replace in a session asks for confirmation; later ones don't.
     var hasConfirmedReplace = false
-    var queueError: String?
+    /// Videos that would lose metadata, waiting for the user's decision before they are added (spec 8.4).
+    var lossReview: LossReview?
+    /// A message for the user: something couldn't be added, was already queued, or the saved queue was unreadable.
+    var alert: AppAlert?
 
     let library: LocalLibrary
     /// Grouping, sort, search, filter and selection for the grid, with cached sections and savings.
@@ -54,6 +57,9 @@ final class AppModel {
     @ObservationIgnored var lastQueueCommand: Task<Void, Never>?
     @ObservationIgnored var runTracker = QueueRunTracker()
     @ObservationIgnored let notifier = QueueNotifier()
+    /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
+    /// with the jobs finished in earlier sessions.
+    @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
 
     init(directory: URL = AppModel.supportDirectory(), defaults: UserDefaults = .standard) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -93,4 +99,11 @@ final class AppModel {
         library.add(urls)
         selection = .localFiles
     }
+}
+
+/// A titled message shown in an alert.
+struct AppAlert: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let message: String
 }

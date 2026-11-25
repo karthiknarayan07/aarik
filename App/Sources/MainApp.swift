@@ -21,7 +21,7 @@ struct MainApp: App {
     }
 }
 
-/// File → Add files… (⌘O); Queue → Add to queue (⌘⏎) and Pause or Resume queue (⌘.).
+/// File → Add files… (⌘O); Edit → Remove from library; Queue → Add to queue (⌘⏎) and Pause or Resume queue (⌘.).
 private struct LibraryCommands: Commands {
     let model: AppModel
 
@@ -32,6 +32,11 @@ private struct LibraryCommands: Commands {
                 model.isImporterPresented = true
             }
             .keyboardShortcut("o")
+        }
+        CommandGroup(after: .pasteboard) {
+            // Only the library entries go; Delete in the grid does the same.
+            Button("Remove from library") { model.removeSelectionFromLibrary() }
+                .disabled(!model.canRemoveSelectionFromLibrary)
         }
         CommandMenu("Queue") {
             Button("Add to queue") { model.requestAddSelectionToQueue() }

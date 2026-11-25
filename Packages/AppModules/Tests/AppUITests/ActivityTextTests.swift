@@ -30,3 +30,15 @@ private func outcome(before: Int64, after: Int64) -> JobOutcome {
         ActivityText.notificationBody(QueueRunSummary(converted: 0, savedBytes: 0, keptAsIs: 1, failed: 0))
             == "1 video kept as is")
 }
+
+@Test func addNoticeSaysWhatWasSkipped() {
+    #expect(ActivityText.addNotice(alreadyQueued: 0, unreadable: 0) == nil)
+    #expect(ActivityText.addNotice(alreadyQueued: 1, unreadable: 0) == "1 video is already in the queue.")
+    #expect(ActivityText.addNotice(alreadyQueued: 3, unreadable: 0) == "3 videos are already in the queue.")
+    #expect(
+        ActivityText.addNotice(alreadyQueued: 2, unreadable: 1)
+            == "2 videos are already in the queue. 1 video couldn't be added because it's missing or can't be read.")
+    #expect(
+        ActivityText.addNotice(alreadyQueued: 0, unreadable: 2)
+            == "2 videos couldn't be added because they're missing or can't be read.")
+}

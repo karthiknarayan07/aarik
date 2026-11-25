@@ -31,6 +31,21 @@ public enum ActivityText {
         return parts.joined(separator: " · ")
     }
 
+    /// What adding to the queue skipped, or nil when it skipped nothing: "2 videos are already in the queue."
+    /// and "1 video couldn't be added because it's missing or can't be read."
+    public static func addNotice(alreadyQueued: Int, unreadable: Int) -> String? {
+        var sentences: [String] = []
+        if alreadyQueued > 0 {
+            sentences.append("\(videos(alreadyQueued)) \(alreadyQueued == 1 ? "is" : "are") already in the queue.")
+        }
+        if unreadable > 0 {
+            sentences.append(
+                "\(videos(unreadable)) couldn't be added because \(unreadable == 1 ? "it's" : "they're") missing or "
+                    + "can't be read.")
+        }
+        return sentences.isEmpty ? nil : sentences.joined(separator: " ")
+    }
+
     /// "1 video", "3 videos"
     public static func videos(_ count: Int) -> String {
         count == 1 ? "1 video" : "\(count) videos"

@@ -8,6 +8,10 @@ struct AdvancedSettingsView: View {
     /// The decision for the one selected video; nil for several.
     let decision: PlanDecision?
     let byteSize: Int64
+    /// Some selected video is slo-mo, whose frame rate is always kept.
+    var locksFrameRate = false
+    /// More than one video is selected.
+    var isMultiple = false
 
     @State private var isExpanded = false
 
@@ -27,6 +31,13 @@ struct AdvancedSettingsView: View {
                 Picker("Frame rate", selection: $options.frameRate) {
                     ForEach(AdvancedOptions.FrameRate.allCases) { Text($0.title).tag($0) }
                 }
+                .disabled(locksFrameRate)
+                .help(locksFrameRate ? Self.sloMoNote : "Lower the frame rate; it is never raised")
+                if locksFrameRate, isMultiple {
+                    Text(Self.sloMoNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Picker("Format", selection: $options.codec) {
                     ForEach(VideoCodec.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
@@ -39,6 +50,8 @@ struct AdvancedSettingsView: View {
         }
         .accessibilityLabel("Advanced settings")
     }
+
+    static let sloMoNote = "Slo-mo clips keep their frame rate"
 
     @ViewBuilder private func verdict(_ decision: PlanDecision) -> some View {
         switch decision {

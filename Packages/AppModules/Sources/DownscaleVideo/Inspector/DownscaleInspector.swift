@@ -67,7 +67,10 @@ public struct DownscaleInspector: View {
             }
         }
         Section {
-            AdvancedSettingsView(options: $advanced, decision: decision, byteSize: single?.byteSize ?? 0)
+            AdvancedSettingsView(
+                options: $advanced, decision: decision, byteSize: single?.byteSize ?? 0,
+                locksFrameRate: sources.contains { DownscalePlanner.locksFrameRate($0.inventory) },
+                isMultiple: sources.count > 1)
         }
         if let decision {
             Section("What happens to metadata") {
@@ -107,10 +110,20 @@ private struct SelectionTotals: View {
         let available = sources.filter(\.isAvailable).map(\.savings)
         let total = available.reduce(Int64(0)) { $0 + $1.byteSize }
         let freed = SavingsCalculator.couldFreeBytes(for: available, preset: preset, custom: custom)
+        let losing = LossCheck.losses(
+            for: available.enumerated().map { (id: $0.offset, source: $0.element) }, preset: preset, custom: custom
+        ).count
         let missing = sources.count - available.count
         LabeledContent(available.count == 1 ? "1 video" : "\(available.count) videos", value: ByteFormat.string(total))
         LabeledContent("Could free about", value: ByteFormat.string(freed))
             .foregroundStyle(.green)
+        if losing > 0 {
+            Label(
+                losing == 1 ? "1 video will lose metadata" : "\(losing) videos will lose metadata",
+                systemImage: "exclamationmark.triangle"
+            )
+            .foregroundStyle(.orange)
+        }
         if missing > 0 {
             Label(
                 missing == 1 ? "1 missing file is skipped" : "\(missing) missing files are skipped",

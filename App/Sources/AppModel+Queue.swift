@@ -16,6 +16,9 @@ extension AppModel {
                 self?.receive(jobs)
             }
         }
+        if let error = await queue.loadError {
+            alert = AppAlert(title: "Couldn't read the queue", message: error)
+        }
         // A queue created paused (auto-start off) waits for Resume.
         if !isQueuePaused { await queue.resume() }
     }
@@ -36,6 +39,25 @@ extension AppModel {
         if let summary = runTracker.observe(jobs) {
             notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))
         }
+        reconcileReplacedFiles(jobs)
+    }
+
+    /// A Replace put a smaller file where a library item was: update that item in place. Jobs finished before
+    /// this session are taken as already reflected.
+    private func reconcileReplacedFiles(_ jobs: [Job]) {
+        let replaced = jobs.compactMap { job -> (id: UUID, source: URL, output: URL)? in
+            guard case .completed(let outcome) = job.state, outcome.replacedOriginal else { return nil }
+            return (job.id, job.source, outcome.output)
+        }
+        guard var handled = reconciledReplaceIDs else {
+            reconciledReplaceIDs = Set(replaced.map(\.id))
+            return
+        }
+        let library = self.library
+        for job in replaced where handled.insert(job.id).inserted {
+            Task { await library.fileWasReplaced(at: job.source, by: job.output) }
+        }
+        reconciledReplaceIDs = handled
     }
 
     // MARK: - Lists
@@ -68,7 +90,7 @@ extension AppModel {
     // MARK: - Queue commands
 
     /// Sends a command to the queue after the previous one.
-    private func send(_ command: @escaping @Sendable (JobQueue) async -> Void) {
+    func send(_ command: @escaping @Sendable (JobQueue) async -> Void) {
         let previous = lastQueueCommand
         let queue = self.queue
         lastQueueCommand = Task {
@@ -90,6 +112,18 @@ extension AppModel {
         send { await $0.remove(id) }
     }
 
+    /// Stops the job if it is converting (its partial file is removed, the original untouched) and takes it out
+    /// of the queue.
+    func cancel(_ job: Job) {
+        let id = job.id
+        send { await $0.cancel(id) }
+    }
+
+    /// Empties the queue and stops the conversion in progress.
+    func cancelAll() {
+        send { await $0.cancelAll() }
+    }
+
     func retry(_ job: Job) {
         let id = job.id
         send { await $0.retry(id) }
@@ -97,51 +131,6 @@ extension AppModel {
 
     func retryAllFailed() {
         send { await $0.retryAllFailed() }
-    }
-
-    // MARK: - Adding
-
-    /// Available selected items; missing files can't be converted.
-    var queueableItems: [LibraryItem] { selectedItems.filter(\.isAvailable) }
-
-    var canAddSelectionToQueue: Bool { !queueableItems.isEmpty && saveLocation.destination != nil }
-
-    var addToQueueTitle: String {
-        QueueButtonTitle.title(count: queueableItems.count, preset: preset, isCustom: advanced.isEnabled)
-    }
-
-    /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
-    func requestAddSelectionToQueue() {
-        guard canAddSelectionToQueue else { return }
-        if saveLocation.choice == .replace, !hasConfirmedReplace {
-            isConfirmingReplace = true
-        } else {
-            addSelectionToQueue()
-        }
-    }
-
-    func confirmReplace() {
-        hasConfirmedReplace = true
-        addSelectionToQueue()
-    }
-
-    /// One job per available selected video, with the current preset, Advanced spec and Save to choice. Files that
-    /// already wait or run in the queue are skipped by the queue. With auto-start on, the queue resumes.
-    func addSelectionToQueue() {
-        guard let destination = saveLocation.destination else { return }
-        let settings = DownscaleJobSettings(preset: preset, saveTo: destination, custom: advanced.spec)
-        do {
-            let jobs = try JobFactory.makeJobs(for: queueableItems.map(\.url), settings: settings)
-            let autoStart = AppSettings.autoStartQueue(defaults)
-            if autoStart { isQueuePaused = false }
-            send { queue in
-                await queue.enqueue(jobs)
-                if autoStart { await queue.resume() }
-            }
-            notifier.requestAuthorizationOnce()
-        } catch {
-            queueError = "Couldn't add to the queue: \(error.localizedDescription)"
-        }
     }
 
     /// Puts the Settings window's Save to default into the inspector.
