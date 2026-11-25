@@ -72,6 +72,23 @@ import Testing
             LossCheck.lostNames(byteSize: byteSize, inventory: source, preset: .balanced) == ["Cinematic depth data"])
     }
 
+    /// The outcome's warnings name a lost Cinematic track once, plainly, not as "Track 2 kind" and "Track 2 tagc".
+    @Test func warningsNameLostItemsPlainlyAndOnce() {
+        let report = MetadataReport(
+            changed: [MetadataChange(key: "video.bitDepth", displayName: "Bit depth", from: "8", to: "10")],
+            lost: [
+                item("track.1.kind", "auxv/dish", name: "Track 2 kind"),
+                item("trackmeta.1.tagc", "1", name: "Track 2 tagc"),
+                item("qt.uiso/loci", "+1+2/", name: "loci"),
+            ])
+        let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 8_000_000)
+
+        #expect(
+            DownscaleRunner.warnings(report, predicted: MetadataReport(), spec: spec) == [
+                "Cinematic depth data is lost", "Location is lost", "Bit depth changed from 8 to 10",
+            ])
+    }
+
     @Test func h264OfAnHDRClipLosesItsHDRMetadata() {
         let source = inventory(extra: [
             item("hdr.dolbyVision", "profile 8, level 9, compat 4", name: "Dolby Vision"),

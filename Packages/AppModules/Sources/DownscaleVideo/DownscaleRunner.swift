@@ -274,11 +274,15 @@ public struct DownscaleRunner: JobRunner {
         return report.lost.filter { !predictedLost.contains($0.key) }
     }
 
-    /// One line per item lost beyond what was predicted, then one per unexpected change.
+    /// One line per thing lost beyond what was predicted (plain names, each once: a Cinematic track and its
+    /// metadata are one line), then one per unexpected change.
     static func warnings(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec) -> [String] {
-        let lost = unpredictedLosses(report, predicted: predicted).map { "\($0.displayName) is lost" }
+        let context = report.kept + report.lost
+        let lost = MetadataNames.plainNames(of: unpredictedLosses(report, predicted: predicted), context: context)
+            .map { "\($0) is lost" }
+        let auxiliary = MetadataNames.auxiliaryTracks(in: context)
         let changed = ExpectedChanges.unexpected(in: report, spec: spec).map {
-            "\($0.displayName) changed from \($0.from) to \($0.to)"
+            MetadataNames.changeSentence($0, auxiliaryTracks: auxiliary)
         }
         return lost + changed
     }
