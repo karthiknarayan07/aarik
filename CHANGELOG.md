@@ -13,6 +13,11 @@ First public release.
   give it, or picks them by date range, resolution and source (Local Files or Photos), with the quality, format and
   destination you choose. Nothing is replaced, videos that would lose metadata are skipped, and one notification says
   how it went. Settings explains how to add it to Finder.
+- **Replace in Photos:** choose Replace Original in Photos and each smaller copy is saved and checked first. When the
+  queue finishes, Photos asks you once to move all the originals to Recently Deleted. If you decline, they are kept
+  and a bar offers to move them later. iCloud space is freed when Recently Deleted is emptied, or after 30 days.
+- **Overview:** totals for your Photos videos and local files, what converting them could free at the current preset,
+  the ten biggest savings (click one to see it in its grid) and the space saved so far.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).
 

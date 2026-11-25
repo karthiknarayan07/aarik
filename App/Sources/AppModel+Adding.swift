@@ -53,9 +53,11 @@ extension AppModel {
     /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
     func requestAddSelectionToQueue() {
         guard canAddSelectionToQueue else { return }
-        if isPhotosPage { return addPhotosSelectionToQueue() }
-        if saveLocation.choice == .replace, replaceConsent.needsAsking {
+        let replaces = isPhotosPage ? photosSaveLocation.choice == .replace : saveLocation.choice == .replace
+        if replaces, replaceConsent.needsAsking {
             isConfirmingReplace = true
+        } else if isPhotosPage {
+            addPhotosSelectionToQueue()
         } else {
             addSelectionToQueue()
         }
@@ -64,7 +66,7 @@ extension AppModel {
     /// The confirmation holds only once videos are added: cancelling the loss sheet asks again next time.
     func confirmReplace() {
         replaceConsent.confirm()
-        addSelectionToQueue()
+        if isPhotosPage { addPhotosSelectionToQueue() } else { addSelectionToQueue() }
     }
 
     /// Re-checks which files are still there, then adds one job per available selected video with its preset

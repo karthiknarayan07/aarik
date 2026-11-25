@@ -77,6 +77,17 @@ final class AppModel {
     let assistant = AssistantServices()
     /// Photos originals whose copy is saved and verified, waiting for the batch delete.
     let pendingDeletions: PendingDeletions
+    /// The originals in `pendingDeletions`, mirrored for the pending-deletion bar.
+    var pendingOriginals: [PendingDeletion] = []
+    /// How the last attempt to move them to Recently Deleted went, until the next one.
+    var originalsNotice: OriginalsNotice?
+    /// True from the delete call until Photos has answered (it waits for the user's confirmation).
+    var isMovingOriginals = false
+    /// Originals pending when the user declined the confirmation; a run that adds none doesn't ask again.
+    @ObservationIgnored var declinedOriginals: Set<String> = []
+    /// The saved queue couldn't be read, so its job list is incomplete and saved copies are not pruned by it.
+    @ObservationIgnored var queueLoadFailed = false
+    @ObservationIgnored let photoStore: any PhotoStore
     let thumbnails = ThumbnailCache()
     let thumbnailSource: ThumbnailSource
     let tools: [ToolEntry] = ToolRegistry.tools
@@ -119,11 +130,13 @@ final class AppModel {
         self.photos = photos
         self.photosBrowser = LibraryBrowser(collection: photos)
         self.thumbnailSource = ThumbnailSource(cache: thumbnails, photos: photoStore)
+        self.photoStore = photoStore
         // The runner asks for the backup folder at each Replace, so the setting applies without rebuilding the queue.
         let backupProvider = AppSettings.originalsBackupProvider(defaults)
         let runner = DownscaleRunner(originalsBackup: backupProvider)
         let pendingDeletions = PendingDeletions(directory: directory)
         self.pendingDeletions = pendingDeletions
+        self.pendingOriginals = pendingDeletions.all
         // Photos jobs fetch into the Work folder, which the launch sweep clears before the queue starts.
         let photosRunner = PhotosDownscaleRunner(
             store: photoStore, workFolder: .standard(), pendingDeletions: pendingDeletions,
