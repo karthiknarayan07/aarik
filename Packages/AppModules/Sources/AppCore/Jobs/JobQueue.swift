@@ -12,6 +12,9 @@ public actor JobQueue {
     private let runners: [String: any JobRunner]
     private var items: [Job]
     private var paused = false
+    /// The queue stopped itself (hot Mac, low battery). Separate from `paused`: `resume()` never clears it, and
+    /// lifting it never clears the user's pause.
+    private var heldAutomatically = false
     private var stopped = false
     private var worker: Task<Void, Never>?
     /// The job being run and its task, so `cancel` can stop just that job.
@@ -67,7 +70,11 @@ public actor JobQueue {
 
     public var jobs: [Job] { items }
 
+    /// Whether the user paused the queue.
     public func isPaused() -> Bool { paused }
+
+    /// Whether the queue holds itself for the system (see `setAutomaticHold`).
+    public func isHeldAutomatically() -> Bool { heldAutomatically }
 
     /// Appends the jobs and returns the ones actually added. A job whose file already has a queued or running job
     /// for the same tool is skipped, as is a repeat within `newJobs`; finished jobs don't block adding a file again.
@@ -90,6 +97,13 @@ public actor JobQueue {
     public func resume() {
         paused = false
         startWorkerIfNeeded()
+    }
+
+    /// Holds the queue for the system (the Mac is too hot, the battery is low), like `pause` but on its own flag: the
+    /// running job finishes, then nothing new starts. Lifting the hold restarts the queue unless the user paused it.
+    public func setAutomaticHold(_ held: Bool) {
+        heldAutomatically = held
+        if !held { startWorkerIfNeeded() }
     }
 
     /// Puts a failed job back in the queue. Other states are ignored, and so is a failed job whose file already
@@ -245,7 +259,7 @@ public actor JobQueue {
     }
 
     private func startWorkerIfNeeded() {
-        guard worker == nil, !paused, !stopped,
+        guard worker == nil, !paused, !heldAutomatically, !stopped,
             items.contains(where: { $0.state == .queued })
         else { return }
         worker = Task { await self.drain() }
@@ -255,7 +269,7 @@ public actor JobQueue {
         while true {
             // No suspension between this check and clearing `worker`, so a concurrent
             // enqueue/resume either sees the worker still alive or starts a new one.
-            guard !paused, !stopped,
+            guard !paused, !heldAutomatically, !stopped,
                 let index = items.firstIndex(where: { $0.state == .queued })
             else {
                 worker = nil
