@@ -1,6 +1,6 @@
 <p align="center"><img src="Branding/mark-200.png" alt="" height="200"></p>
 
-# aarik
+# Aarik
 
 A free, offline, open-source Mac toolbox for converting video, images, PDFs and documents without losing metadata.
 
@@ -31,7 +31,7 @@ The app is not yet signed with an Apple Developer ID or notarized, so macOS bloc
 Alternatively, remove the quarantine flag from Terminal:
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/aarik.app
+xattr -dr com.apple.quarantine /Applications/Aarik.app
 ```
 
 Because the signature changes with each release, macOS may ask you to grant Photos access again after an update.
