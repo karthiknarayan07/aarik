@@ -12,6 +12,7 @@ extension AppModel {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        await startPressure()
         await quickRun.start()
         let queue = self.queue
         let loadError = await queue.loadError
@@ -40,7 +41,7 @@ extension AppModel {
 
     private func receive(_ jobs: [Job]) {
         self.jobs = jobs
-        relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused)
+        refreshQueuePause()
         activity = ActivitySummary(jobs: jobs)
         // A saved copy is only needed while its job can still be put back in the queue.
         if !queueLoadFailed {

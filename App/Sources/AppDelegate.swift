@@ -1,3 +1,4 @@
+import AppCore
 import AppKit
 import PhotosLibrary
 import QuickRunService
@@ -148,6 +149,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isTerminating else { return .terminateLater }
+        // Work under way: ask first, unless the system is logging out or restarting. The running job and the rest of
+        // the queue are saved as queued below and continue next launch.
+        if QuitPolicy.needsConfirmation(
+            jobs: model.jobs, isQueuePaused: model.queuePause.isPaused,
+            isSessionEnding: QuitConfirmation.isSessionEnding)
+            && !QuitConfirmation.confirmStop()
+        {
+            return .terminateCancel
+        }
         isTerminating = true
         Task {
             // Pending library saves finish and the running job goes back to the queue for next launch.

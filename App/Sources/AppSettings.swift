@@ -1,3 +1,4 @@
+import AppCore
 import DownscaleVideo
 import Foundation
 
@@ -7,6 +8,8 @@ enum AppSettings {
     enum Keys {
         static let preset = "downscale.preset"
         static let autoStartQueue = "queue.autoStart"
+        /// `SpeedSetting` raw value: quiet, balanced or fastest.
+        static let speed = "performance.speed"
         /// `SaveLocation.Choice` raw value: next to original or folder.
         static let defaultSaveTo = "output.defaultSaveTo"
         static let defaultSaveFolder = "output.defaultSaveFolder"
@@ -18,6 +21,11 @@ enum AppSettings {
     /// On unless turned off.
     static func autoStartQueue(_ defaults: UserDefaults) -> Bool {
         defaults.object(forKey: Keys.autoStartQueue) as? Bool ?? true
+    }
+
+    /// Balanced unless the user chose another speed.
+    static func speed(_ defaults: UserDefaults) -> SpeedSetting {
+        defaults.string(forKey: Keys.speed).flatMap(SpeedSetting.init(rawValue:)) ?? .default
     }
 
     /// `~/Movies/<App Name> Originals/`.

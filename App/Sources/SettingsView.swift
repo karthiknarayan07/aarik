@@ -1,3 +1,4 @@
+import AppCore
 import AppUI
 import DownscaleVideo
 import SwiftUI
@@ -23,6 +24,7 @@ private struct GeneralSettings: View {
     @Bindable var updater: Updater
     @AppStorage(AppSettings.Keys.preset) private var preset = Preset.balanced
     @AppStorage(AppSettings.Keys.autoStartQueue) private var autoStart = true
+    @AppStorage(AppSettings.Keys.speed) private var speed = SpeedSetting.default
 
     var body: some View {
         Form {
@@ -32,6 +34,24 @@ private struct GeneralSettings: View {
             Toggle(isOn: $autoStart) {
                 Text("Start the queue automatically")
                 Text("When off, the queue waits until you press Resume.")
+            }
+            Section("Performance") {
+                Picker("Conversion speed", selection: $speed) {
+                    ForEach(SpeedSetting.allCases) { option in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(option.title)
+                            Text(option.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(option)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(option.title). \(option.summary)")
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                .accessibilityLabel("Conversion speed")
+                .accessibilityHint("Quiet, Balanced or Fastest. A hot Mac slows down or pauses whatever you choose.")
             }
             Section("Updates") {
                 if updater.isConfigured {
@@ -51,6 +71,9 @@ private struct GeneralSettings: View {
         // The inspector's preset is this same stored value; keep the open window in step.
         .onChange(of: preset) { _, newValue in
             if model.preset != newValue { model.preset = newValue }
+        }
+        .onChange(of: speed) { _, newValue in
+            if model.speed != newValue { model.speed = newValue }
         }
     }
 }

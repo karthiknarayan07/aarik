@@ -17,7 +17,7 @@ struct QueueView: View {
             } else {
                 List {
                     ForEach(jobs) { job in
-                        QueueRow(job: job, isPaused: model.isQueuePaused, thumbnails: model.thumbnails) {
+                        QueueRow(job: job, pauseText: model.queuePause.statusText, thumbnails: model.thumbnails) {
                             model.cancel(job)
                         }
                     }
@@ -26,7 +26,7 @@ struct QueueView: View {
         }
         .navigationTitle("Queue")
         // Kept while empty too: videos added later wait until Resume.
-        .navigationSubtitle(model.isQueuePaused ? "Paused" : "")
+        .navigationSubtitle(model.queuePause.statusText ?? "")
         .toolbar {
             ToolbarItem(placement: .primaryAction) { PauseResumeButton(model: model) }
             ToolbarItem(placement: .primaryAction) {
@@ -46,7 +46,8 @@ struct QueueView: View {
 
 private struct QueueRow: View {
     let job: Job
-    let isPaused: Bool
+    /// "Paused", or why the queue stopped itself; nil while it runs.
+    let pauseText: String?
     let thumbnails: ThumbnailCache
     /// Removes a waiting job, or stops the one converting.
     let cancel: () -> Void
@@ -61,7 +62,7 @@ private struct QueueRow: View {
     private var stateText: String {
         // A phase of its own (a download from iCloud) names itself and counts its own progress.
         if let progress { return "\(job.phase ?? "Converting") · \(Int((progress * 100).rounded()))%" }
-        return isPaused ? "Paused" : "Waiting"
+        return pauseText ?? "Waiting"
     }
 
     var body: some View {
