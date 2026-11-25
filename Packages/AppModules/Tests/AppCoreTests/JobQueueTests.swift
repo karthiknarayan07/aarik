@@ -569,3 +569,76 @@ private actor ProgressRunner: JobRunner {
     await queue.enqueue([makeJob()])
     #expect(try Data(contentsOf: file) == garbage)
 }
+
+// MARK: - Progress throttling
+
+/// Reports `count` progress values as fast as it can (the last is 1), then waits until released.
+private actor FloodRunner: JobRunner {
+    private let count: Int
+    private var gate: CheckedContinuation<Void, Never>?
+    private var released = false
+    private let floodedContinuation: AsyncStream<Void>.Continuation
+    /// Yields once every progress value has been reported.
+    nonisolated let flooded: AsyncStream<Void>
+
+    init(count: Int) {
+        self.count = count
+        (flooded, floodedContinuation) = AsyncStream.makeStream(of: Void.self)
+    }
+
+    func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
+        for step in 1...count { progress(Double(step) / Double(count)) }
+        floodedContinuation.yield()
+        if !released { await withCheckedContinuation { gate = $0 } }
+        return .keptAsIs(reason: "done")
+    }
+
+    func release() {
+        released = true
+        gate?.resume()
+        gate = nil
+    }
+}
+
+@Test(.timeLimit(.minutes(1))) func progressIsPublishedAtMostTenTimesASecondAndEndsOnTheLastValue() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = FloodRunner(count: 2000)
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let start = ContinuousClock.now
+    let updates = await queue.updates()
+    let counter = Task {
+        var progressUpdates = 0
+        for await jobs in updates {
+            guard case .running(let progress) = jobs.first?.state, progress > 0 else { continue }
+            progressUpdates += 1
+            if progress == 1 { return progressUpdates }
+        }
+        return progressUpdates
+    }
+
+    await queue.enqueue([makeJob()])
+    let progressUpdates = await counter.value
+    let elapsed = start.duration(to: .now)
+
+    // One right away, then at most one per 100 ms; the last value still arrives.
+    #expect(progressUpdates <= Int(elapsed / .milliseconds(100)) + 2)
+    await runner.release()
+    await queue.shutdown()
+}
+
+@Test(.timeLimit(.minutes(1))) func stateChangesArePublishedAtOnceWhateverTheProgressInterval() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = FloodRunner(count: 500)
+    // Far longer than the test may take: only state changes can get through in time.
+    let queue = JobQueue(store: store, runners: ["fake": runner], progressInterval: .seconds(3600))
+    var flooded = runner.flooded.makeAsyncIterator()
+    await queue.enqueue([makeJob()])
+    await flooded.next()
+
+    await runner.release()
+
+    await waitUntil(queue) { $0.first?.state == .keptAsIs(reason: "done") }
+    await queue.shutdown()
+}

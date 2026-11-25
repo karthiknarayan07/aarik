@@ -11,13 +11,20 @@ public struct BookmarkStore: Sendable {
         public var bookmark: Data?
         public var byteSize: Int64
         public var inventory: MetadataInventory
+        /// The file's modification date when it was read; with `byteSize`, tells a refresh that the file changed.
+        /// Nil for entries saved before this was stored.
+        public var modifiedAt: Date?
 
-        public init(id: UUID, path: String, bookmark: Data?, byteSize: Int64, inventory: MetadataInventory) {
+        public init(
+            id: UUID, path: String, bookmark: Data?, byteSize: Int64, inventory: MetadataInventory,
+            modifiedAt: Date? = nil
+        ) {
             self.id = id
             self.path = path
             self.bookmark = bookmark
             self.byteSize = byteSize
             self.inventory = inventory
+            self.modifiedAt = modifiedAt
         }
     }
 

@@ -3,10 +3,37 @@ import Foundation
 import MediaEngine
 import UniformTypeIdentifiers
 
-/// A file the scanner inspected, with the bookmark made for it.
+/// A file the scanner inspected, with the bookmark made for it and its modification date when it was read.
 public struct ScannedFile: Sendable {
     public let item: LibraryItem
     public let bookmark: Data?
+    public var modifiedAt: Date?
+}
+
+/// A file's size and modification date, read from the file system: together they tell that a file changed.
+struct FileStamp: Sendable, Equatable {
+    let size: Int64
+    let modified: Date?
+
+    /// Never from URL resource values: those can stay cached for a path after a Replace swapped the file there,
+    /// which made the library keep showing the original's size.
+    static func read(_ url: URL) -> FileStamp? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+            let size = (attributes[.size] as? NSNumber)?.int64Value
+        else { return nil }
+        return FileStamp(size: size, modified: attributes[.modificationDate] as? Date)
+    }
+
+    /// Whether this stamp still describes a file stored with `size` and `modified`. Dates within a millisecond
+    /// are the same (they go through JSON).
+    func matches(size: Int64, modified: Date?) -> Bool {
+        guard size == self.size else { return false }
+        switch (modified, self.modified) {
+        case (nil, nil): return true
+        case (let stored?, let current?): return abs(stored.timeIntervalSince(current)) < 0.001
+        default: return false
+        }
+    }
 }
 
 /// Finds movie files in files and folders and inspects them off the main actor.
@@ -56,17 +83,10 @@ public actor LibraryScanner {
         -> ScannedFile?
     {
         guard let inventory = try? await inspector.inventory(of: url),
-            let size = fileSize(url),
-            let item = LibraryItemBuilder.build(url: url, inventory: inventory, byteSize: size)
+            let stamp = FileStamp.read(url),
+            let item = LibraryItemBuilder.build(url: url, inventory: inventory, byteSize: stamp.size)
         else { return nil }
-        return ScannedFile(item: item, bookmark: BookmarkStore.makeBookmark(for: url))
-    }
-
-    /// The file's size read from the file system, never from URL resource values: those can stay cached for a path
-    /// after a Replace swapped the file there, which made the library keep showing the original's size.
-    nonisolated static func fileSize(_ url: URL) -> Int64? {
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
-        return (attributes[.size] as? NSNumber)?.int64Value
+        return ScannedFile(item: item, bookmark: BookmarkStore.makeBookmark(for: url), modifiedAt: stamp.modified)
     }
 
     /// Movie files at or below `urls`, in path order within each folder.

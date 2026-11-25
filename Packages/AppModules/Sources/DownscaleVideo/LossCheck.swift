@@ -35,17 +35,28 @@ public enum LossCheck {
         for sources: [(id: ID, source: SavingsCalculator.Source)], preset: Preset, custom: DownscaleSpec? = nil,
         quickTimeFallbacks: Set<ID> = []
     ) -> [PredictedLoss<ID>] {
+        losses(
+            for: sources.map { (id: $0.id, source: $0.source, preset: preset) }, custom: custom,
+            quickTimeFallbacks: quickTimeFallbacks)
+    }
+
+    /// `losses(for:preset:custom:quickTimeFallbacks:)` with a preset per video (`custom`, when given, wins).
+    public static func losses<ID: Hashable & Sendable>(
+        for sources: [(id: ID, source: SavingsCalculator.Source, preset: Preset)], custom: DownscaleSpec? = nil,
+        quickTimeFallbacks: Set<ID> = []
+    ) -> [PredictedLoss<ID>] {
         sources.compactMap { entry in
             let lost = lostNames(
-                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: preset, custom: custom,
-                fallsBackToQuickTime: quickTimeFallbacks.contains(entry.id))
+                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: entry.preset,
+                custom: custom, fallsBackToQuickTime: quickTimeFallbacks.contains(entry.id))
             return lost.isEmpty ? nil : PredictedLoss(id: entry.id, lost: lost)
         }
     }
 
     /// The files whose output will be QuickTime although they are MPEG-4 (`OutputContainer.decide(for:)`). Reads
-    /// each `.mp4` and `.m4v` file's tracks, off the caller's actor; other files are skipped without reading. A
-    /// file that can't be read is left out: its run will fail, or check the result itself.
+    /// each `.mp4` and `.m4v` file's tracks, off the caller's actor; other files are skipped without reading. An
+    /// MPEG-4 file that can't be read counts as falling back: showing a loss that doesn't happen is safe, while
+    /// a loss left out would make its run keep the original as is.
     @concurrent
     public static func quickTimeFallbacks<ID: Hashable & Sendable>(among files: [(id: ID, url: URL)]) async
         -> Set<ID>
@@ -53,9 +64,10 @@ public enum LossCheck {
         var result = Set<ID>()
         for file in files {
             // `decide` answers a QuickTime source from its name alone.
-            if (try? await OutputContainer.decide(for: file.url))?.fallsBackToQuickTime == true {
-                result.insert(file.id)
-            }
+            let fallsBack =
+                (try? await OutputContainer.decide(for: file.url))?.fallsBackToQuickTime
+                ?? (OutputContainer.fileType(for: file.url) != .mov)
+            if fallsBack { result.insert(file.id) }
         }
         return result
     }

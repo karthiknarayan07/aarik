@@ -21,7 +21,8 @@ struct LibraryInspector: View {
                     }
                 }
                 DownscaleInspector(
-                    sources: items.map(\.inspectorSource), preset: $model.preset, advanced: $model.advanced,
+                    sources: items.map(model.inspectorSource(for:)), preset: $model.selectionPreset,
+                    advanced: $model.advanced,
                     saveLocation: $model.saveLocation)
             }
             .formStyle(.grouped)

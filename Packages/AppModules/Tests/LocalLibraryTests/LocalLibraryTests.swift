@@ -250,6 +250,106 @@ enum Fixtures {
         #expect(library.items.first?.isAvailable == true)
     }
 
+    private static func size(_ url: URL) throws -> Int64 {
+        try #require(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber).int64Value
+    }
+
+    /// Edited or replaced outside the app: a refresh notices the new size and reads the file again, in place.
+    @Test func fileChangedOnDiskIsReadAgainInPlace() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(width: 640, height: 360), into: folder, as: "a.mov")
+        let store = BookmarkStore(directory: try Fixtures.tempDirectory())
+        let library = LocalLibrary(store: store)
+        library.add([clip])
+        await Fixtures.settle(library)
+        let before = try #require(library.items.first)
+
+        try FileManager.default.removeItem(at: clip)
+        try FileManager.default.copyItem(at: try await Fixtures.clip(width: 320, height: 180), to: clip)
+        let newSize = try Self.size(clip)
+        await library.refreshAvailability()
+        await Fixtures.settle(library)
+
+        let after = try #require(library.items.first)
+        #expect(library.items.count == 1)
+        #expect(after.id == before.id)
+        #expect(after.byteSize == newSize)
+        #expect(after.inventory["video.dimensions"]?.value == "320x180")
+        #expect(after.isAvailable)
+        let entry = try #require(try store.load().first)
+        #expect(entry.id == before.id)
+        #expect(entry.byteSize == newSize)
+        #expect(entry.inventory == after.inventory)
+    }
+
+    /// Same size, newer modification date: still read again (the stored date follows).
+    @Test func fileTouchedOnDiskIsNoticedByItsModificationDate() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")
+        let store = BookmarkStore(directory: try Fixtures.tempDirectory())
+        let library = LocalLibrary(store: store)
+        library.add([clip])
+        await Fixtures.settle(library)
+        let stored = try #require(try store.load().first?.modifiedAt)
+
+        let later = stored.addingTimeInterval(120)
+        try FileManager.default.setAttributes([.modificationDate: later], ofItemAtPath: clip.path)
+        await library.refreshAvailability()
+        await Fixtures.settle(library)
+
+        let entry = try #require(try store.load().first)
+        #expect(entry.modifiedAt.map { abs($0.timeIntervalSince(later)) < 1 } == true)
+    }
+
+    /// An entry saved before modification dates were stored, with a size that is no longer the file's (as the
+    /// stale-size bug left them): read again. One whose size still matches only gets its date recorded.
+    @Test func entryWithoutAModificationDateIsReadAgainWhenItsSizeIsWrong() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let stale = try Fixtures.copy(try await Fixtures.clip(width: 640, height: 360), into: folder, as: "a.mov")
+        let fine = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "b.mov")
+        let store = BookmarkStore(directory: try Fixtures.tempDirectory())
+        let first = LocalLibrary(store: store)
+        first.add([stale, fine])
+        await Fixtures.settle(first)
+        var entries = try store.load()
+        for index in entries.indices {
+            entries[index].modifiedAt = nil
+            if entries[index].path.hasSuffix("a.mov") { entries[index].byteSize = 12_345 }
+        }
+        try store.save(entries)
+
+        let library = LocalLibrary(store: store)
+        #expect(library.items.first { $0.url.lastPathComponent == "a.mov" }?.byteSize == 12_345)
+        await library.refreshAvailability()
+        await Fixtures.settle(library)
+
+        #expect(library.items.first { $0.url.lastPathComponent == "a.mov" }?.byteSize == (try Self.size(stale)))
+        let saved = try store.load()
+        #expect(saved.count == 2)
+        #expect(saved.allSatisfy { $0.modifiedAt != nil })
+        #expect(saved.first { $0.path.hasSuffix("b.mov") }?.byteSize == (try Self.size(fine)))
+    }
+
+    /// Moved in Finder after it was queued: the run followed the bookmark to the new path, but the item is still at
+    /// the old one. Trying the run's path first, then the job's own, still finds it.
+    @Test func replacementOfAFileMovedSinceItWasQueuedFindsTheItemByItsOldPath() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(width: 640, height: 360), into: folder, as: "a.mov")
+        let library = LocalLibrary(directory: try Fixtures.tempDirectory())
+        library.add([clip])
+        await Fixtures.settle(library)
+        let id = try #require(library.items.first?.id)
+
+        let moved = folder.appending(path: "moved.mov")
+        try FileManager.default.removeItem(at: clip)
+        try FileManager.default.copyItem(at: try await Fixtures.clip(width: 320, height: 180), to: moved)
+        await library.fileWasReplaced(at: [moved, clip], by: moved)
+
+        #expect(library.items.map(\.id) == [id])
+        #expect(library.items.first?.url.lastPathComponent == "moved.mov")
+        #expect(library.items.first?.inventory["video.dimensions"]?.value == "320x180")
+    }
+
     @Test func replacementOfAFileNotInTheLibraryChangesNothing() async throws {
         let folder = try Fixtures.tempDirectory()
         let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")

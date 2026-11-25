@@ -27,6 +27,9 @@ final class AppModel {
     var preset: Preset {
         didSet { defaults.set(preset.rawValue, forKey: AppSettings.Keys.preset) }
     }
+    /// Presets chosen in the inspector for single videos; the header's `preset` is everyone else's (spec 8.2).
+    /// Kept for the session.
+    var presetOverrides = PresetOverrides<UUID>()
     var advanced = AdvancedOptions()
     var saveLocation: SaveLocation
 

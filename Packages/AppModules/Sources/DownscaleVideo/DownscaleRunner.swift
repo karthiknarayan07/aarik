@@ -66,8 +66,13 @@ public struct DownscaleRunner: JobRunner {
         let inventory = try await MediaInspector().inventory(of: source)
 
         // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
-        // that loses, so it is predicted (and was shown before the job was added), not found afterwards.
+        // that loses only when it was shown before the job was added. Found only now (the add-time probe failed,
+        // or the job predates predictions), it stays out of the prediction, so the check after the run finds it
+        // unpredicted and keeps the original as is: never a silent loss.
         let container = try await OutputContainer.decide(for: source)
+        let fallbackPredicted =
+            container.fallsBackToQuickTime
+            && Self.fallbackLossWasShown(inventory, predictedLost: settings.predictedLost)
 
         // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
         // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
@@ -76,7 +81,7 @@ public struct DownscaleRunner: JobRunner {
         let predicted: MetadataReport
         let decision = DownscalePlanner.decide(
             inventory: inventory, byteSize: byteSize, spec: requested,
-            fallsBackToQuickTime: container.fallsBackToQuickTime)
+            fallsBackToQuickTime: fallbackPredicted)
         switch decision {
         case .keptAsIs(let reason): return .keptAsIs(reason: reason)
         case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
@@ -152,6 +157,15 @@ public struct DownscaleRunner: JobRunner {
             JobOutcome(
                 output: finalURL, bytesBefore: byteSize, bytesAfter: outputSize,
                 report: report, replacedOriginal: replaced, warnings: warnings, notes: notes, source: source))
+    }
+
+    /// Whether what leaving MPEG-4 for QuickTime loses was shown before the job was added: every name is in
+    /// `predictedLost`. A job without a prediction (saved before predictions were recorded) showed nothing.
+    static func fallbackLossWasShown(_ inventory: MetadataInventory, predictedLost: [String]?) -> Bool {
+        let names = LossCheck.names(of: OutputContainer.lostInQuickTimeFallback(inventory))
+        if names.isEmpty { return true }
+        guard let predictedLost else { return false }
+        return Set(names).isSubset(of: predictedLost)
     }
 
     static let formatCantKeepDetails = "Its file format can't keep all of its details"

@@ -3,16 +3,19 @@ import AppUI
 import MediaEngine
 import SwiftUI
 
-/// A selected video as the inspector needs it: size, metadata, and whether the file can be converted now.
+/// A selected video as the inspector needs it: size, metadata, whether the file can be converted now, and the
+/// preset it converts with (the header's, or its own override).
 public struct InspectorSource: Sendable {
     public let byteSize: Int64
     public let inventory: MetadataInventory
     public let isAvailable: Bool
+    public let preset: Preset
 
-    public init(byteSize: Int64, inventory: MetadataInventory, isAvailable: Bool) {
+    public init(byteSize: Int64, inventory: MetadataInventory, isAvailable: Bool, preset: Preset = .balanced) {
         self.byteSize = byteSize
         self.inventory = inventory
         self.isAvailable = isAvailable
+        self.preset = preset
     }
 
     var savings: SavingsCalculator.Source { (byteSize: byteSize, inventory: inventory) }
@@ -20,14 +23,17 @@ public struct InspectorSource: Sendable {
 
 /// The Downscale Video part of the inspector, as `Form` sections: quality, Advanced, metadata and Save to.
 /// It takes sizes and inventories only, so it knows nothing about where the videos come from.
+///
+/// `preset` is the selection's preset: the one its videos share, nil when they differ ("Mixed"). Choosing one
+/// applies to every selected video; the caller decides what that means (spec 8.2: a per-video override).
 public struct DownscaleInspector: View {
     let sources: [InspectorSource]
-    @Binding var preset: Preset
+    @Binding var preset: Preset?
     @Binding var advanced: AdvancedOptions
     @Binding var saveLocation: SaveLocation
 
     public init(
-        sources: [InspectorSource], preset: Binding<Preset>, advanced: Binding<AdvancedOptions>,
+        sources: [InspectorSource], preset: Binding<Preset?>, advanced: Binding<AdvancedOptions>,
         saveLocation: Binding<SaveLocation>
     ) {
         self.sources = sources
@@ -41,17 +47,27 @@ public struct DownscaleInspector: View {
     private var decision: PlanDecision? {
         single.map {
             SavingsCalculator.decision(
-                byteSize: $0.byteSize, inventory: $0.inventory, preset: preset, custom: advanced.spec)
+                byteSize: $0.byteSize, inventory: $0.inventory, preset: $0.preset, custom: advanced.spec)
         }
     }
 
-    /// Picking a preset row switches custom settings off, so the pick takes effect.
-    private var presetChoice: Binding<Preset> {
+    /// Picking a preset row switches custom settings off, so the pick takes effect. Nil (mixed) is never set.
+    private var presetChoice: Binding<Preset?> {
         Binding {
             preset
         } set: {
-            preset = $0
+            guard let choice = $0 else { return }
+            preset = choice
             advanced.isEnabled = false
+        }
+    }
+
+    /// The one video's preset row, set through `presetChoice`.
+    private func rowChoice(for single: InspectorSource) -> Binding<Preset> {
+        Binding {
+            single.preset
+        } set: {
+            presetChoice.wrappedValue = $0
         }
     }
 
@@ -59,11 +75,18 @@ public struct DownscaleInspector: View {
         Section("Quality") {
             if let single {
                 PresetEstimateRows(
-                    byteSize: single.byteSize, inventory: single.inventory, selection: presetChoice,
+                    byteSize: single.byteSize, inventory: single.inventory, selection: rowChoice(for: single),
                     isCustom: advanced.isEnabled)
             } else {
-                SelectionTotals(sources: sources, preset: preset, custom: advanced.spec)
-                PresetPicker("Quality preset", selection: $preset, options: Preset.allCases) { $0.displayName }
+                SelectionTotals(sources: sources, custom: advanced.spec)
+                if preset == nil, !advanced.isEnabled {
+                    LabeledContent("Preset", value: "Mixed")
+                        .help("The selected videos use different presets; choosing one applies it to all of them")
+                }
+                PresetPicker(
+                    "Quality preset for the selected videos", selection: presetChoice,
+                    options: Preset.allCases.map(Optional.some)
+                ) { $0?.displayName ?? "Mixed" }
             }
         }
         Section {
@@ -100,18 +123,20 @@ public enum QueueButtonTitle {
     }
 }
 
-/// Totals for a multi-selection, over the files that can be converted now (as the queue button counts them).
+/// Totals for a multi-selection, over the files that can be converted now (as the queue button counts them), each
+/// with its own preset.
 private struct SelectionTotals: View {
     let sources: [InspectorSource]
-    let preset: Preset
     let custom: DownscaleSpec?
 
     var body: some View {
-        let available = sources.filter(\.isAvailable).map(\.savings)
+        let available = sources.filter(\.isAvailable)
         let total = available.reduce(Int64(0)) { $0 + $1.byteSize }
-        let freed = SavingsCalculator.couldFreeBytes(for: available, preset: preset, custom: custom)
+        let freed = SavingsCalculator.couldFreeBytes(
+            for: available.map { (source: $0.savings, preset: $0.preset) }, custom: custom)
         let losing = LossCheck.losses(
-            for: available.enumerated().map { (id: $0.offset, source: $0.element) }, preset: preset, custom: custom
+            for: available.enumerated().map { (id: $0.offset, source: $0.element.savings, preset: $0.element.preset) },
+            custom: custom
         ).count
         let missing = sources.count - available.count
         LabeledContent(available.count == 1 ? "1 video" : "\(available.count) videos", value: ByteFormat.string(total))

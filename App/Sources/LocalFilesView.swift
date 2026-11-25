@@ -37,10 +37,14 @@ struct LocalFilesView: View {
                     } else {
                         MediaGrid(sections: sections, selection: $browser.selection, onSpace: model.toggleQuickLook) {
                             item, isSelected in
-                            LibraryTile(item: item, isSelected: isSelected, thumbnails: model.thumbnails)
-                                .contextMenu {
-                                    Button("Remove from library") { model.removeFromLibrary(clicked: item) }
-                                }
+                            LibraryTile(
+                                item: item, isSelected: isSelected, thumbnails: model.thumbnails,
+                                presetOverride: model.presetOverrides.shownOverride(
+                                    for: item.id, default: model.preset)?.displayName
+                            )
+                            .contextMenu {
+                                Button("Remove from library") { model.removeFromLibrary(clicked: item) }
+                            }
                         }
                         .onDeleteCommand { model.removeSelectionFromLibrary() }
                     }

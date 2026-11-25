@@ -23,7 +23,9 @@ public struct VideoDownscaler: Sendable {
     /// MPEG-4 for `.mp4` / `.m4v`, QuickTime otherwise). Throws `outputExists` if `output` exists, `sourceAlreadySmall` if the source
     /// short side is at most a non-nil `spec.targetShortSide`, and `unsupportedSource` for spatial video, all before
     /// writing. Output goes to a hidden partial file that is renamed to `output` only when complete (`outputExists`
-    /// if `output` appeared meanwhile). On any failure or cancellation only the partial is deleted.
+    /// if `output` appeared meanwhile). On any failure or cancellation only the partial is deleted. Always runs
+    /// off the caller's actor (`@concurrent`), so its blocking reads never land on a main-actor caller.
+    @concurrent
     public func downscale(
         source: URL, output: URL, spec: DownscaleSpec, progress: @escaping @Sendable (Double) -> Void
     ) async throws {

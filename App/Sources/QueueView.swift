@@ -13,6 +13,7 @@ struct QueueView: View {
         Group {
             if jobs.isEmpty {
                 SidebarDestination.queue.emptyState
+                    .action("Go to Local files") { model.selection = .localFiles }
             } else {
                 List {
                     ForEach(jobs) { job in

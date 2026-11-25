@@ -1,7 +1,8 @@
 import CoreGraphics
 import SwiftUI
 
-/// One grid tile: a poster frame, up to three badges, and the file size.
+/// One grid tile: a poster frame, up to three badges, the file size, and an optional note (such as a preset chosen
+/// for this video alone).
 public struct MediaTile: View {
     public static let cornerRadius: CGFloat = 6
     public static let maxBadges = 3
@@ -11,13 +12,17 @@ public struct MediaTile: View {
     let sizeLabel: String
     let isAvailable: Bool
     let isSelected: Bool
+    let note: String?
 
-    public init(image: CGImage?, badges: [String], sizeLabel: String, isAvailable: Bool, isSelected: Bool) {
+    public init(
+        image: CGImage?, badges: [String], sizeLabel: String, isAvailable: Bool, isSelected: Bool, note: String? = nil
+    ) {
         self.image = image
         self.badges = badges
         self.sizeLabel = sizeLabel
         self.isAvailable = isAvailable
         self.isSelected = isSelected
+        self.note = note
     }
 
     public var body: some View {
@@ -29,6 +34,9 @@ public struct MediaTile: View {
             .opacity(isAvailable ? 1 : 0.4)
             .overlay(alignment: .topLeading) { badgeRow }
             .overlay(alignment: .bottomTrailing) { TileLabel(sizeLabel).padding(5) }
+            .overlay(alignment: .bottomLeading) {
+                if let note { TileLabel(note).padding(5) }
+            }
             .overlay(alignment: .topTrailing) { missingBadge }
             .overlay {
                 if isSelected {
