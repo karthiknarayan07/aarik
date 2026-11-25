@@ -1,5 +1,6 @@
 import AppCore
 import AppUI
+import Assistant
 import LocalLibrary
 import SwiftUI
 
@@ -16,7 +17,9 @@ struct CompletedView: View {
                 List {
                     Section {
                         ForEach(rows, id: \.job.id) { row in
-                            CompletedRow(job: row.job, outcome: row.outcome, thumbnails: model.thumbnails)
+                            CompletedRow(
+                                job: row.job, outcome: row.outcome, thumbnails: model.thumbnails,
+                                assistant: model.assistant)
                         }
                     } header: {
                         Text("Saved \(ByteFormat.string(model.activity.savedBytes)) in total")
@@ -33,6 +36,7 @@ private struct CompletedRow: View {
     let job: Job
     let outcome: JobOutcome
     let thumbnails: ThumbnailCache
+    let assistant: AssistantServices
 
     var body: some View {
         HStack(spacing: 12) {
@@ -61,7 +65,10 @@ private struct CompletedRow: View {
                 }
             }
             Spacer()
-            ReportBadge(outcome: outcome)
+            if !outcome.isVerified { WhyButton(assistant: assistant, job: job, outcome: outcome) }
+            ReportBadge(outcome: outcome) {
+                if !outcome.isVerified { WhyInline(assistant: assistant, job: job, outcome: outcome) }
+            }
             ShowInFinderButton(url: outcome.output)
         }
         .padding(.vertical, 2)
@@ -79,7 +86,8 @@ struct KeptAsIsView: View {
                 SidebarDestination.keptAsIs.emptyState
             } else {
                 List(rows, id: \.job.id) { row in
-                    ReasonRow(job: row.job, reason: row.reason, thumbnails: model.thumbnails)
+                    ReasonRow(
+                        job: row.job, reason: row.reason, thumbnails: model.thumbnails, assistant: model.assistant)
                 }
             }
         }
@@ -98,7 +106,9 @@ struct FailedView: View {
                 SidebarDestination.failed.emptyState
             } else {
                 List(rows, id: \.job.id) { row in
-                    ReasonRow(job: row.job, reason: row.reason, thumbnails: model.thumbnails) {
+                    ReasonRow(
+                        job: row.job, reason: row.reason, thumbnails: model.thumbnails, assistant: model.assistant
+                    ) {
                         Button("Retry") { model.retry(row.job) }
                             .accessibilityLabel("Retry \(row.job.displayName)")
                     }
@@ -120,6 +130,7 @@ private struct ReasonRow<Actions: View>: View {
     let job: Job
     let reason: String
     let thumbnails: ThumbnailCache
+    let assistant: AssistantServices
     @ViewBuilder var actions: Actions
 
     var body: some View {
@@ -134,6 +145,7 @@ private struct ReasonRow<Actions: View>: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            WhyButton(assistant: assistant, job: job, outcome: nil)
             actions
             ShowInFinderButton(url: job.source)
         }
@@ -142,7 +154,7 @@ private struct ReasonRow<Actions: View>: View {
 }
 
 extension ReasonRow where Actions == EmptyView {
-    init(job: Job, reason: String, thumbnails: ThumbnailCache) {
-        self.init(job: job, reason: reason, thumbnails: thumbnails) { EmptyView() }
+    init(job: Job, reason: String, thumbnails: ThumbnailCache, assistant: AssistantServices) {
+        self.init(job: job, reason: reason, thumbnails: thumbnails, assistant: assistant) { EmptyView() }
     }
 }

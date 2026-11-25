@@ -46,7 +46,7 @@ let package = Package(
         ),
         .target(
             name: "Assistant",
-            dependencies: ["LocalLibrary", "AppCore", "DownscaleVideo"],
+            dependencies: ["LocalLibrary", "AppCore", "AppUI", "DownscaleVideo"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
