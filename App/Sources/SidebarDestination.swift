@@ -58,8 +58,8 @@ enum SidebarDestination: Hashable, Sendable {
                 message: "A summary of the space you could free arrives with Photos library support.")
         case .photosVideos:
             EmptyState(
-                "Coming with Photos", systemImage: systemImage,
-                message: "Videos from your Photos library will appear here.")
+                "Videos", systemImage: systemImage,
+                message: "Videos from your Photos library appear here.")
         case .localFiles, .mediaType:
             EmptyState(
                 "No files added", systemImage: systemImage,

@@ -12,6 +12,24 @@ struct LocalFilesToolbar: ToolbarContent {
     }
 
     var body: some ToolbarContent {
+        GridToolbar(browser: browser)
+        ToolbarItem {
+            Button {
+                model.isImporterPresented = true
+            } label: {
+                Label("Add files…", systemImage: "plus")
+            }
+            .help("Add videos or folders (⌘O)")
+            .accessibilityLabel("Add files")
+        }
+    }
+}
+
+/// Group by and sort, shared by both libraries' grids.
+struct GridToolbar: ToolbarContent {
+    @Bindable var browser: LibraryBrowser
+
+    var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             Picker("Group by", selection: $browser.grouping) {
                 Text("Years").tag(Grouping.year)
@@ -32,15 +50,6 @@ struct LocalFilesToolbar: ToolbarContent {
             .pickerStyle(.menu)
             .accessibilityLabel("Sort order")
             .help("Sort order")
-        }
-        ToolbarItem {
-            Button {
-                model.isImporterPresented = true
-            } label: {
-                Label("Add files…", systemImage: "plus")
-            }
-            .help("Add videos or folders (⌘O)")
-            .accessibilityLabel("Add files")
         }
     }
 }

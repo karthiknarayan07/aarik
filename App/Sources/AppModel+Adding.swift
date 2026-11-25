@@ -27,7 +27,7 @@ struct LossReview {
 
 extension AppModel {
     /// Available selected items; missing files can't be converted.
-    var queueableItems: [LibraryItem] { selectedItems.filter(\.isAvailable) }
+    var queueableItems: [LibraryItem] { selectedItems.filter { $0.isAvailable && $0.fileURL != nil } }
 
     var canAddSelectionToQueue: Bool { !queueableItems.isEmpty && saveLocation.destination != nil }
 
@@ -76,19 +76,22 @@ extension AppModel {
                 showAddNotice(alreadyQueued: 0, unreadable: 0, missing: missing)
                 return
             }
-            let fallbacks = await LossCheck.quickTimeFallbacks(among: items.map { (id: $0.id, url: $0.url) })
+            let fallbacks = await LossCheck.quickTimeFallbacks(
+                among: items.compactMap { item in item.fileURL.map { (id: item.id, url: $0) } })
             let losses = LossCheck.losses(
                 for: items.map { (id: $0.id, source: $0.savingsSource, preset: presets[$0.id] ?? settings.preset) },
                 custom: settings.custom, quickTimeFallbacks: fallbacks)
             let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
             let lostByURL = Dictionary(
-                uniqueKeysWithValues: losses.compactMap { loss in byID[loss.id].map { ($0.url, loss) } })
+                uniqueKeysWithValues: losses.compactMap { loss in
+                    byID[loss.id].flatMap { $0.fileURL }.map { ($0, loss) }
+                })
             if losses.isEmpty {
                 enqueue(items, settings: settings, presets: presets, losses: lostByURL, missing: missing)
             } else {
                 lossReview = LossReview(
                     entries: losses.compactMap { loss in
-                        byID[loss.id].map { .init(id: loss.id, name: $0.url.lastPathComponent, lost: loss.lost) }
+                        byID[loss.id].map { .init(id: loss.id, name: $0.name, lost: loss.lost) }
                     },
                     items: items, settings: settings, presets: presets, losses: lostByURL, missing: missing)
             }
@@ -125,7 +128,9 @@ extension AppModel {
     ) {
         replaceConsent.videosAdded()
         let batch = JobFactory.makeJobs(
-            for: items.map { (url: $0.url, preset: presets[$0.id] ?? settings.preset) }, settings: settings,
+            for: items.compactMap { item in
+                item.fileURL.map { (url: $0, preset: presets[item.id] ?? settings.preset) }
+            }, settings: settings,
             losses: losses)
         let autoStart = AppSettings.autoStartQueue(defaults)
         if autoStart { isQueuePaused = false }
