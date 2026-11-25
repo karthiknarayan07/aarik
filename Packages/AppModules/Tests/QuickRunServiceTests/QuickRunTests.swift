@@ -202,6 +202,45 @@ import Testing
         #expect(notices[1].body == "1 failed.")
     }
 
+    @Test func finishedJobsRemovedFromTheQueueStillCount() async throws {
+        var first: URL!
+        var second: URL!
+        let harness = try Harness { fixture in
+            first = try fixture.file("a.mov")
+            second = try fixture.file("b.mov")
+            return [first: QuickRunFixture.clean, second: QuickRunFixture.clean]
+        }
+        defer { harness.fixture.remove() }
+
+        _ = await harness.quickRun.run(urls: [first, second], overrides: nil)
+        let queue = harness.queue
+        let jobs = await queue.jobs
+        await queue.finish(jobs[0].id, with: .completed(FakeQueue.outcome(for: jobs[0], saving: 500_000_000)))
+        await harness.quickRun.refresh()
+        // "Clear completed" in the window, then the second job fails.
+        await queue.remove(jobs[0].id)
+        await queue.finish(jobs[1].id, with: .failed(reason: "boom"))
+        await harness.quickRun.refresh()
+
+        #expect(await harness.notifier.notices.first?.body == "1 converted, saved 500 MB. 1 failed.")
+    }
+
+    @Test func aRunWhoseJobsWereAllRemovedBeforeFinishingStaysSilent() async throws {
+        var first: URL!
+        let harness = try Harness { fixture in
+            first = try fixture.file("a.mov")
+            return [first: QuickRunFixture.clean]
+        }
+        defer { harness.fixture.remove() }
+
+        _ = await harness.quickRun.run(urls: [first], overrides: nil)
+        let job = try #require(await harness.queue.jobs.first)
+        await harness.queue.remove(job.id)
+        await harness.quickRun.refresh()
+
+        #expect(await harness.notifier.notices.isEmpty)
+    }
+
     @Test func aRunWithNothingToConvertNotifiesAtOnce() async throws {
         var small: URL!
         let harness = try Harness { fixture in

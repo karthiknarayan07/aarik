@@ -49,6 +49,10 @@ and how many were skipped; "Review skipped files" opens them in Local Files.
 - If the app's window is open, the files are only added to Local Files. Nothing is queued.
 - If no window is visible (it was closed, or the app wasn't running), the files go through a quick run.
 
+Closing the window keeps the app running (it stays in the Dock, and in the menu bar when that item is on) so a quick
+run can finish; ⌘Q quits. A Dock click brings the window back. With auto-start off in Settings, quick-run videos wait
+until you resume the queue.
+
 The app is listed under Open With as an alternate; it never becomes the default player. Quick runs use the same queue
 as the window, so they never convert two videos at once.
 

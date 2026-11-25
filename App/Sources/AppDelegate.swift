@@ -10,9 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let updater = Updater()
     private var isTerminating = false
     private var volumeObservers: [any NSObjectProtocol] = []
-    private var didFinishLaunching = false
+    /// The main window lives as long as the app; closing it only hides it.
+    private var windowController: MainWindowController?
     /// Files opened (Dock drop, Open With) before launch finished; delivered once it has, exactly once.
-    private var pendingOpenURLs: [URL] = []
+    private var openedFiles = LaunchBuffer<URL>()
+    /// Quick-run notification responses that arrived before launch finished (a click that relaunched the app).
+    private var notificationResponses = LaunchBuffer<UUID>()
 
     /// Set before launch finishes, so a click on a notification that relaunched the app reaches `didReceive`.
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -26,11 +29,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        didFinishLaunching = true
         Task { await model.start() }
-        let pending = pendingOpenURLs
-        pendingOpenURLs = []
-        if !pending.isEmpty { model.openFiles(pending) }
+        windowController = MainWindowController(model: model)
+        // Files that came with the launch are a quick run and leave the window hidden; any other launch (or a
+        // notification click that needs the window) shows it.
+        let files = openedFiles.launchFinished()
+        let responses = notificationResponses.launchFinished()
+        if LaunchWindowPlan.plan(openedFileCount: files.count, hasNotificationResponse: !responses.isEmpty) == .show {
+            model.showMainWindow()
+        }
+        if !files.isEmpty { model.openFiles(files) }
+        for runID in responses { Task { await model.reviewQuickRun(runID) } }
         #if DEBUG
             if PhotosSpike.isRequested { PhotosSpike.start() }
         #endif
@@ -47,14 +56,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// Quick runs outlive the window, so closing it never quits.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// A click on the Dock icon brings the window back after it was closed or minimized.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !model.isMainWindowVisible { model.showMainWindow() }
+        return false
+    }
+
     /// Dock drop and Finder's Open With, at cold launch and while running. SwiftUI's `onOpenURL` isn't used, so each
-    /// event arrives here once. With the window open the files join Local Files; otherwise they are a quick run.
+    /// event arrives here once. With the window on screen the files join Local Files; otherwise they are a quick run.
     func application(_ application: NSApplication, open urls: [URL]) {
-        if didFinishLaunching {
-            model.openFiles(urls)
-        } else {
-            pendingOpenURLs.append(contentsOf: urls)
-        }
+        let now = openedFiles.receive(urls)
+        if !now.isEmpty { model.openFiles(now) }
     }
 
     /// A click on a quick run's notification (or its Review action) shows the skipped files.
@@ -65,7 +77,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard content.categoryIdentifier == QuickRunNotice.category,
             let runID = (content.userInfo[QuickRunNotice.runIDKey] as? String).flatMap(UUID.init(uuidString:))
         else { return }
-        await model.reviewQuickRun(runID)
+        await receiveReviewRequest(runID)
+    }
+
+    private func receiveReviewRequest(_ runID: UUID) async {
+        let now = notificationResponses.receive([runID])
+        for runID in now { await model.reviewQuickRun(runID) }
     }
 
     /// Files may have been moved, deleted or restored while the app was in the background.

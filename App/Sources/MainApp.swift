@@ -5,22 +5,15 @@ struct MainApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        // One window, never a group: an Open With or Dock drop while running must not open a second one.
-        Window(AppModel.displayName, id: MainWindow.id) {
-            RootView(model: delegate.model)
-                .frame(minWidth: 900, minHeight: 600)
-                .tracksMainWindow(delegate.model)
+        Settings {
+            SettingsView(model: delegate.model, updater: delegate.updater)
         }
-        .defaultSize(width: 1280, height: 820)
-        .windowResizability(.contentMinSize)
+        // The main window is AppKit's (`MainWindowController`); its menu commands ride on this scene.
         .commands {
             UpdateCommands(updater: delegate.updater)
             SidebarCommands()
             InspectorCommands()
             LibraryCommands(model: delegate.model)
-        }
-        Settings {
-            SettingsView(model: delegate.model, updater: delegate.updater)
         }
     }
 }

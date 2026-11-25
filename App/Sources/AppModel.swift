@@ -29,10 +29,8 @@ final class AppModel {
     }
     var isImporterPresented = false
     var quickLookURL: URL?
-    /// The main window while it exists; nil once SwiftUI has dropped it.
+    /// The main window, owned by `AppDelegate` (see `MainWindowController`).
     @ObservationIgnored weak var mainWindow: NSWindow?
-    /// Opens the main window from code (set by the window's own view; works after the window was closed).
-    @ObservationIgnored var openMainWindow: (() -> Void)?
 
     // MARK: Conversion choices
     var preset: Preset {

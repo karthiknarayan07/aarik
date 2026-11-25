@@ -7,7 +7,7 @@ import QuickRunService
 extension AppModel {
     func makeQuickRun() -> QuickRun {
         QuickRun(
-            queue: queue, store: quickRunStore, notifier: QuickRunNotifier(notifier: notifier),
+            queue: queue, store: quickRunStore, notifier: QuickRunNotifier(model: self),
             settings: { [unowned self] in await self.quickRunSettings() })
     }
 
@@ -29,13 +29,12 @@ extension AppModel {
         }
     }
 
-    /// Dock drop and Open With: with the window open the files join Local Files and nothing is queued; with no
-    /// window they are a quick run.
+    /// Dock drop and Open With: with the window on screen the files join Local Files and nothing is queued;
+    /// otherwise they are a quick run.
     func openFiles(_ urls: [URL]) {
-        if isMainWindowOpen {
-            addFiles(urls)
-        } else {
-            runQuickly(urls)
+        switch OpenedFilesRoute.route(windowVisible: isMainWindowVisible) {
+        case .addToLibrary: addFiles(urls)
+        case .quickRun: runQuickly(urls)
         }
     }
 
@@ -54,12 +53,22 @@ extension AppModel {
     }
 }
 
-/// Posts a finished run's notification through the queue notifier, which stays quiet while the app is frontmost.
+/// Posts a finished run's notification. It stays quiet only when the app is active with its window on screen: a
+/// Dock drop activates a windowless app, and that run's notification is the only feedback.
 struct QuickRunNotifier: QuickRunNotifying {
-    let notifier: QueueNotifier
+    let model: AppModel
 
     func post(_ notice: QuickRunNotice) async {
-        await notifier.postUnlessFrontmost(
+        await model.postQuickRunNotice(notice)
+    }
+}
+
+extension AppModel {
+    func postQuickRunNotice(_ notice: QuickRunNotice) {
+        guard NotificationPolicy.shouldPost(appIsActive: NSApp.isActive, windowOnScreen: isMainWindowVisible) else {
+            return
+        }
+        notifier.post(
             title: notice.title, body: notice.body, category: QuickRunNotice.category,
             userInfo: [QuickRunNotice.runIDKey: notice.runID.uuidString])
     }

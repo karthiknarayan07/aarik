@@ -18,6 +18,8 @@ public actor QuickRun {
     private let settings: @Sendable () async -> QuickRunSettings
     private let now: @Sendable () -> Date
     private var watcher: Task<Void, Never>?
+    /// Runs being set up: their jobs are on the way into the queue, so they can't be judged finished yet.
+    private var starting: Set<UUID> = []
 
     public init(
         queue: any QuickRunQueue, store: QuickRunStore, notifier: any QuickRunNotifying,
@@ -56,46 +58,74 @@ public actor QuickRun {
         let batch = JobFactory.makeJobs(
             for: accepted, settings: DownscaleJobSettings(preset: preset, saveTo: destination), losses: [:],
             now: now())
+        // Remembered before the jobs exist in the queue, so the app never sees them as the window's own jobs, and
+        // held back from `refresh` until the run is complete.
+        let unreadable = batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
+        let runID = UUID()
+        store.add(
+            QuickRunRecord(
+                runID: runID, createdAt: now(), jobIDs: batch.jobs.map(\.id), skipped: [], notes: notes))
+        starting.insert(runID)
         let added = await queue.enqueue(batch.jobs)
         let addedSources = Set(added.map(\.source))
-        let unreadable = batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
         let duplicates = batch.jobs.filter { !addedSources.contains($0.source) }.map {
             QuickRunSkip(url: $0.source, reason: "Already in the queue")
         }
         let skipped = Self.inOrder(unique, skippedByPlan + unreadable + duplicates)
-
-        let record = QuickRunRecord(
-            runID: UUID(), createdAt: now(), jobIDs: added.map(\.id), skipped: skipped, notes: notes)
-        store.add(record)
+        store.update(runID) {
+            $0.jobIDs = added.map(\.id)
+            $0.skipped = skipped
+        }
+        starting.remove(runID)
         if saved.startsQueue, !added.isEmpty { await queue.resume() }
         // A run with nothing queued is done now; one whose jobs already finished is too.
         await refresh()
-        return QuickRunReceipt(runID: record.runID, queuedJobIDs: record.jobIDs, skipped: skipped, notes: notes)
+        return QuickRunReceipt(runID: runID, queuedJobIDs: added.map(\.id), skipped: skipped, notes: notes)
     }
 
     /// Posts the notification of every run whose jobs have all finished and that wasn't announced yet. The queue's
-    /// current jobs decide, not a snapshot that may be older than a run just recorded.
+    /// current jobs decide, not a snapshot that may be older than a run just recorded. How each job ended is kept
+    /// in the record, so removing finished jobs from the queue doesn't change the tally.
     public func refresh() async {
         let jobs = Dictionary(await queue.jobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        for record in store.runs where !record.notified {
-            let live = record.jobIDs.compactMap { jobs[$0] }
-            if live.contains(where: { $0.state.isPending }) { continue }
+        for record in store.runs where !record.notified && !starting.contains(record.runID) {
+            var results = record.results
+            var pending = false
+            for id in record.jobIDs where results[id] == nil {
+                guard let job = jobs[id] else { continue }
+                if let result = Self.result(of: job) {
+                    results[id] = result
+                } else {
+                    pending = true
+                }
+            }
+            if results != record.results { store.update(record.runID) { $0.results = results } }
+            if pending { continue }
             guard store.markNotified(record.runID) else { continue }
-            // Every job removed by hand and nothing skipped: nothing to report.
-            if live.isEmpty, !record.jobIDs.isEmpty, record.skipped.isEmpty { continue }
-            await notifier.post(Self.notice(for: record, jobs: live))
+            // Every job removed by hand before it finished and nothing skipped: nothing to report.
+            if results.isEmpty, !record.jobIDs.isEmpty, record.skipped.isEmpty { continue }
+            var done = record
+            done.results = results
+            await notifier.post(Self.notice(for: done))
         }
     }
 
     /// The files to review for a run: the ones skipped up front, and the ones whose job ended up kept as is.
     public func skippedURLs(runID: UUID) async -> [URL] {
+        await refresh()
         guard let record = store.run(runID) else { return [] }
-        let jobs = Dictionary(await queue.jobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let keptAsIs = record.jobIDs.compactMap { jobs[$0] }.compactMap { job -> URL? in
-            if case .keptAsIs = job.state { return job.source }
-            return nil
-        }
+        let keptAsIs = record.jobIDs.compactMap { record.results[$0] }.filter { $0.kind == .keptAsIs }.map(\.source)
         return record.skipped.map(\.url) + keptAsIs
+    }
+
+    private static func result(of job: Job) -> QuickRunResult? {
+        switch job.state {
+        case .completed(let outcome):
+            QuickRunResult(kind: .converted, savedBytes: outcome.savedBytes, source: job.source)
+        case .keptAsIs: QuickRunResult(kind: .keptAsIs, source: job.source)
+        case .failed: QuickRunResult(kind: .failed, source: job.source)
+        case .queued, .running: nil
+        }
     }
 
     // MARK: - Planning
@@ -162,29 +192,22 @@ public actor QuickRun {
 
     /// Skips sorted as the files were given.
     private static func inOrder(_ urls: [URL], _ skips: [QuickRunSkip]) -> [QuickRunSkip] {
-        let position = Dictionary(urls.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        let position = Dictionary(
+            urls.enumerated().map { ($1.standardizedFileURL.path, $0) }, uniquingKeysWith: { first, _ in first })
         return skips.enumerated().sorted {
-            (position[$0.element.url] ?? 0, $0.offset) < (position[$1.element.url] ?? 0, $1.offset)
+            (position[$0.element.url.standardizedFileURL.path] ?? 0, $0.offset)
+                < (position[$1.element.url.standardizedFileURL.path] ?? 0, $1.offset)
         }.map(\.element)
     }
 
     // MARK: - Notification
 
-    static func notice(for record: QuickRunRecord, jobs: [Job]) -> QuickRunNotice {
-        var converted = 0
-        var saved: Int64 = 0
-        var skipped = record.skipped.count
-        var failed = 0
-        for job in jobs {
-            switch job.state {
-            case .completed(let outcome):
-                converted += 1
-                saved += outcome.savedBytes
-            case .keptAsIs: skipped += 1
-            case .failed: failed += 1
-            case .queued, .running: break
-            }
-        }
+    static func notice(for record: QuickRunRecord) -> QuickRunNotice {
+        let results = record.results.values
+        let converted = results.filter { $0.kind == .converted }.count
+        let saved = results.reduce(Int64(0)) { $0 + $1.savedBytes }
+        let skipped = record.skipped.count + results.filter { $0.kind == .keptAsIs }.count
+        let failed = results.filter { $0.kind == .failed }.count
         var sentences: [String] = []
         if converted > 0 { sentences.append("\(converted) converted, saved \(ByteFormat.string(saved)).") }
         if skipped > 0 { sentences.append("\(skipped) skipped.") }

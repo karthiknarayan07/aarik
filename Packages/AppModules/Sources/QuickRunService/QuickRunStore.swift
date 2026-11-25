@@ -1,13 +1,31 @@
 import Foundation
 import Synchronization
 
+/// How one job of a run ended, kept so removing the job from the queue doesn't change the run's tally.
+public struct QuickRunResult: Codable, Sendable, Equatable {
+    public enum Kind: String, Codable, Sendable { case converted, keptAsIs, failed }
+
+    public let kind: Kind
+    public let savedBytes: Int64
+    /// The file, for a kept-as-is job (reviewed later).
+    public let source: URL
+
+    public init(kind: Kind, savedBytes: Int64 = 0, source: URL) {
+        self.kind = kind
+        self.savedBytes = savedBytes
+        self.source = source
+    }
+}
+
 /// One quick run as remembered between launches.
 public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
     public let runID: UUID
     public let createdAt: Date
-    public let jobIDs: [UUID]
-    public let skipped: [QuickRunSkip]
+    public var jobIDs: [UUID]
+    public var skipped: [QuickRunSkip]
     public let notes: [String]
+    /// How the finished jobs ended, by job ID.
+    public var results: [UUID: QuickRunResult] = [:]
     /// Set once the run's notification was handed over, so it is never posted twice.
     public var notified = false
 
@@ -27,8 +45,19 @@ public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
 public final class QuickRunStore: Sendable {
     public static let retention: TimeInterval = 7 * 86_400
 
+    private struct State {
+        var records: [QuickRunRecord]
+        /// Every job ID of every record, kept in step so the queue's updates can test membership cheaply.
+        var jobIDs: Set<UUID>
+
+        init(_ records: [QuickRunRecord]) {
+            self.records = records
+            jobIDs = Set(records.flatMap(\.jobIDs))
+        }
+    }
+
     private let fileURL: URL
-    private let records: Mutex<[QuickRunRecord]>
+    private let state: Mutex<State>
 
     /// Reads the file (none or unreadable means no runs) and drops runs older than seven days.
     public init(fileURL: URL, now: Date = Date()) {
@@ -37,30 +66,43 @@ public final class QuickRunStore: Sendable {
             (try? Data(contentsOf: fileURL)).flatMap { try? JSONDecoder().decode([QuickRunRecord].self, from: $0) }
             ?? []
         let kept = loaded.filter { now.timeIntervalSince($0.createdAt) <= Self.retention }
-        self.records = Mutex(kept)
+        self.state = Mutex(State(kept))
         if kept.count != loaded.count { save(kept) }
     }
 
-    public var runs: [QuickRunRecord] { records.withLock { $0 } }
+    public var runs: [QuickRunRecord] { state.withLock { $0.records } }
 
-    public func run(_ id: UUID) -> QuickRunRecord? { records.withLock { $0.first { $0.runID == id } } }
+    public func run(_ id: UUID) -> QuickRunRecord? { state.withLock { $0.records.first { $0.runID == id } } }
 
     /// Every job ID of every remembered run.
-    public var jobIDs: Set<UUID> { records.withLock { Set($0.flatMap(\.jobIDs)) } }
+    public var jobIDs: Set<UUID> { state.withLock { $0.jobIDs } }
 
     public func add(_ record: QuickRunRecord) {
-        records.withLock {
-            $0.append(record)
-            save($0)
+        state.withLock {
+            $0.records.append(record)
+            $0.jobIDs.formUnion(record.jobIDs)
+            save($0.records)
+        }
+    }
+
+    /// Changes a remembered run in place; ignored for an unknown run.
+    public func update(_ id: UUID, _ change: (inout QuickRunRecord) -> Void) {
+        state.withLock {
+            guard let index = $0.records.firstIndex(where: { $0.runID == id }) else { return }
+            change(&$0.records[index])
+            $0.jobIDs = Set($0.records.flatMap(\.jobIDs))
+            save($0.records)
         }
     }
 
     /// True the first time for a run, false after; false for an unknown run.
     public func markNotified(_ id: UUID) -> Bool {
-        records.withLock {
-            guard let index = $0.firstIndex(where: { $0.runID == id }), !$0[index].notified else { return false }
-            $0[index].notified = true
-            save($0)
+        state.withLock {
+            guard let index = $0.records.firstIndex(where: { $0.runID == id }), !$0.records[index].notified else {
+                return false
+            }
+            $0.records[index].notified = true
+            save($0.records)
             return true
         }
     }

@@ -95,6 +95,11 @@ actor FakeQueue: QuickRunQueue {
         publish()
     }
 
+    func remove(_ id: UUID) {
+        items.removeAll { $0.id == id }
+        publish()
+    }
+
     func completeAll(saving saved: Int64 = 1000) {
         for job in items where job.state.isPending {
             finish(job.id, with: .completed(Self.outcome(for: job, saving: saved)))
