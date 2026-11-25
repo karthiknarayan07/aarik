@@ -1,10 +1,11 @@
 import Foundation
 import Observation
 
-/// What the grid shows: the library filtered by media type and name, grouped and sorted, plus the selection.
+/// What the grid shows: the library filtered by media type, name and quality, grouped and sorted, plus the
+/// selection.
 ///
-/// The snapshot and anything derived from it (`cached`) are rebuilt only when the items or the query change.
-/// A selection change never rebuilds them.
+/// The snapshot and anything derived from it (`cached`) are rebuilt only when the items or the query change; the
+/// query includes the quality filter, so totals and savings follow it. A selection change never rebuilds them.
 @MainActor
 @Observable
 public final class LibraryBrowser {
@@ -13,11 +14,14 @@ public final class LibraryBrowser {
         public let groups: [ItemGroup]
         public let items: [LibraryItem]
         public let totalBytes: Int64
+        /// The quality options present among the items the media-type filter and search let through, with counts.
+        public let facets: QualityFacets
         /// Grid order of each visible item.
         let positions: [UUID: Int]
 
-        init(groups: [ItemGroup]) {
+        init(groups: [ItemGroup], facets: QualityFacets = .empty) {
             self.groups = groups
+            self.facets = facets
             self.items = groups.flatMap(\.items)
             self.totalBytes = items.reduce(0) { $0 + $1.byteSize }
             self.positions = Dictionary(uniqueKeysWithValues: items.enumerated().map { ($1.id, $0) })
@@ -28,6 +32,8 @@ public final class LibraryBrowser {
     public var sort: Sort = .biggestFirst
     public var filter: MediaBadge?
     public var search = ""
+    /// Resolution and frame rate, size, length, codec and dynamic range; combined with `filter` and `search`.
+    public var quality = QualityFilter()
     /// The grid's selection. A search can hide some of it; `selectedItems` leaves those out.
     public var selection: Set<UUID> = []
 
@@ -43,6 +49,7 @@ public final class LibraryBrowser {
         let sort: Sort
         let filter: MediaBadge?
         let search: String
+        let quality: QualityFilter
     }
 
     @ObservationIgnored private var query: Query?
@@ -56,10 +63,10 @@ public final class LibraryBrowser {
     public var snapshot: Snapshot {
         let next = Query(
             revision: library.revision, grouping: grouping, sort: sort, filter: filter,
-            search: search.trimmingCharacters(in: .whitespacesAndNewlines))
+            search: search.trimmingCharacters(in: .whitespacesAndNewlines), quality: quality)
         if next != query {
             query = next
-            current = Snapshot(groups: Self.groups(library.items, query: next))
+            current = Self.snapshot(library.items, query: next)
             derived.removeAll()
             snapshotBuilds += 1
         }
@@ -82,12 +89,15 @@ public final class LibraryBrowser {
         return selection.compactMap { snapshot.positions[$0] }.sorted().map { snapshot.items[$0] }
     }
 
-    private static func groups(_ items: [LibraryItem], query: Query) -> [ItemGroup] {
-        let groups = LibraryGrouper.groups(items, by: query.grouping, sort: query.sort, filter: query.filter)
-        guard !query.search.isEmpty else { return groups }
-        return groups.compactMap { group in
-            let kept = group.items.filter { $0.url.lastPathComponent.localizedStandardContains(query.search) }
-            return kept.isEmpty ? nil : ItemGroup(id: group.id, title: group.title, items: kept)
+    /// Media type and search narrow the collection; the quality filter then picks from it and counts its options
+    /// there, so the bar offers only what the current collection has.
+    private static func snapshot(_ items: [LibraryItem], query: Query) -> Snapshot {
+        let collection = items.filter { item in
+            (query.filter.map(item.badges.contains) ?? true)
+                && (query.search.isEmpty || item.url.lastPathComponent.localizedStandardContains(query.search))
         }
+        let (kept, facets) = query.quality.apply(to: collection)
+        let groups = LibraryGrouper.groups(kept, by: query.grouping, sort: query.sort, filter: nil)
+        return Snapshot(groups: groups, facets: facets)
     }
 }

@@ -26,8 +26,14 @@ struct LocalFilesView: View {
                         }
                     }
                     Divider()
+                    QualityFilterBar(browser: browser)
+                    Divider()
                     if sections.isEmpty {
-                        ContentUnavailableView.search(text: browser.search)
+                        if browser.quality.isActive && browser.search.isEmpty {
+                            NoMatchingVideos { browser.quality = QualityFilter() }
+                        } else {
+                            ContentUnavailableView.search(text: browser.search)
+                        }
                     } else {
                         MediaGrid(sections: sections, selection: $browser.selection, onSpace: model.toggleQuickLook) {
                             item, isSelected in
@@ -77,6 +83,21 @@ private struct LocalFilesWelcome: View {
             Button("Add files…", action: addFiles)
                 .buttonStyle(.borderedProminent)
                 .help("Choose videos or folders, or drag them into this window")
+        }
+    }
+}
+
+/// The quality filters hide every video in the collection.
+private struct NoMatchingVideos: View {
+    let clear: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("No matching videos", systemImage: "line.3.horizontal.decrease.circle")
+        } description: {
+            Text("No videos here match these filters.")
+        } actions: {
+            Button("Clear filters", action: clear)
         }
     }
 }
