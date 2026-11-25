@@ -50,7 +50,7 @@ public struct AdvancedOptions: Sendable, Equatable {
     /// The bit rate the field starts at for HEVC, in Mbps.
     public static let suggestedHEVCMbps = 10.0
     /// H.264 needs about 1.6x the HEVC bit rate for similar quality.
-    static let h264BitRateFactor = 1.6
+    public static let h264BitRateFactor = 1.6
 
     public var isEnabled = false
     public var resolution = Resolution.p1080
