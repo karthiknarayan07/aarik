@@ -32,6 +32,11 @@ import Testing
         return output
     }
 
+    private func expectNoPartial(beside output: URL) throws {
+        let names = try FileManager.default.contentsOfDirectory(atPath: output.deletingLastPathComponent().path)
+        #expect(!names.contains { $0.contains(".partial-") }, "leaked: \(names)")
+    }
+
     private func duration(of url: URL, _ mediaType: AVMediaType) async throws -> Double {
         let track = try #require(try await AVURLAsset(url: url).loadTracks(withMediaType: mediaType).first)
         return try await track.load(.timeRange).duration.seconds
@@ -204,6 +209,7 @@ import Testing
             try await downscaler.downscale(source: source, output: output, spec: smallSpec) { _ in }
         }
         #expect(try Data(contentsOf: output) == other)
+        try expectNoPartial(beside: output)
     }
 
     @Test(.timeLimit(.minutes(2))) func cancelRemovesPartialOutput() async throws {
@@ -231,6 +237,7 @@ import Testing
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(state.withLock { $0.cancelRequested })
         #expect(!FileManager.default.fileExists(atPath: output.path))
+        try expectNoPartial(beside: output)
     }
 
     @Test(.timeLimit(.minutes(2))) func sixtyToThirtyKeepsDurationAndSync() async throws {
@@ -275,6 +282,7 @@ import Testing
             try await downscaler.downscale(source: source, output: output, spec: smallSpec) { _ in }
         }
         #expect(!FileManager.default.fileExists(atPath: output.path))
+        try expectNoPartial(beside: output)
     }
 
     /// Regression: once video is finished, the passthrough drain must feed every track. Draining one track at a time

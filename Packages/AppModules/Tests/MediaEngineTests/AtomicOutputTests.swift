@@ -42,6 +42,31 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: partial.path))
     }
 
+    @Test func fallbackCommitsWhenExclusiveRenameIsUnsupported() throws {
+        for unsupported in [ENOTSUP, EINVAL] {
+            let dir = try directory()
+            let final = dir.appending(path: "out.mov")
+            let partial = AtomicOutput.partialURL(for: final)
+            try Data("new".utf8).write(to: partial)
+            try AtomicOutput.commit(partial: partial, to: final) { _, _ in unsupported }
+            #expect(try Data(contentsOf: final) == Data("new".utf8))
+            #expect(!FileManager.default.fileExists(atPath: partial.path))
+        }
+    }
+
+    @Test func fallbackRefusesExistingFinal() throws {
+        let dir = try directory()
+        let final = dir.appending(path: "out.mov")
+        try Data("keep me".utf8).write(to: final)
+        let partial = AtomicOutput.partialURL(for: final)
+        try Data("new".utf8).write(to: partial)
+        #expect(throws: DownscaleError.outputExists) {
+            try AtomicOutput.commit(partial: partial, to: final) { _, _ in ENOTSUP }
+        }
+        #expect(try Data(contentsOf: final) == Data("keep me".utf8))
+        #expect(!FileManager.default.fileExists(atPath: partial.path))
+    }
+
     @Test(.timeLimit(.minutes(2))) func downscaleWritesNoFinalUntilDone() async throws {
         var options = ClipOptions()
         options.width = 1280
