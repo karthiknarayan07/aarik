@@ -45,6 +45,7 @@ private struct GeneralSettings: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            FinderQuickActionSection()
         }
         .formStyle(.grouped)
         // The inspector's preset is this same stored value; keep the open window in step.
