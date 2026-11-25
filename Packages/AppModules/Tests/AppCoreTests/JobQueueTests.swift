@@ -411,3 +411,124 @@ private actor ProgressRunner: JobRunner {
         if case .completed = jobs[0].state { return true } else { return false }
     }
 }
+
+// MARK: - Cancel
+
+@Test func cancellingTheRunningJobRemovesItAndRunsTheNext() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let (a, b) = (makeJob(name: "a"), makeJob(name: "b"))
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([a, b])
+    _ = await starts.next()
+    await queue.cancel(a.id)
+    #expect(await starts.next() == b.id)
+
+    #expect(await queue.jobs.map(\.id) == [b.id])
+    #expect(store.load().map(\.id) == [b.id])
+    #expect(await runner.events == ["start a", "abort a", "start b"])
+    await queue.shutdown()
+}
+
+@Test func cancellingAQueuedJobRemovesIt() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let queue = JobQueue(store: store, runners: [:], startPaused: true)
+    let (a, b) = (makeJob(name: "a"), makeJob(name: "b"))
+    await queue.enqueue([a, b])
+
+    await queue.cancel(b.id)
+
+    #expect(await queue.jobs.map(\.id) == [a.id])
+}
+
+@Test func cancelIgnoresFinishedJobs() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    var done = makeJob()
+    done.state = .failed(reason: "boom")
+    try store.save([done])
+    let queue = JobQueue(store: store, runners: [:])
+
+    await queue.cancel(done.id)
+    await queue.cancelAll()
+
+    #expect(await queue.jobs == [done])
+}
+
+@Test func cancelAllRemovesQueuedJobsAndCancelsTheRunningOne() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    var finished = makeJob(name: "done")
+    finished.state = .completed(
+        JobOutcome(
+            output: URL(fileURLWithPath: "/tmp/done (1080p).mov"), bytesBefore: 10, bytesAfter: 5,
+            report: MetadataReport(), replacedOriginal: false))
+    try store.save([finished])
+    let restored = JobQueue(store: store, runners: ["fake": runner])
+    let jobs = ["a", "b", "c"].map { makeJob(name: $0) }
+    var starts = runner.started.makeAsyncIterator()
+
+    await restored.enqueue(jobs)
+    _ = await starts.next()
+    await restored.cancelAll()
+    await waitUntil(restored) { $0.count == 1 }
+
+    #expect(await restored.jobs.map(\.id) == [finished.id])
+    #expect(await runner.events == ["start a", "abort a"])
+    #expect(store.load().map(\.id) == [finished.id])
+    await restored.shutdown()
+}
+
+@Test func aJobThatFinishesAsItIsCancelledKeepsItsResult() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let job = makeJob()
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([job])
+    _ = await starts.next()
+    // The result arrives before the cancellation reaches the runner: it stands (a Replace may already be done).
+    await runner.finish(job.id, .success(completed()))
+    await queue.cancel(job.id)
+    await waitUntil(queue) { !$0.isEmpty && !$0[0].state.isPending }
+
+    #expect(await queue.jobs.map(\.state) == [completed()])
+    await queue.shutdown()
+}
+
+// MARK: - Store
+
+@Test func unreadableJobsFileIsSetAsideAndReported() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let garbage = Data("{ not jobs".utf8)
+    try garbage.write(to: dir.appendingPathComponent("jobs.json"))
+
+    let queue = JobQueue(store: store, runners: [:])
+
+    #expect(await queue.jobs.isEmpty)
+    let error = try #require(await queue.loadError)
+    #expect(error.contains("jobs.json.corrupt-"))
+    let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+    let aside = try #require(names.first { $0.hasPrefix("jobs.json.corrupt-") })
+    #expect(try Data(contentsOf: dir.appendingPathComponent(aside)) == garbage)
+    #expect(!names.contains("jobs.json"))
+    // The next save starts a fresh file and leaves the set-aside one alone.
+    await queue.enqueue([makeJob()])
+    #expect(try Data(contentsOf: dir.appendingPathComponent(aside)) == garbage)
+}
+
+@Test func readableOrMissingJobsFileReportsNoError() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    #expect(await JobQueue(store: store, runners: [:]).loadError == nil)
+    try store.save([makeJob()])
+    #expect(await JobQueue(store: store, runners: [:]).loadError == nil)
+}

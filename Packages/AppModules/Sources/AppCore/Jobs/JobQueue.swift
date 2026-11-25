@@ -12,13 +12,23 @@ public actor JobQueue {
     private var paused = false
     private var stopped = false
     private var worker: Task<Void, Never>?
+    /// The job being run and its task, so `cancel` can stop just that job.
+    private var current: (id: UUID, task: Task<JobState, any Error>)?
+    /// Running jobs the user cancelled: when their run throws they leave the queue instead of failing.
+    private var cancelledByUser: Set<UUID> = []
     private var subscribers: [UUID: AsyncStream<[Job]>.Continuation] = [:]
+    /// Set when the saved queue couldn't be read and was set aside; the queue starts empty.
+    public private(set) var loadError: String?
 
     public init(store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false) {
         self.store = store
         self.runners = runners
         self.paused = startPaused
-        var loaded = store.load()
+        let result = store.loadReportingProblems()
+        if let aside = result.setAside {
+            loadError = "The saved queue couldn't be read. It was kept as \(aside.lastPathComponent)."
+        }
+        var loaded = result.jobs
         var recovered = false
         for index in loaded.indices {
             if case .running = loaded[index].state {
@@ -83,6 +93,36 @@ public actor JobQueue {
         guard any else { return }
         changed()
         startWorkerIfNeeded()
+    }
+
+    /// Cancels a job: a running one is stopped (the runner removes its partial output and leaves the original
+    /// untouched) and leaves the queue; a queued one is removed. Finished jobs are left alone. Unlike `shutdown`,
+    /// a cancelled job is never put back in the queue. A run that finishes before the cancellation reaches it
+    /// keeps its result.
+    public func cancel(_ id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        switch items[index].state {
+        case .queued:
+            items.remove(at: index)
+            changed()
+        case .running:
+            guard let current, current.id == id else { return }
+            cancelledByUser.insert(id)
+            current.task.cancel()
+        case .completed, .keptAsIs, .failed:
+            return
+        }
+    }
+
+    /// Removes every queued job and cancels the running one (see `cancel`). Finished jobs stay.
+    public func cancelAll() {
+        let before = items.count
+        items.removeAll { $0.state == .queued }
+        if items.count != before { changed() }
+        if let current {
+            cancelledByUser.insert(current.id)
+            current.task.cancel()
+        }
     }
 
     /// Removes a job unless it is running.
@@ -159,27 +199,52 @@ public actor JobQueue {
         }
     }
 
-    private func execute(_ job: Job) async -> JobState? {
+    /// What happens to a job once its run ends.
+    private enum Disposition {
+        case finished(JobState)
+        /// Shutdown: back in the queue, to start over next time.
+        case requeue
+        /// Cancelled by the user: out of the queue.
+        case remove
+    }
+
+    private func execute(_ job: Job) async -> Disposition {
         guard let runner = runners[job.toolID] else {
-            return .failed(reason: "No tool can run this job")
+            return .finished(.failed(reason: "No tool can run this job"))
         }
         let id = job.id
-        do {
-            let state = try await runner.run(job) { [weak self] value in
-                Task { await self?.updateProgress(value, for: id) }
-            }
-            return state
-        } catch {
-            // Only a cancelled worker (shutdown) is not a failure: nil means "put back in the queue".
-            if Task.isCancelled { return nil }
+        // Its own task, so `cancel` can stop this job alone; cancelling the worker (shutdown) cancels it too.
+        let progress: @Sendable (Double) -> Void = { [weak self] value in
+            Task { await self?.updateProgress(value, for: id) }
+        }
+        let task = Task { try await runner.run(job, progress: progress) }
+        current = (id, task)
+        let result = await withTaskCancellationHandler {
+            await task.result
+        } onCancel: {
+            task.cancel()
+        }
+        current = nil
+        let cancelled = cancelledByUser.remove(id) != nil
+        switch result {
+        case .success(let state):
+            return .finished(state)
+        case .failure(let error):
+            if cancelled { return .remove }
+            // Only a cancelled worker (shutdown) is not a failure.
+            if Task.isCancelled { return .requeue }
             let reason = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-            return .failed(reason: reason)
+            return .finished(.failed(reason: reason))
         }
     }
 
-    private func apply(_ result: JobState?, to id: UUID) {
+    private func apply(_ disposition: Disposition, to id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].state = result ?? .queued
+        switch disposition {
+        case .finished(let state): items[index].state = state
+        case .requeue: items[index].state = .queued
+        case .remove: items.remove(at: index)
+        }
         changed()
     }
 
