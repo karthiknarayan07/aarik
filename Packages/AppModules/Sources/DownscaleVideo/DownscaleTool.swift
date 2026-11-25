@@ -15,11 +15,17 @@ public struct DownscaleJobSettings: Codable, Sendable, Equatable {
     public var saveTo: SaveDestination
     /// When set, wins over `preset`.
     public var custom: DownscaleSpec?
+    /// What the planner predicted, when the job was added, that converting loses (display names); empty for
+    /// nothing. Nil for jobs saved before this was recorded.
+    public var predictedLost: [String]?
 
-    public init(preset: Preset, saveTo: SaveDestination, custom: DownscaleSpec? = nil) {
+    public init(
+        preset: Preset, saveTo: SaveDestination, custom: DownscaleSpec? = nil, predictedLost: [String]? = nil
+    ) {
         self.preset = preset
         self.saveTo = saveTo
         self.custom = custom
+        self.predictedLost = predictedLost
     }
 }
 

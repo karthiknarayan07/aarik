@@ -21,13 +21,13 @@ import Testing
         // The generated clips are a second long, too short for a preset's estimate to promise a 10% saving, so the
         // jobs carry the runner tests' custom spec: a 1080p downscale. The 640x360 clip is already below it.
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: RunnerFixture.spec)
-        let jobs = try JobFactory.makeJobs(for: [big, small], settings: settings)
+        let jobs = JobFactory.makeJobs(for: [big, small], settings: settings).jobs
         var tracker = QueueRunTracker()
         #expect(tracker.observe(await queue.jobs) == nil)
 
         #expect(await queue.enqueue(jobs).count == 2)
         // Adding the same files again while they wait or run adds nothing.
-        #expect(await queue.enqueue(try JobFactory.makeJobs(for: [big, small], settings: settings)).isEmpty)
+        #expect(await queue.enqueue(JobFactory.makeJobs(for: [big, small], settings: settings).jobs).isEmpty)
 
         var summary: QueueRunSummary?
         var final: [Job] = []

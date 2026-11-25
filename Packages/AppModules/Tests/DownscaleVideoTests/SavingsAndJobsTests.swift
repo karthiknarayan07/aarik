@@ -71,8 +71,10 @@ import Testing
         }
         let settings = DownscaleJobSettings(preset: .smaller, saveTo: .nextToOriginal)
 
-        let jobs = try JobFactory.makeJobs(for: urls, settings: settings)
+        let batch = JobFactory.makeJobs(for: urls, settings: settings)
+        let jobs = batch.jobs
 
+        #expect(batch.skipped.isEmpty)
         #expect(jobs.count == 3)
         #expect(jobs.map(\.source) == urls)
         #expect(Set(jobs.map(\.id)).count == 3)
@@ -97,17 +99,51 @@ import Testing
         let settings = DownscaleJobSettings(
             preset: .high, saveTo: .replace, custom: DownscaleSpec(targetShortSide: 720, averageBitRate: 3_000_000))
 
-        let jobs = try JobFactory.makeJobs(for: [url], settings: settings)
+        let jobs = JobFactory.makeJobs(for: [url], settings: settings).jobs
         let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: try #require(jobs.first).settings)
         #expect(decoded == settings)
     }
 
-    @Test func missingSourceThrows() {
-        let missing = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID().uuidString).mov")
-        #expect(throws: (any Error).self) {
-            try JobFactory.makeJobs(
-                for: [missing], settings: DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal))
-        }
+    @Test func fileThatCantBeBookmarkedIsSkippedAndReportedOthersStillGetJobs() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "jobfactory-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let present = folder.appending(path: "clip.mov")
+        try Data([1]).write(to: present)
+        let missing = folder.appending(path: "missing.mov")
+
+        let batch = JobFactory.makeJobs(
+            for: [missing, present], settings: DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal))
+
+        #expect(batch.jobs.map(\.source) == [present])
+        #expect(batch.skipped == [missing])
+    }
+
+    @Test func jobsRecordWhatTheyArePredictedToLose() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "jobfactory-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let lossy = folder.appending(path: "a.mov")
+        let clean = folder.appending(path: "b.mov")
+        try Data([1]).write(to: lossy)
+        try Data([2]).write(to: clean)
+        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
+
+        let jobs = JobFactory.makeJobs(
+            for: [lossy, clean], settings: settings, losses: [lossy: ["Cinematic depth data"]]
+        ).jobs
+        let decoded = try jobs.map { try JSONDecoder().decode(DownscaleJobSettings.self, from: $0.settings) }
+
+        #expect(decoded.map(\.predictedLost) == [["Cinematic depth data"], []])
+        // Without a loss check the prediction is unknown, as for jobs saved before it existed.
+        let unknown = try #require(JobFactory.makeJobs(for: [clean], settings: settings).jobs.first)
+        #expect(try JSONDecoder().decode(DownscaleJobSettings.self, from: unknown.settings).predictedLost == nil)
+    }
+
+    @Test func settingsSavedBeforePredictedLossDecode() throws {
+        let old = #"{"preset":"balanced","saveTo":{"nextToOriginal":{}}}"#
+        let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: Data(old.utf8))
+        #expect(decoded == DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal))
     }
 
     @Test func advancedOptionsBuildACustomSpecOnlyWhenOn() {

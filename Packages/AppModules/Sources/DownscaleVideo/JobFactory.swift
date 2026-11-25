@@ -1,18 +1,38 @@
 import AppCore
 import Foundation
 
+/// The jobs made for a selection, and the files that couldn't get one.
+public struct JobBatch: Sendable {
+    public var jobs: [Job]
+    /// Files that couldn't be bookmarked (for example, gone since they were added); they get no job.
+    public var skipped: [URL]
+}
+
 /// Turns a selection into Downscale Video jobs.
 public enum JobFactory {
-    /// One queued job per file, each carrying `settings` and a bookmark that follows the file if it moves.
-    /// Throws when a file can't be bookmarked (for example, it no longer exists).
-    public static func makeJobs(for sources: [URL], settings: DownscaleJobSettings, now: Date = Date()) throws
-        -> [Job]
-    {
-        let encoded = try JSONEncoder().encode(settings)
-        return try sources.map { url in
-            Job(
-                toolID: DownscaleTool.toolID, source: url, sourceBookmark: try url.bookmarkData(options: []),
-                settings: encoded, createdAt: now)
+    /// One queued job per file, each carrying `settings` and a bookmark that follows the file if it moves. With
+    /// `losses`, each job also records what it is predicted to lose (`losses[url]`, none when absent) for the queue's
+    /// badge. A file that can't be bookmarked is skipped and listed in `skipped`; the others still get jobs.
+    public static func makeJobs(
+        for sources: [URL], settings: DownscaleJobSettings, losses: [URL: [String]]? = nil, now: Date = Date()
+    ) -> JobBatch {
+        var batch = JobBatch(jobs: [], skipped: [])
+        for url in sources {
+            guard let bookmark = try? url.bookmarkData(options: []) else {
+                batch.skipped.append(url)
+                continue
+            }
+            var settings = settings
+            settings.predictedLost = losses.map { $0[url] ?? [] }
+            guard let encoded = try? JSONEncoder().encode(settings) else {
+                batch.skipped.append(url)
+                continue
+            }
+            batch.jobs.append(
+                Job(
+                    toolID: DownscaleTool.toolID, source: url, sourceBookmark: bookmark, settings: encoded,
+                    createdAt: now))
         }
+        return batch
     }
 }
