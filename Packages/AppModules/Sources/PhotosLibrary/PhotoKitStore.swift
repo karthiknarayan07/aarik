@@ -92,11 +92,11 @@ public final class PhotoKitStore: PhotoStore {
         return result
     }
 
-    private static func location(_ location: CLLocation?) -> PhotoLocation? {
+    static func location(_ location: CLLocation?) -> PhotoLocation? {
         guard let location, CLLocationCoordinate2DIsValid(location.coordinate) else { return nil }
         return PhotoLocation(
             latitude: location.coordinate.latitude, longitude: location.coordinate.longitude,
-            altitude: location.altitude)
+            altitude: location.verticalAccuracy >= 0 ? location.altitude : nil)
     }
 
     // MARK: - Resource fields

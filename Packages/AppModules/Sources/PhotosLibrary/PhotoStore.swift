@@ -5,10 +5,10 @@ import Foundation
 public struct PhotoLocation: Sendable, Hashable {
     public let latitude: Double
     public let longitude: Double
-    /// Meters above sea level.
-    public let altitude: Double
+    /// Meters above sea level; nil when unknown.
+    public let altitude: Double?
 
-    public init(latitude: Double, longitude: Double, altitude: Double = 0) {
+    public init(latitude: Double, longitude: Double, altitude: Double? = nil) {
         self.latitude = latitude
         self.longitude = longitude
         self.altitude = altitude
@@ -134,7 +134,37 @@ public enum FetchProgress: Sendable, Equatable {
     }
 }
 
-/// Read access to the Photos library. The real one wraps PhotoKit; tests use `FakePhotoStore`.
+/// What a new video asset is created with: the file plus the fields copied from the source asset.
+public struct PhotoSaveRequest: Sendable, Equatable {
+    public let file: URL
+    public let creationDate: Date?
+    public let location: PhotoLocation?
+    public let isFavorite: Bool
+    public let isHidden: Bool
+    /// Local identifiers of the albums to add the new asset to. An album that no longer exists is skipped.
+    public let albums: [String]
+
+    public init(
+        file: URL, creationDate: Date?, location: PhotoLocation?, isFavorite: Bool, isHidden: Bool,
+        albums: [String]
+    ) {
+        self.file = file
+        self.creationDate = creationDate
+        self.location = location
+        self.isFavorite = isFavorite
+        self.isHidden = isHidden
+        self.albums = albums
+    }
+
+    /// The albums the new asset is added to: those requested that are in `existing`, in the requested order,
+    /// each once.
+    public func albumsToAdd(existing: Set<String>) -> [String] {
+        var seen: Set<String> = []
+        return albums.filter { existing.contains($0) && seen.insert($0).inserted }
+    }
+}
+
+/// Access to the Photos library. The real one wraps PhotoKit; tests use `FakePhotoStore`.
 public protocol PhotoStore: Sendable {
     func authorization() async -> PhotoAuthorization
     /// Asks for read and write access, showing the system prompt the first time.
@@ -149,6 +179,15 @@ public protocol PhotoStore: Sendable {
     func thumbnail(for id: String, size: CGSize) async -> CGImage?
     /// The asset's current metadata (including whether it was edited); throws `notInLibrary` when it is gone.
     func asset(id: String) async throws -> PhotoAsset
+    /// Adds a new video asset made from `request.file` in one change (the file is copied, never moved), with the
+    /// request's date, location, favorite and hidden flags, and adds it to each of the request's albums that
+    /// still exists. Returns the new asset's local identifier. Never changes an existing asset. Works with full or
+    /// limited access; otherwise throws `notAuthorized`. When it throws, no asset was added, except after the
+    /// change itself succeeded and Photos gave no identifier (`unavailable`): a video may then have been added.
+    func saveVideo(_ request: PhotoSaveRequest) async throws -> String
+    /// Deletes assets the app can access (full or limited access). Photos always asks the user to confirm; throws
+    /// `CancellationError` when the user declines.
+    func deleteAssets(ids: [String]) async throws
     /// Writes the asset's original video resource to `url`, downloading from iCloud when needed and reporting
     /// `.downloading` progress. Cancelling the task stops the transfer.
     func writeOriginal(id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void) async throws

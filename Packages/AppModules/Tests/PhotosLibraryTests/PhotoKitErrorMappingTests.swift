@@ -31,6 +31,10 @@ import Testing
         #expect(map("PHPhotosErrorDomain", 3072) is CancellationError)
     }
 
+    @Test func cocoaUserCancelledIsACancellation() {
+        #expect(map(NSCocoaErrorDomain, NSUserCancelledError) is CancellationError)
+    }
+
     @Test func otherErrorsAreUnavailableNotDownloadFailures() {
         let error = map("PHPhotosErrorDomain", 3300) as? PhotoStoreError
         guard case .unavailable? = error else {
