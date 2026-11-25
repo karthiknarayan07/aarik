@@ -35,10 +35,20 @@ public enum LossCheck {
         for sources: [(id: ID, source: SavingsCalculator.Source)], preset: Preset, custom: DownscaleSpec? = nil,
         quickTimeFallbacks: Set<ID> = []
     ) -> [PredictedLoss<ID>] {
+        losses(
+            for: sources.map { (id: $0.id, source: $0.source, preset: preset) }, custom: custom,
+            quickTimeFallbacks: quickTimeFallbacks)
+    }
+
+    /// `losses(for:preset:custom:quickTimeFallbacks:)` with a preset per video (`custom`, when given, wins).
+    public static func losses<ID: Hashable & Sendable>(
+        for sources: [(id: ID, source: SavingsCalculator.Source, preset: Preset)], custom: DownscaleSpec? = nil,
+        quickTimeFallbacks: Set<ID> = []
+    ) -> [PredictedLoss<ID>] {
         sources.compactMap { entry in
             let lost = lostNames(
-                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: preset, custom: custom,
-                fallsBackToQuickTime: quickTimeFallbacks.contains(entry.id))
+                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: entry.preset,
+                custom: custom, fallsBackToQuickTime: quickTimeFallbacks.contains(entry.id))
             return lost.isEmpty ? nil : PredictedLoss(id: entry.id, lost: lost)
         }
     }

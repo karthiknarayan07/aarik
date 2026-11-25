@@ -16,13 +16,23 @@ public enum JobFactory {
     public static func makeJobs(
         for sources: [URL], settings: DownscaleJobSettings, losses: [URL: [String]]? = nil, now: Date = Date()
     ) -> JobBatch {
+        makeJobs(for: sources.map { (url: $0, preset: settings.preset) }, settings: settings, losses: losses, now: now)
+    }
+
+    /// `makeJobs(for:settings:losses:now:)` with a preset per file (the inspector's per-video choice) in place of
+    /// `settings.preset`.
+    public static func makeJobs(
+        for sources: [(url: URL, preset: Preset)], settings: DownscaleJobSettings, losses: [URL: [String]]? = nil,
+        now: Date = Date()
+    ) -> JobBatch {
         var batch = JobBatch(jobs: [], skipped: [])
-        for url in sources {
+        for (url, preset) in sources {
             guard let bookmark = try? url.bookmarkData(options: []) else {
                 batch.skipped.append(url)
                 continue
             }
             var settings = settings
+            settings.preset = preset
             settings.predictedLost = losses.map { $0[url] ?? [] }
             guard let encoded = try? JSONEncoder().encode(settings) else {
                 batch.skipped.append(url)

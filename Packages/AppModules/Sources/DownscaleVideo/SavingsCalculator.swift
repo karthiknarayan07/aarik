@@ -41,7 +41,15 @@ public enum SavingsCalculator {
 
     /// Sum of `byteSize - estimate` over the videos that would be converted.
     public static func couldFreeBytes(for sources: [Source], preset: Preset, custom: DownscaleSpec? = nil) -> Int64 {
-        sources.reduce(into: Int64(0)) { total, source in
+        couldFreeBytes(for: sources.map { (source: $0, preset: preset) }, custom: custom)
+    }
+
+    /// `couldFreeBytes(for:preset:custom:)` with a preset per video (`custom`, when given, wins for all).
+    public static func couldFreeBytes(
+        for sources: [(source: Source, preset: Preset)], custom: DownscaleSpec? = nil
+    ) -> Int64 {
+        sources.reduce(into: Int64(0)) { total, entry in
+            let (source, preset) = entry
             let decision = decision(
                 byteSize: source.byteSize, inventory: source.inventory, preset: preset, custom: custom)
             if case .convert(_, let estimate, _) = decision {

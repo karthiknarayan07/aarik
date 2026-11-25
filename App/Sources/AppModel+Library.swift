@@ -23,24 +23,40 @@ extension AppModel {
         }
     }
 
-    /// What converting the shown, available items would free with the current preset or Advanced spec.
-    /// Kept As Is items count as zero. Cached until the items, the query, the preset or the spec change.
+    /// What converting the shown, available items would free, each with its own preset (the header's unless the
+    /// inspector chose another), or all with the Advanced spec. Kept As Is items count as zero. Cached until the
+    /// items, the query, the presets or the spec change.
     var couldFreeShown: Int64 {
-        let key = SavingsKey(preset: preset, custom: advanced.spec)
+        let key = SavingsKey(preset: preset, custom: advanced.spec, overrides: presetOverrides)
         return browser.cached(key) { snapshot in
-            couldFreeBytes(for: snapshot.items.filter(\.isAvailable), key: key)
+            key.overrides.couldFreeBytes(
+                for: snapshot.items.filter(\.isAvailable).map { (id: $0.id, source: $0.savingsSource) },
+                default: key.preset, custom: key.custom)
         }
     }
 
     /// Visible selected items, in grid order; a search or filter that hides an item also deselects it here.
     var selectedItems: [LibraryItem] { browser.selectedItems }
 
-    func couldFreeBytes(for items: [LibraryItem]) -> Int64 {
-        couldFreeBytes(for: items, key: SavingsKey(preset: preset, custom: advanced.spec))
+    /// The preset `item` converts with: its own from the inspector, else the header's.
+    func effectivePreset(for item: LibraryItem) -> Preset {
+        presetOverrides.preset(for: item.id, default: preset)
     }
 
-    private func couldFreeBytes(for items: [LibraryItem], key: SavingsKey) -> Int64 {
-        SavingsCalculator.couldFreeBytes(for: items.map(\.savingsSource), preset: key.preset, custom: key.custom)
+    /// The inspector's preset: the one every selected video converts with, nil when they differ ("Mixed").
+    /// Choosing one gives it to every selected video, leaving the header's preset alone.
+    var selectionPreset: Preset? {
+        get { presetOverrides.selectionPreset(for: selectedItems.map(\.id), default: preset) }
+        set {
+            guard let newValue else { return }
+            presetOverrides.set(newValue, for: selectedItems.map(\.id), default: preset)
+        }
+    }
+
+    func inspectorSource(for item: LibraryItem) -> InspectorSource {
+        InspectorSource(
+            byteSize: item.byteSize, inventory: item.inventory, isAvailable: item.isAvailable,
+            preset: effectivePreset(for: item))
     }
 
     /// Space toggles Quick Look for the selection.
@@ -54,13 +70,11 @@ extension AppModel {
 private struct SavingsKey: Hashable {
     let preset: Preset
     let custom: DownscaleSpec?
+    let overrides: PresetOverrides<UUID>
 }
 
 extension LibraryItem {
     var savingsSource: SavingsCalculator.Source { (byteSize: byteSize, inventory: inventory) }
-    var inspectorSource: InspectorSource {
-        InspectorSource(byteSize: byteSize, inventory: inventory, isAvailable: isAvailable)
-    }
 }
 
 extension AppModel {
@@ -83,6 +97,7 @@ extension AppModel {
 
     private func removeFromLibrary(_ ids: Set<UUID>) {
         library.remove(ids)
+        presetOverrides.remove(ids)
         browser.selection.subtract(ids)
         if let url = quickLookURL, !library.items.contains(where: { $0.url == url }) { quickLookURL = nil }
     }

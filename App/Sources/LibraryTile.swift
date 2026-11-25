@@ -8,12 +8,15 @@ struct LibraryTile: View {
     let item: VideoItem
     let isSelected: Bool
     let thumbnails: ThumbnailCache
+    /// A preset chosen in the inspector for this video alone, when it isn't the header's.
+    var presetOverride: String?
     @State private var image: CGImage?
 
     var body: some View {
         MediaTile(
             image: image, badges: MediaBadge.ordered(item.badges).map(\.tileLabel),
-            sizeLabel: ByteFormat.string(item.byteSize), isAvailable: item.isAvailable, isSelected: isSelected
+            sizeLabel: ByteFormat.string(item.byteSize), isAvailable: item.isAvailable, isSelected: isSelected,
+            note: presetOverride
         )
         .task(id: item.url) {
             guard item.isAvailable else { return }
@@ -21,7 +24,9 @@ struct LibraryTile: View {
         }
         .help(item.url.lastPathComponent)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(ItemDescription.accessibilityLabel(for: item))
+        .accessibilityLabel(
+            [ItemDescription.accessibilityLabel(for: item), presetOverride.map { "\($0) preset" }]
+                .compactMap { $0 }.joined(separator: ", "))
     }
 }
 
