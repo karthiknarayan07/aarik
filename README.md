@@ -1,3 +1,5 @@
+<p align="center"><img src="Branding/mark-200.png" alt="" height="200"></p>
+
 # aarik
 
 A free, offline, open-source Mac toolbox for converting video, images, PDFs and documents without losing metadata.
