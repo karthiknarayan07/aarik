@@ -19,3 +19,4 @@ docs/references/KeepFeather/
 
 # Release artifacts (scripts/make-dmg.sh)
 build/
+.claude/worktrees/
