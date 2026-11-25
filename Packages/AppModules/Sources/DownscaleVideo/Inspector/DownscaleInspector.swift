@@ -11,7 +11,7 @@ public struct InspectorSource: Sendable {
     public let isAvailable: Bool
     public let preset: Preset
 
-    public init(byteSize: Int64, inventory: MetadataInventory, isAvailable: Bool, preset: Preset = .balanced) {
+    public init(byteSize: Int64, inventory: MetadataInventory, isAvailable: Bool, preset: Preset) {
         self.byteSize = byteSize
         self.inventory = inventory
         self.isAvailable = isAvailable
@@ -51,23 +51,24 @@ public struct DownscaleInspector: View {
         }
     }
 
-    /// Picking a preset row switches custom settings off, so the pick takes effect. Nil (mixed) is never set.
-    private var presetChoice: Binding<Preset?> {
+    private var control: PresetControl { PresetControl(shared: preset, isCustom: advanced.isEnabled) }
+
+    /// The selection's choice. Mixed is a real option, so the picker always has a selection; picking it, or any
+    /// preset while custom settings are on, changes nothing.
+    private var presetChoice: Binding<PresetControl.Choice> {
         Binding {
-            preset
-        } set: {
-            guard let choice = $0 else { return }
-            preset = choice
-            advanced.isEnabled = false
+            control.selection
+        } set: { choice in
+            if let chosen = control.preset(choosing: choice) { preset = chosen }
         }
     }
 
-    /// The one video's preset row, set through `presetChoice`.
+    /// The one video's preset row.
     private func rowChoice(for single: InspectorSource) -> Binding<Preset> {
         Binding {
             single.preset
-        } set: {
-            presetChoice.wrappedValue = $0
+        } set: { chosen in
+            presetChoice.wrappedValue = .preset(chosen)
         }
     }
 
@@ -79,14 +80,12 @@ public struct DownscaleInspector: View {
                     isCustom: advanced.isEnabled)
             } else {
                 SelectionTotals(sources: sources, custom: advanced.spec)
-                if preset == nil, !advanced.isEnabled {
-                    LabeledContent("Preset", value: "Mixed")
-                        .help("The selected videos use different presets; choosing one applies it to all of them")
-                }
                 PresetPicker(
-                    "Quality preset for the selected videos", selection: presetChoice,
-                    options: Preset.allCases.map(Optional.some)
-                ) { $0?.displayName ?? "Mixed" }
+                    "Quality preset for the selected videos", selection: presetChoice, options: control.options,
+                    label: PresetControl.label
+                )
+                .disabled(!control.isEnabled)
+                .help(control.help)
             }
         }
         Section {

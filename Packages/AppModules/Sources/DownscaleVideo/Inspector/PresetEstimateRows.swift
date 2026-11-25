@@ -3,7 +3,8 @@ import AppUI
 import MediaEngine
 import SwiftUI
 
-/// Original plus one row per preset with its estimated size and saving; click a row to pick that preset.
+/// Original plus one row per preset with its estimated size and saving; click a row to pick that preset. While
+/// custom settings are on (they apply to every video) the rows can't be picked.
 struct PresetEstimateRows: View {
     let byteSize: Int64
     let inventory: MetadataInventory
@@ -16,7 +17,7 @@ struct PresetEstimateRows: View {
         ForEach(SavingsCalculator.estimates(byteSize: byteSize, inventory: inventory)) { estimate in
             PresetRow(
                 estimate: estimate, inventory: inventory,
-                isSelected: !isCustom && estimate.preset == selection
+                isSelected: !isCustom && estimate.preset == selection, isCustom: isCustom
             ) {
                 selection = estimate.preset
             }
@@ -28,6 +29,7 @@ private struct PresetRow: View {
     let estimate: PresetEstimate
     let inventory: MetadataInventory
     let isSelected: Bool
+    let isCustom: Bool
     let action: () -> Void
 
     private var name: String {
@@ -58,12 +60,14 @@ private struct PresetRow: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .disabled(isCustom)
         .help(helpText)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var helpText: String {
+        if isCustom { return PresetControl(shared: estimate.preset, isCustom: true).help }
         if case .keptAsIs(let reason) = estimate.decision { return reason }
         return "Use the \(estimate.preset.displayName) preset"
     }
