@@ -23,13 +23,25 @@ struct LossReview {
     let losses: [URL: PredictedLoss<UUID>]
     /// Selected videos found missing just before they would have been added.
     let missing: Int
+    /// Set for Photos videos: where their copies go and what each is predicted to lose.
+    var photos: PhotosBatch?
+}
+
+/// What a batch of Photos videos is added with.
+struct PhotosBatch {
+    let destination: PhotosDestination
+    /// Predicted losses by Photos local identifier, for the jobs' badges and the runner's check.
+    let lost: [String: [String]]
 }
 
 extension AppModel {
     /// Available selected items; missing files can't be converted.
     var queueableItems: [LibraryItem] { selectedItems.filter { $0.isAvailable && $0.fileURL != nil } }
 
-    var canAddSelectionToQueue: Bool { !queueableItems.isEmpty && saveLocation.destination != nil }
+    var canAddSelectionToQueue: Bool {
+        if isPhotosPage { return canAddPhotosToQueue }
+        return !queueableItems.isEmpty && saveLocation.destination != nil
+    }
 
     var addToQueueTitle: String {
         let items = queueableItems
@@ -41,6 +53,7 @@ extension AppModel {
     /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
     func requestAddSelectionToQueue() {
         guard canAddSelectionToQueue else { return }
+        if isPhotosPage { return addPhotosSelectionToQueue() }
         if saveLocation.choice == .replace, replaceConsent.needsAsking {
             isConfirmingReplace = true
         } else {
@@ -104,7 +117,11 @@ extension AppModel {
         lossReview = nil
         let skipped = Set(review.entries.filter(\.skip).map(\.id))
         let items = review.items.filter { !skipped.contains($0.id) }
-        if items.isEmpty {
+        if let photos = review.photos {
+            if !items.isEmpty {
+                enqueuePhotos(items, settings: review.settings, presets: review.presets, batch: photos)
+            }
+        } else if items.isEmpty {
             replaceConsent.abandon()
         } else {
             enqueue(
@@ -145,7 +162,7 @@ extension AppModel {
         notifier.requestAuthorizationOnce()
     }
 
-    private func showAddNotice(alreadyQueued: Int, unreadable: Int, missing: Int) {
+    func showAddNotice(alreadyQueued: Int, unreadable: Int, missing: Int) {
         guard
             let notice = ActivityText.addNotice(alreadyQueued: alreadyQueued, unreadable: unreadable, missing: missing)
         else { return }

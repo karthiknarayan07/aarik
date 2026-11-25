@@ -38,7 +38,7 @@ import Testing
         #expect(rig.store.deletedIDs.isEmpty)
         #expect(rig.pending.all.isEmpty)
         #expect(rig.workContents.isEmpty)
-        #expect(!outcome.notes.contains { $0.contains("Recently Deleted") })
+        #expect(outcome.notes == ["Saved to Photos as a new video"])
     }
 
     @Test(.timeLimit(.minutes(2))) func theDownloadIsItsOwnPhaseWithItsOwnProgress() async throws {
@@ -124,7 +124,7 @@ import Testing
         let outcome = try #require(completed(state))
         #expect(outcome.output == PhotoAssetURL.url(for: "new-1"))
         #expect(!outcome.replacedOriginal)
-        #expect(outcome.notes.contains("Original will move to Recently Deleted"))
+        #expect(outcome.notes == ["Saved to Photos as a new video", "Original will move to Recently Deleted"])
         #expect(rig.pending.all == [PendingDeletion(assetID: rig.asset.id, jobID: job.id, replacedBy: "new-1")])
         #expect(rig.store.deletedIDs.isEmpty)
         #expect(!rig.store.operations.contains { if case .delete = $0 { true } else { false } })

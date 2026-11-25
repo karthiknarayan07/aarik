@@ -59,7 +59,8 @@ private struct QueueRow: View {
     private var cancelTitle: String { progress == nil ? "Remove from queue" : "Cancel conversion" }
 
     private var stateText: String {
-        if let progress { return "Converting · \(Int((progress * 100).rounded()))%" }
+        // A phase of its own (a download from iCloud) names itself and counts its own progress.
+        if let progress { return "\(job.phase ?? "Converting") · \(Int((progress * 100).rounded()))%" }
         return isPaused ? "Paused" : "Waiting"
     }
 

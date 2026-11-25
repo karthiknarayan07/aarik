@@ -64,6 +64,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     static let convertingPhase = "Converting…"
     static let savingPhase = "Saving to Photos…"
     static let backupPhase = "Downloading the original for the backup…"
+    static let savedNote = "Saved to Photos as a new video"
     static let recentlyDeletedNote = "Original will move to Recently Deleted"
     static let originalChanged = "The original changed during conversion"
 
@@ -188,6 +189,7 @@ public struct PhotosDownscaleRunner: JobRunner {
             file: converted.output, like: current, albums: albums,
             expectedPixelSize: Self.displaySize(of: converted.outputInventory))
         progress(1)
+        notes.append(Self.savedNote)
 
         if replace {
             if !warnings.isEmpty {
