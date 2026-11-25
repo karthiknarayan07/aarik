@@ -1,5 +1,6 @@
 import AppCore
 import AppUI
+import Assistant
 import DownscaleVideo
 import Foundation
 import LocalLibrary
@@ -61,6 +62,8 @@ final class AppModel {
     /// The Videos page's own grouping, sort, search, filters and selection.
     let photosBrowser: LibraryBrowser
     let queue: JobQueue
+    /// On-device Apple Intelligence features; every control hides while the model is unavailable.
+    let assistant = AssistantServices()
     /// Photos originals whose copy is saved and verified, waiting for the batch delete.
     let pendingDeletions: PendingDeletions
     let thumbnails = ThumbnailCache()

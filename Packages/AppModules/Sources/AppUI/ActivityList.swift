@@ -55,12 +55,15 @@ public enum ActivityText {
 }
 
 /// **Verified** or **Completed with warnings**; click for what was kept, changed and lost.
-public struct ReportBadge: View {
+public struct ReportBadge<Footer: View>: View {
     let outcome: JobOutcome
+    let footer: Footer
     @State private var isShowingReport = false
 
-    public init(outcome: JobOutcome) {
+    /// `footer` is shown at the bottom of the report popover.
+    public init(outcome: JobOutcome, @ViewBuilder footer: () -> Footer) {
         self.outcome = outcome
+        self.footer = footer()
     }
 
     private var title: String { outcome.isVerified ? "Verified" : "Completed with warnings" }
@@ -76,13 +79,20 @@ public struct ReportBadge: View {
         .help("Show what was kept, changed and lost")
         .accessibilityLabel("\(title). Show the report")
         .popover(isPresented: $isShowingReport, arrowEdge: .bottom) {
-            ReportPopover(outcome: outcome)
+            ReportPopover(outcome: outcome, footer: footer)
         }
     }
 }
 
-private struct ReportPopover: View {
+extension ReportBadge where Footer == EmptyView {
+    public init(outcome: JobOutcome) {
+        self.init(outcome: outcome) { EmptyView() }
+    }
+}
+
+private struct ReportPopover<Footer: View>: View {
     let outcome: JobOutcome
+    let footer: Footer
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -106,6 +116,7 @@ private struct ReportPopover: View {
                 Divider()
             }
             MetadataSummary(report: outcome.report)
+            footer
         }
         .padding()
         .frame(width: 340, alignment: .leading)
