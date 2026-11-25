@@ -99,6 +99,81 @@ import Testing
         #expect(browser.selectedItems.isEmpty)
     }
 
+    /// alpha is 4K60 (100 bytes), beta and gamma are 1080p30 (200 and 300 bytes).
+    private func makeMixedLibrary() throws -> LocalLibrary {
+        let store = BookmarkStore(directory: try Fixtures.tempDirectory())
+        func inventory(_ dimensions: String, fps: String) -> MetadataInventory {
+            MetadataInventory(items: [
+                MetadataItem(key: "video.dimensions", category: .video, displayName: "Dimensions", value: dimensions),
+                MetadataItem(key: "video.frameRate", category: .video, displayName: "Frame rate", value: fps),
+                MetadataItem(key: "video.duration", category: .video, displayName: "Duration", value: "2500"),
+            ])
+        }
+        let inventories = [inventory("3840x2160", fps: "59.94"), inventory("1920x1080", fps: "30")]
+        try store.save(
+            names.enumerated().map { index, name in
+                BookmarkStore.Entry(
+                    id: UUID(), path: "/nonexistent/\(name)", bookmark: nil, byteSize: Int64(100 * (index + 1)),
+                    inventory: inventories[min(index, 1)])
+            })
+        return LocalLibrary(store: store)
+    }
+
+    @Test func qualityFilterNarrowsTotalsAndRebuildsDerivedValues() throws {
+        let browser = LibraryBrowser(library: try makeMixedLibrary())
+        var computes = 0
+        func savings() -> Int64 {
+            browser.cached("balanced") { snapshot in
+                computes += 1
+                return snapshot.totalBytes / 2
+            }
+        }
+        #expect(browser.snapshot.totalBytes == 600)
+        #expect(savings() == 300)
+        #expect(browser.snapshot.facets.qualities.map(\.value) == [.uhd(.fps60), .fullHD(.fps30)])
+        #expect(browser.snapshot.facets.qualities.map(\.count) == [1, 2])
+
+        // The filter is part of the query: the snapshot and the cached savings follow it.
+        browser.quality.qualities = [.fullHD(.fps30)]
+        #expect(browser.snapshot.items.map(\.url.lastPathComponent) == ["gamma.mov", "beta.mov"])
+        #expect(browser.snapshot.totalBytes == 500)
+        #expect(savings() == 250)
+        #expect(computes == 2)
+        // Its own dimension still lists every option, so another can be added.
+        #expect(browser.snapshot.facets.qualities.count == 2)
+
+        // Setting the same value again doesn't rebuild.
+        let builds = browser.snapshotBuilds
+        browser.quality.qualities = [.fullHD(.fps30)]
+        _ = browser.snapshot
+        #expect(browser.snapshotBuilds == builds)
+        #expect(savings() == 250)
+        #expect(computes == 2)
+
+        // AND with search and the media-type filter.
+        browser.search = "beta"
+        #expect(browser.snapshot.items.map(\.url.lastPathComponent) == ["beta.mov"])
+        browser.search = ""
+        browser.filter = .k4
+        #expect(browser.snapshot.items.isEmpty)
+        // Facets count within the media-type filter's collection.
+        #expect(browser.snapshot.facets.qualities.map(\.value) == [.uhd(.fps60)])
+
+        browser.filter = nil
+        browser.quality = QualityFilter()
+        #expect(browser.snapshot.totalBytes == 600)
+        #expect(savings() == 300)
+    }
+
+    @Test func qualityFilterHidesSelectedItems() throws {
+        let browser = LibraryBrowser(library: try makeMixedLibrary())
+        let alpha = try id("alpha.mov", in: browser)
+        let beta = try id("beta.mov", in: browser)
+        browser.selection = [alpha, beta]
+        browser.quality.qualities = [.uhd(.fps60)]
+        #expect(browser.selectedItems.map(\.id) == [alpha])
+    }
+
     @Test func badgeCountsFollowTheLibrary() throws {
         let library = try makeLibrary()
         #expect(library.badgeCounts == [.sdr: 3])
