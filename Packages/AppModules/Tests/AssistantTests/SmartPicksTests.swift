@@ -127,7 +127,7 @@ private func draft(_ id: String, title: String = "Shrink these first", why: Stri
         let answer = SmartPicks(picks: [
             draft("B1", title: "  Big\n\n4K   group  ", why: "This could free about 70 GB from 400 videos."),
             draft("B2", title: "", why: "This would free 900 GB."),
-            draft("B3", title: long, why: ""),
+            draft("B3", title: long, why: "540 videos"),
         ])
         let (picker, _) = picker(returning: answer)
         guard case .picks(let picks) = await picker.picks(from: buckets) else {

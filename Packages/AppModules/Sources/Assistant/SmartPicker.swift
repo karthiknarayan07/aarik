@@ -51,6 +51,7 @@ public struct SmartPicker: Sendable {
     public static let maximumPicks = 3
     static let maximumTitleLength = 60
     static let maximumWhyLength = 200
+    static let minimumWhyWords = 4
 
     let client: any LanguageModelClient
     let timeout: Duration
@@ -122,10 +123,11 @@ public struct SmartPicker: Sendable {
         return picks
     }
 
-    /// A sentence is kept only when it says something and every number in it is one the model was given. The
+    /// A sentence is kept only when it has a few words and every number in it is one the model was given. The
     /// small model sometimes invents sizes; the group's own numbers are shown beside the sentence anyway.
     static func isGrounded(_ why: String, in bucket: SavingsBucket) -> Bool {
-        guard !why.isEmpty else { return false }
+        // A fragment such as "540 videos" or a copied line isn't a sentence about why.
+        guard why.split(whereSeparator: \.isWhitespace).count >= minimumWhyWords else { return false }
         let allowed = Set(numbers(in: line(for: bucket)))
         return numbers(in: why).allSatisfy(allowed.contains)
     }
