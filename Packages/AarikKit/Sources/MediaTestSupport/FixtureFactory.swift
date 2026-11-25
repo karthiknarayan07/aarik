@@ -16,6 +16,9 @@ public struct ClipOptions: Sendable {
     public var quickTimeMetadata: [String: String] = [:]
     /// stereo AAC 48 kHz
     public var includeAudio = true
+    /// With audio: a second stereo AAC track, disabled, in one alternate group with the first, which falls back to it
+    /// (the shape of an iPhone spatial-audio clip's fallback track).
+    public var includeFallbackAudioTrack = false
     /// How much longer than the video the audio runs (with audio only); the timed metadata spans the audio length.
     public var audioTailSeconds = 0.0
     /// Adds the timed-metadata track before the audio track (default: audio first).
@@ -24,6 +27,16 @@ public struct ClipOptions: Sendable {
     public var includeTimedMetadataTrack = false
     /// 0 or 90 → preferredTransform
     public var rotationDegrees = 0
+    /// key → string value, keySpace mdta, on the video track itself
+    public var videoTrackMetadata: [String: String] = [:]
+    /// ISO 639-2/T code for the video track
+    public var videoLanguage: String?
+    /// Static HDR metadata (raw SEI payload bytes, as in the CoreMedia extensions); nil leaves it out. Mastering
+    /// display and content light level are encoder properties; ambient viewing environment has no encoder property,
+    /// so it is attached to every frame.
+    public var masteringDisplay: Data?
+    public var contentLightLevel: Data?
+    public var ambientViewingEnvironment: Data?
     public var finderTags: [String] = []
     public var extendedAttributes: [String: Data] = [:]
 
@@ -51,6 +64,18 @@ public enum FixtureFactory {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let hlg = options.hdr == .hlg
 
+        var compression: [String: Any] = [
+            AVVideoProfileLevelKey: hlg
+                ? kVTProfileLevel_HEVC_Main10_AutoLevel as String
+                : kVTProfileLevel_HEVC_Main_AutoLevel as String,
+            AVVideoAverageBitRateKey: max(options.width * options.height * 2, 1_000_000),
+        ]
+        let staticHDR: [(CFString, Data?)] = [
+            (kVTCompressionPropertyKey_MasteringDisplayColorVolume, options.masteringDisplay),
+            (kVTCompressionPropertyKey_ContentLightLevelInfo, options.contentLightLevel),
+        ]
+        for case let (key, data?) in staticHDR { compression[key as String] = data }
+
         // Video
         let videoInput = AVAssetWriterInput(
             mediaType: .video,
@@ -65,14 +90,11 @@ public enum FixtureFactory {
                         ? AVVideoTransferFunction_ITU_R_2100_HLG : AVVideoTransferFunction_ITU_R_709_2,
                     AVVideoYCbCrMatrixKey: hlg ? AVVideoYCbCrMatrix_ITU_R_2020 : AVVideoYCbCrMatrix_ITU_R_709_2,
                 ],
-                AVVideoCompressionPropertiesKey: [
-                    AVVideoProfileLevelKey: hlg
-                        ? kVTProfileLevel_HEVC_Main10_AutoLevel as String
-                        : kVTProfileLevel_HEVC_Main_AutoLevel as String,
-                    AVVideoAverageBitRateKey: max(options.width * options.height * 2, 1_000_000),
-                ],
+                AVVideoCompressionPropertiesKey: compression,
             ])
         videoInput.expectsMediaDataInRealTime = false
+        videoInput.metadata = quickTimeItems(options.videoTrackMetadata)
+        if let language = options.videoLanguage { videoInput.languageCode = language }
         if options.rotationDegrees == 90 {
             videoInput.transform = CGAffineTransform(rotationAngle: .pi / 2)
         }
@@ -88,18 +110,20 @@ public enum FixtureFactory {
         writer.add(videoInput)
 
         // Audio
-        var audioInput: AVAssetWriterInput?
+        var audioInputs: [AVAssetWriterInput] = []
         if options.includeAudio {
-            let input = AVAssetWriterInput(
-                mediaType: .audio,
-                outputSettings: [
-                    AVFormatIDKey: kAudioFormatMPEG4AAC,
-                    AVSampleRateKey: sampleRate,
-                    AVNumberOfChannelsKey: 2,
-                    AVEncoderBitRateKey: 128_000,
-                ])
-            input.expectsMediaDataInRealTime = false
-            audioInput = input
+            for _ in 0..<(options.includeFallbackAudioTrack ? 2 : 1) {
+                let input = AVAssetWriterInput(
+                    mediaType: .audio,
+                    outputSettings: [
+                        AVFormatIDKey: kAudioFormatMPEG4AAC,
+                        AVSampleRateKey: sampleRate,
+                        AVNumberOfChannelsKey: 2,
+                        AVEncoderBitRateKey: 128_000,
+                    ])
+                input.expectsMediaDataInRealTime = false
+                audioInputs.append(input)
+            }
         }
 
         // Timed metadata
@@ -128,20 +152,20 @@ public enum FixtureFactory {
             metadataAdaptor = AVAssetWriterInputMetadataAdaptor(assetWriterInput: input)
         }
 
-        let passthroughInputs = [audioInput, metadataInput].compactMap(\.self)
+        let passthroughInputs = audioInputs + [metadataInput].compactMap(\.self)
         for input in options.timedMetadataBeforeAudio ? passthroughInputs.reversed() : passthroughInputs {
             writer.add(input)
         }
+        if audioInputs.count == 2 {
+            let (main, fallback) = (audioInputs[0], audioInputs[1])
+            fallback.marksOutputTrackAsEnabled = false
+            main.addTrackAssociation(
+                withTrackOf: fallback, type: AVAssetTrack.AssociationType.audioFallback.rawValue)
+            writer.add(AVAssetWriterInputGroup(inputs: [main, fallback], defaultInput: main))
+        }
 
         // File-level QuickTime metadata
-        writer.metadata = options.quickTimeMetadata.sorted { $0.key < $1.key }.map { key, value in
-            let item = AVMutableMetadataItem()
-            item.keySpace = .quickTimeMetadata
-            item.key = key as NSString
-            item.value = value as NSString
-            item.dataType = kCMMetadataBaseDataType_UTF8 as String
-            return item
-        }
+        writer.metadata = quickTimeItems(options.quickTimeMetadata)
 
         do {
             guard writer.startWriting() else {
@@ -153,12 +177,12 @@ public enum FixtureFactory {
             // metadata is one group per second over the audio length (one group for a clip of a second or less).
             let frameCount = max(1, Int((options.seconds * Double(options.fps)).rounded()))
             let audioFrameCount =
-                audioInput == nil
+                audioInputs.isEmpty
                 ? 0 : Int(((options.seconds + options.audioTailSeconds) * Double(options.fps)).rounded())
-            let timedSeconds = options.seconds + (audioInput == nil ? 0 : options.audioTailSeconds)
+            let timedSeconds = options.seconds + (audioInputs.isEmpty ? 0 : options.audioTailSeconds)
             let groupCount = max(1, Int(timedSeconds.rounded(.up)))
             var groupsWritten = 0
-            var audioSamplesWritten = 0
+            var audioSamplesWritten = [Int](repeating: 0, count: audioInputs.count)
             for frame in 0..<max(frameCount, audioFrameCount) {
                 if let metadataAdaptor, let metadataInput, groupsWritten < groupCount,
                     Double(frame) / Double(options.fps) >= Double(groupsWritten)
@@ -178,16 +202,21 @@ public enum FixtureFactory {
                     let cv = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer)
                     guard cv == kCVReturnSuccess, let pixelBuffer else { throw FixtureError.pixelBufferFailed(cv) }
                     fill(pixelBuffer, frame: frame, hlg: hlg)
+                    if let ambient = options.ambientViewingEnvironment {
+                        CVBufferSetAttachment(
+                            pixelBuffer, kCVImageBufferAmbientViewingEnvironmentKey, ambient as CFData,
+                            .shouldPropagate)
+                    }
                     let pts = CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
                     guard adaptor.append(pixelBuffer, withPresentationTime: pts) else {
                         throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "video append failed")
                     }
                     if frame == frameCount - 1 { videoInput.markAsFinished() }
                 }
-                if let audioInput {
+                for (index, audioInput) in audioInputs.enumerated() {
                     try await appendAudio(
                         frame: frame, fps: options.fps, input: audioInput, writer: writer,
-                        written: &audioSamplesWritten)
+                        written: &audioSamplesWritten[index])
                 }
             }
             if let metadataAdaptor, let metadataInput, groupsWritten < groupCount {
@@ -198,7 +227,7 @@ public enum FixtureFactory {
                 }
                 metadataInput.markAsFinished()
             }
-            audioInput?.markAsFinished()
+            for audioInput in audioInputs { audioInput.markAsFinished() }
 
             await writer.finishWriting()
             guard writer.status == .completed else {
@@ -225,6 +254,17 @@ public enum FixtureFactory {
     }
 
     // MARK: - Helpers
+
+    private static func quickTimeItems(_ values: [String: String]) -> [AVMetadataItem] {
+        values.sorted { $0.key < $1.key }.map { key, value in
+            let item = AVMutableMetadataItem()
+            item.keySpace = .quickTimeMetadata
+            item.key = key as NSString
+            item.value = value as NSString
+            item.dataType = kCMMetadataBaseDataType_UTF8 as String
+            return item
+        }
+    }
 
     /// Appends timed-metadata group `index`, covering second `index` (clipped to `totalSeconds`).
     private static func appendTimedGroup(

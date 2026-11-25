@@ -84,6 +84,62 @@ import Testing
         #expect(Set(report.changed.map(\.key)).isSubset(of: ["video.dimensions"]), "changed: \(report.changed)")
     }
 
+    /// Downscales and checks the report: nothing lost, only `video.dimensions` changed. Returns both inventories.
+    private func roundTrip(_ options: ClipOptions) async throws -> (MetadataInventory, MetadataInventory, URL) {
+        let source = try await FixtureFactory.makeClip(options)
+        let output = try await downscale(source, spec: smallSpec)
+        let sourceInventory = try await MediaInspector().inventory(of: source)
+        let outputInventory = try await MediaInspector().inventory(of: output)
+        let report = MetadataDiff.report(source: sourceInventory, output: outputInventory)
+        #expect(report.lost.isEmpty, "lost: \(report.lost.map(\.key))")
+        let allowed: Set<String> = ["video.dimensions", "hdr.dolbyVision"]
+        #expect(Set(report.changed.map(\.key)).isSubset(of: allowed), "changed: \(report.changed)")
+        return (sourceInventory, outputInventory, output)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func videoTrackMetadataAndLanguageSurvive() async throws {
+        let (source, output, outputURL) = try await roundTrip(
+            clip {
+                $0.videoTrackMetadata = ["com.aarik.test.track": "track value"]
+                $0.videoLanguage = "eng"
+            })
+        let key = "trackmeta.0.com.aarik.test.track"
+        #expect(source[key]?.value == "track value")
+        #expect(output[key]?.value == "track value")
+        let track = try #require(try await AVURLAsset(url: outputURL).loadTracks(withMediaType: .video).first)
+        #expect(try await track.load(.languageCode) == "eng")
+    }
+
+    @Test(.timeLimit(.minutes(2))) func audioGroupEnabledStateAndFallbackSurvive() async throws {
+        let (source, output, _) = try await roundTrip(clip { $0.includeFallbackAudioTrack = true })
+        let expected = [
+            "audio.0.enabled": "true", "audio.1.enabled": "false",
+            "audio.0.alternateGroup": "audio 0, audio 1", "audio.1.alternateGroup": "audio 0, audio 1",
+            "audio.0.fallback": "audio 1", "audio.1.fallback": "none",
+        ]
+        for (key, value) in expected {
+            #expect(source[key]?.value == value, "source \(key)")
+            #expect(output[key]?.value == value, "output \(key)")
+        }
+    }
+
+    @Test(.timeLimit(.minutes(2))) func staticHDRMetadataIsCarried() async throws {
+        let (source, output, _) = try await roundTrip(
+            clip {
+                // BT.2020 primaries, D65, 1000 / 0.005 nits; MaxCLL 1000, MaxFALL 400; 314 lux, D65.
+                $0.masteringDisplay = Data([
+                    0x33, 0xC2, 0x86, 0xC4, 0x1D, 0x4C, 0x0B, 0xB8, 0x84, 0xD0, 0x3E, 0x80, 0x3D, 0x13, 0x40, 0x42,
+                    0x00, 0x98, 0x96, 0x80, 0x00, 0x00, 0x00, 0x32,
+                ])
+                $0.contentLightLevel = Data([0x03, 0xE8, 0x01, 0x90])
+                $0.ambientViewingEnvironment = Data([0x00, 0x04, 0xCA, 0x80, 0x3D, 0x13, 0x40, 0x42])
+            })
+        for key in ["hdr.masteringDisplay", "hdr.contentLightLevel", "hdr.ambientViewingEnvironment"] {
+            let value = try #require(source[key]?.value, "fixture lacks \(key)")
+            #expect(output[key]?.value == value, "\(key)")
+        }
+    }
+
     @Test(.timeLimit(.minutes(2))) func unknownQuickTimeKeysSurvive() async throws {
         let source = try await FixtureFactory.makeClip(
             clip { $0.quickTimeMetadata = ["com.apple.quicktime.some-future-key": "42"] })

@@ -13,7 +13,16 @@ final class DownscaleJob {
     private let videoOutput: AVAssetReaderTrackOutput
     private let writer: AVAssetWriter
     private let passthrough: [PassthroughTrack]
+    private let videoTrackID: CMPersistentTrackID
+    /// The video track's own metadata and language, copied onto the encoded track.
+    private let videoMetadata: [AVMetadataItem]
+    private let videoLanguage: (code: String?, extendedTag: String?)
+    /// Alternate groups as source track IDs, with the member that was enabled.
+    private let trackGroups: [(members: [CMPersistentTrackID], enabled: CMPersistentTrackID?)]
     private let transform: CGAffineTransform
+    /// Ambient viewing environment from the source format description. VideoToolbox has no session property for
+    /// it, so it rides on each frame as an attachment.
+    private let ambientViewingEnvironment: CFData?
     private let scaler: FrameScaler
     private let encoder: HEVCEncoder
     private let duration: Double
@@ -51,6 +60,10 @@ final class DownscaleJob {
         func color(_ key: CFString) -> CFString? {
             description.flatMap { CMFormatDescriptionGetExtension($0, extensionKey: key) as? String } as CFString?
         }
+        func data(_ key: CFString) -> CFData? {
+            description.flatMap { CMFormatDescriptionGetExtension($0, extensionKey: key) as? Data } as CFData?
+        }
+        ambientViewingEnvironment = data(kCMFormatDescriptionExtension_AmbientViewingEnvironment)
         encoder = try HEVCEncoder(
             .init(
                 width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
@@ -59,6 +72,8 @@ final class DownscaleJob {
                 colorPrimaries: color(kCMFormatDescriptionExtension_ColorPrimaries),
                 transferFunction: color(kCMFormatDescriptionExtension_TransferFunction),
                 matrix: color(kCMFormatDescriptionExtension_YCbCrMatrix),
+                masteringDisplay: data(kCMFormatDescriptionExtension_MasteringDisplayColorVolume),
+                contentLightLevel: data(kCMFormatDescriptionExtension_ContentLightLevelInfo),
                 preservesDolbyVision: preservesDolbyVision))
         scaler = try FrameScaler(width: Int(size.width), height: Int(size.height), pixelFormat: pixelFormat)
         self.transform = transform
@@ -78,6 +93,10 @@ final class DownscaleJob {
 
         writer = try AVAssetWriter(outputURL: output, fileType: .mov)
         writer.metadata = try await asset.load(.metadata)
+        videoTrackID = videoTrack.trackID
+        videoMetadata = try await videoTrack.load(.metadata)
+        videoLanguage = (try await videoTrack.load(.languageCode), try await videoTrack.load(.extendedLanguageTag))
+        trackGroups = try await Self.groups(of: asset)
 
         var passthrough: [PassthroughTrack] = []
         for track in try await asset.load(.tracks) where [.audio, .metadata].contains(track.mediaType) {
@@ -91,13 +110,35 @@ final class DownscaleJob {
             guard reader.canAdd(readerOutput), writer.canAdd(input) else { continue }
             reader.add(readerOutput)
             input.expectsMediaDataInRealTime = false
+            input.marksOutputTrackAsEnabled = try await track.load(.isEnabled)
             input.metadata = try await track.load(.metadata)
             if let language = try await track.load(.languageCode) { input.languageCode = language }
             if let tag = try await track.load(.extendedLanguageTag) { input.extendedLanguageTag = tag }
+            let fallbacks = try await track.loadAssociatedTracks(ofType: .audioFallback).map(\.trackID)
             passthrough.append(
-                PassthroughTrack(output: readerOutput, input: input, isTimedMetadata: track.mediaType == .metadata))
+                PassthroughTrack(
+                    trackID: track.trackID, output: readerOutput, input: input,
+                    isTimedMetadata: track.mediaType == .metadata, fallbackTrackIDs: fallbacks))
         }
         self.passthrough = passthrough
+    }
+
+    private static func groups(of asset: AVAsset) async throws
+        -> [(members: [CMPersistentTrackID], enabled: CMPersistentTrackID?)]
+    {
+        var result: [(members: [CMPersistentTrackID], enabled: CMPersistentTrackID?)] = []
+        for group in try await asset.load(.trackGroups) {
+            let members = group.trackIDs.map(\.int32Value)
+            var enabled: CMPersistentTrackID?
+            for id in members {
+                if let track = try await asset.loadTrack(withTrackID: id), try await track.load(.isEnabled) {
+                    enabled = id
+                    break
+                }
+            }
+            result.append((members, enabled))
+        }
+        return result
     }
 
     func run() async throws {
@@ -109,7 +150,14 @@ final class DownscaleJob {
             lastSourceEnd = sampleDuration.isValid ? time + sampleDuration : time
             guard limiter.shouldKeep(presentationTime: time), let frame = sample.imageBuffer else { continue }
             try await submitPending(nextTime: time)
-            pending = (try scaler.scale(frame), time)
+            let scaled = try scaler.scale(frame)
+            if let ambientViewingEnvironment,
+                CVBufferCopyAttachment(scaled, kCVImageBufferAmbientViewingEnvironmentKey, nil) == nil
+            {
+                CVBufferSetAttachment(
+                    scaled, kCVImageBufferAmbientViewingEnvironmentKey, ambientViewingEnvironment, .shouldPropagate)
+            }
+            pending = (scaled, time)
             try pumpPassthrough(until: time + Self.passthroughLead)
         }
         // nil from `copyNextSampleBuffer()` means the end of the track or that the reader stopped; only the status
@@ -184,6 +232,9 @@ final class DownscaleJob {
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: hint)
         input.expectsMediaDataInRealTime = false
         input.transform = transform
+        input.metadata = videoMetadata
+        if let code = videoLanguage.code { input.languageCode = code }
+        if let tag = videoLanguage.extendedTag { input.extendedLanguageTag = tag }
         guard writer.canAdd(input) else {
             throw DownscaleError.unsupportedSource("the writer refused the encoded video format")
         }
@@ -196,6 +247,7 @@ final class DownscaleJob {
             }
             writer.add(track.input)
         }
+        addFallbacksAndGroups(videoInput: input)
         beforeStartWriting?(output)
         // `startWriting()` fails (status `.failed`) when a file already exists at the output path, for example one
         // another job wrote after the pre-check. Only a successful start makes the output this run's.
@@ -204,6 +256,28 @@ final class DownscaleJob {
         writer.startSession(atSourceTime: .zero)
         videoInput = input
         return input
+    }
+
+    /// Recreates audio fallback associations and alternate groups among the copied tracks. Anything the writer
+    /// refuses is left out (and then shows as changed or lost in the report) rather than raising an exception.
+    private func addFallbacksAndGroups(videoInput: AVAssetWriterInput) {
+        var inputs = [videoTrackID: videoInput]
+        for track in passthrough { inputs[track.trackID] = track.input }
+        let fallback = AVAssetTrack.AssociationType.audioFallback.rawValue
+        for track in passthrough {
+            for id in track.fallbackTrackIDs {
+                guard let other = inputs[id], track.input.canAddTrackAssociation(withTrackOf: other, type: fallback)
+                else { continue }
+                track.input.addTrackAssociation(withTrackOf: other, type: fallback)
+            }
+        }
+        for group in trackGroups {
+            let members = group.members.compactMap { inputs[$0] }
+            guard !members.isEmpty else { continue }
+            let writerGroup = AVAssetWriterInputGroup(
+                inputs: members, defaultInput: group.enabled.flatMap { inputs[$0] })
+            if writer.canAdd(writerGroup) { writer.add(writerGroup) }
+        }
     }
 
     /// Appends ready passthrough samples up to `limit` (nil: no limit). Returns whether anything was appended.
@@ -225,41 +299,5 @@ final class DownscaleJob {
 
     private func readerError() -> DownscaleError {
         .encoderFailed("reader: \(reader.error?.localizedDescription ?? "status \(reader.status.rawValue)")")
-    }
-}
-
-/// An audio or timed-metadata track copied sample for sample.
-private final class PassthroughTrack {
-    let output: AVAssetReaderTrackOutput
-    let input: AVAssetWriterInput
-    let isTimedMetadata: Bool
-    private var next: CMSampleBuffer?
-    private(set) var isFinished = false
-
-    init(output: AVAssetReaderTrackOutput, input: AVAssetWriterInput, isTimedMetadata: Bool) {
-        self.output = output
-        self.input = input
-        self.isTimedMetadata = isTimedMetadata
-    }
-
-    /// Appends samples while the input is ready and the next sample starts at or before `limit`.
-    /// Marks the input finished when the reader runs out. Returns whether anything was appended.
-    func pump(until limit: CMTime?) throws -> Bool {
-        var appended = false
-        while !isFinished, input.isReadyForMoreMediaData {
-            guard let sample = next ?? output.copyNextSampleBuffer() else {
-                input.markAsFinished()
-                isFinished = true
-                break
-            }
-            if let limit, sample.presentationTimeStamp > limit {
-                next = sample
-                break
-            }
-            next = nil
-            guard input.append(sample) else { throw DownscaleError.encoderFailed("passthrough append failed") }
-            appended = true
-        }
-        return appended
     }
 }

@@ -18,6 +18,9 @@ final class HEVCEncoder {
         var colorPrimaries: CFString?
         var transferFunction: CFString?
         var matrix: CFString?
+        /// Static HDR metadata copied from the source format description (CoreMedia extension bytes).
+        var masteringDisplay: CFData?
+        var contentLightLevel: CFData?
         /// Mirrors the source's Dolby Vision presence. True (route A): `HDRMetadataInsertionMode = Auto` and
         /// `PreserveDynamicHDRMetadata = true`. False: `HDRMetadataInsertionMode = None`, so a source without Dolby
         /// Vision does not gain it (the encoder default is `Auto`).
@@ -58,8 +61,17 @@ final class HEVCEncoder {
         if let value = configuration.matrix {
             properties.append((kVTCompressionPropertyKey_YCbCrMatrix, value))
         }
-        // Optional properties: a session that reports one unsupported goes on without it.
+        // Optional properties: a session that reports one unsupported goes on without it. For static HDR metadata the
+        // report then shows the item as lost.
         var optional: Set<String> = []
+        if let value = configuration.masteringDisplay {
+            properties.append((kVTCompressionPropertyKey_MasteringDisplayColorVolume, value))
+            optional.insert(kVTCompressionPropertyKey_MasteringDisplayColorVolume as String)
+        }
+        if let value = configuration.contentLightLevel {
+            properties.append((kVTCompressionPropertyKey_ContentLightLevelInfo, value))
+            optional.insert(kVTCompressionPropertyKey_ContentLightLevelInfo as String)
+        }
         if configuration.preservesDolbyVision {
             properties.append((kVTCompressionPropertyKey_HDRMetadataInsertionMode, kVTHDRMetadataInsertionMode_Auto))
             properties.append((kVTCompressionPropertyKey_PreserveDynamicHDRMetadata, kCFBooleanTrue))

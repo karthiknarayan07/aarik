@@ -3,8 +3,10 @@ import AarikCore
 import CoreMedia
 import Foundation
 
-/// Re-encodes the primary video track at a smaller size (HEVC at the source bit depth, HDR and Dolby Vision kept) and
-/// passes audio, timed metadata, file-level metadata and file attributes through untouched.
+/// Re-encodes the primary video track at a smaller size (HEVC at the source bit depth, HDR, static HDR metadata and
+/// Dolby Vision kept, with the track's own metadata and language) and passes audio, timed metadata, file-level
+/// metadata and file attributes through untouched, keeping each track's enabled state, alternate groups and audio
+/// fallbacks.
 public struct VideoDownscaler: Sendable {
     /// Test seam: runs with the output URL just before the writer starts, to inject a file appearing at the output
     /// path after the pre-check (another job writing the same name).
