@@ -19,9 +19,30 @@ import Testing
             CMFormatDescriptionGetExtension(
                 desc, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
         #expect(transfer == (kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String))
+        let depth =
+            CMFormatDescriptionGetExtension(
+                desc, extensionKey: kCMFormatDescriptionExtension_Depth) as? Int
+        #expect(depth == 24)
+        #expect(CMFormatDescriptionGetMediaSubType(desc) == kCMVideoCodecType_HEVC)
         let duration = try await asset.load(.duration).seconds
         #expect(abs(duration - 1.0) <= 0.05)
         #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+    }
+
+    @Test func makesSDRClip() async throws {
+        var options = ClipOptions()
+        options.width = 1280
+        options.height = 720
+        options.hdr = .sdr
+        let url = try await FixtureFactory.makeClip(options)
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let desc = try #require(try await track.load(.formatDescriptions).first)
+        let transfer =
+            CMFormatDescriptionGetExtension(
+                desc, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
+        #expect(transfer == (kCMFormatDescriptionTransferFunction_ITU_R_709_2 as String))
+        #expect(try await track.load(.naturalSize) == CGSize(width: 1280, height: 720))
     }
 
     @Test func writesQuickTimeMetadata() async throws {

@@ -136,59 +136,68 @@ public enum FixtureFactory {
             return item
         }
 
-        guard writer.startWriting() else {
-            throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "startWriting failed")
-        }
-        writer.startSession(atSourceTime: .zero)
-
-        // Timed metadata: one group spanning the clip.
-        if let metadataAdaptor, let metadataInput {
-            let item = AVMutableMetadataItem()
-            item.identifier = AVMetadataIdentifier(rawValue: timedMetadataIdentifier)
-            item.dataType = kCMMetadataBaseDataType_UTF8 as String
-            item.value = "aarik-timed-0" as NSString
-            let range = CMTimeRange(start: .zero, duration: CMTime(seconds: options.seconds, preferredTimescale: 600))
-            try await waitUntilReady(metadataInput)
-            guard metadataAdaptor.append(AVTimedMetadataGroup(items: [item], timeRange: range)) else {
-                throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "metadata append failed")
+        do {
+            guard writer.startWriting() else {
+                throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "startWriting failed")
             }
-            metadataInput.markAsFinished()
-        }
+            writer.startSession(atSourceTime: .zero)
 
-        // Frames (and interleaved audio)
-        let frameCount = max(1, Int((options.seconds * Double(options.fps)).rounded()))
-        var audioSamplesWritten = 0
-        for frame in 0..<frameCount {
-            try await waitUntilReady(videoInput)
-            guard let pool = adaptor.pixelBufferPool else { throw FixtureError.writerFailed("no pixel buffer pool") }
-            var pixelBuffer: CVPixelBuffer?
-            let cv = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer)
-            guard cv == kCVReturnSuccess, let pixelBuffer else { throw FixtureError.pixelBufferFailed(cv) }
-            fill(pixelBuffer, frame: frame, hlg: hlg)
-            let pts = CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
-            guard adaptor.append(pixelBuffer, withPresentationTime: pts) else {
-                throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "video append failed")
+            // Timed metadata: one group spanning the clip.
+            if let metadataAdaptor, let metadataInput {
+                let item = AVMutableMetadataItem()
+                item.identifier = AVMetadataIdentifier(rawValue: timedMetadataIdentifier)
+                item.dataType = kCMMetadataBaseDataType_UTF8 as String
+                item.value = "aarik-timed-0" as NSString
+                let range = CMTimeRange(
+                    start: .zero, duration: CMTime(seconds: options.seconds, preferredTimescale: 600))
+                try await waitUntilReady(metadataInput, writer: writer)
+                guard metadataAdaptor.append(AVTimedMetadataGroup(items: [item], timeRange: range)) else {
+                    throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "metadata append failed")
+                }
+                metadataInput.markAsFinished()
             }
 
-            if let audioInput {
-                let target = (frame + 1) * sampleRate / options.fps
-                let count = target - audioSamplesWritten
-                if count > 0 {
-                    try await waitUntilReady(audioInput)
-                    let buffer = try makeAudioBuffer(startSample: audioSamplesWritten, count: count)
-                    guard audioInput.append(buffer) else {
-                        throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "audio append failed")
+            // Frames (and interleaved audio)
+            let frameCount = max(1, Int((options.seconds * Double(options.fps)).rounded()))
+            var audioSamplesWritten = 0
+            for frame in 0..<frameCount {
+                try await waitUntilReady(videoInput, writer: writer)
+                guard let pool = adaptor.pixelBufferPool else {
+                    throw FixtureError.writerFailed("no pixel buffer pool")
+                }
+                var pixelBuffer: CVPixelBuffer?
+                let cv = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer)
+                guard cv == kCVReturnSuccess, let pixelBuffer else { throw FixtureError.pixelBufferFailed(cv) }
+                fill(pixelBuffer, frame: frame, hlg: hlg)
+                let pts = CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
+                guard adaptor.append(pixelBuffer, withPresentationTime: pts) else {
+                    throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "video append failed")
+                }
+
+                if let audioInput {
+                    let target = (frame + 1) * sampleRate / options.fps
+                    let count = target - audioSamplesWritten
+                    if count > 0 {
+                        try await waitUntilReady(audioInput, writer: writer)
+                        let buffer = try makeAudioBuffer(startSample: audioSamplesWritten, count: count)
+                        guard audioInput.append(buffer) else {
+                            throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "audio append failed")
+                        }
+                        audioSamplesWritten = target
                     }
-                    audioSamplesWritten = target
                 }
             }
-        }
-        videoInput.markAsFinished()
-        audioInput?.markAsFinished()
+            videoInput.markAsFinished()
+            audioInput?.markAsFinished()
 
-        await writer.finishWriting()
-        guard writer.status == .completed else {
-            throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "finishWriting failed")
+            await writer.finishWriting()
+            guard writer.status == .completed else {
+                throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "finishWriting failed")
+            }
+        } catch {
+            if writer.status == .writing { writer.cancelWriting() }
+            try? FileManager.default.removeItem(at: dir)
+            throw error
         }
 
         // Finder tags and extended attributes
@@ -207,8 +216,11 @@ public enum FixtureFactory {
 
     // MARK: - Helpers
 
-    private static func waitUntilReady(_ input: AVAssetWriterInput) async throws {
+    private static func waitUntilReady(_ input: AVAssetWriterInput, writer: AVAssetWriter) async throws {
         while !input.isReadyForMoreMediaData {
+            if writer.status == .failed || writer.status == .cancelled {
+                throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "writer \(writer.status)")
+            }
             try await Task.sleep(for: .milliseconds(1))
         }
     }
