@@ -37,6 +37,9 @@ public struct ClipOptions: Sendable {
     public var masteringDisplay: Data?
     public var contentLightLevel: Data?
     public var ambientViewingEnvironment: Data?
+    /// Still frames of equal-width vertical stripes at these signal levels (0 = video-range black, 1 = video-range
+    /// white) with neutral chroma, in place of the moving gradient; nil keeps the gradient.
+    public var lumaStripes: [Double]?
     /// Average encode bit rate in bits per second; nil uses 2 bits per pixel per second.
     public var videoBitRate: Int?
     public var finderTags: [String] = []
@@ -203,7 +206,11 @@ public enum FixtureFactory {
                     var pixelBuffer: CVPixelBuffer?
                     let cv = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer)
                     guard cv == kCVReturnSuccess, let pixelBuffer else { throw FixtureError.pixelBufferFailed(cv) }
-                    fill(pixelBuffer, frame: frame, hlg: hlg)
+                    if let stripes = options.lumaStripes {
+                        fillStripes(pixelBuffer, levels: stripes, hlg: hlg)
+                    } else {
+                        fill(pixelBuffer, frame: frame, hlg: hlg)
+                    }
                     if let ambient = options.ambientViewingEnvironment {
                         CVBufferSetAttachment(
                             pixelBuffer, kCVImageBufferAmbientViewingEnvironmentKey, ambient as CFData,
@@ -309,6 +316,41 @@ public enum FixtureFactory {
                 throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "writer \(writer.status)")
             }
             try await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    /// Fills vertical stripes of flat grey, one per level, with neutral chroma.
+    private static func fillStripes(_ buffer: CVPixelBuffer, levels: [Double], hlg: Bool) {
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        let width = CVPixelBufferGetWidthOfPlane(buffer, 0)
+        let height = CVPixelBufferGetHeightOfPlane(buffer, 0)
+        func level(atColumn x: Int) -> Double { levels[min(x * levels.count / width, levels.count - 1)] }
+        if let base = CVPixelBufferGetBaseAddressOfPlane(buffer, 0) {
+            let stride = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
+            if hlg {
+                let row = (0..<width).map { UInt16(Int((64 + level(atColumn: $0) * 876).rounded()) << 6) }
+                row.withUnsafeBytes { src in
+                    for y in 0..<height { memcpy(base + y * stride, src.baseAddress!, width * 2) }
+                }
+            } else {
+                let row = (0..<width).map { UInt8(Int((16 + level(atColumn: $0) * 219).rounded())) }
+                row.withUnsafeBytes { src in
+                    for y in 0..<height { memcpy(base + y * stride, src.baseAddress!, width) }
+                }
+            }
+        }
+        if let base = CVPixelBufferGetBaseAddressOfPlane(buffer, 1) {
+            let stride = CVPixelBufferGetBytesPerRowOfPlane(buffer, 1)
+            let chromaHeight = CVPixelBufferGetHeightOfPlane(buffer, 1)
+            for y in 0..<chromaHeight {
+                if hlg {
+                    let row = base.advanced(by: y * stride).assumingMemoryBound(to: UInt16.self)
+                    for x in 0..<(CVPixelBufferGetWidthOfPlane(buffer, 1) * 2) { row[x] = UInt16(512 << 6) }
+                } else {
+                    memset(base + y * stride, 128, CVPixelBufferGetWidthOfPlane(buffer, 1) * 2)
+                }
+            }
         }
     }
 

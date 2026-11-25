@@ -1,7 +1,8 @@
 import AppUI
+import MediaEngine
 import SwiftUI
 
-/// Custom resolution, bit rate and frame rate, with the planner's verdict for them.
+/// Custom resolution, bit rate, frame rate and format, with the planner's verdict for them.
 struct AdvancedSettingsView: View {
     @Binding var options: AdvancedOptions
     /// The decision for the one selected video; nil for several.
@@ -26,6 +27,10 @@ struct AdvancedSettingsView: View {
                 Picker("Frame rate", selection: $options.frameRate) {
                     ForEach(AdvancedOptions.FrameRate.allCases) { Text($0.title).tag($0) }
                 }
+                Picker("Format", selection: $options.codec) {
+                    ForEach(VideoCodec.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .help("H.264 plays almost everywhere but turns HDR into SDR and drops Dolby Vision")
             }
             .disabled(!options.isEnabled)
             if options.isEnabled, let decision {

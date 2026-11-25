@@ -21,16 +21,17 @@ final class DownscaleJob {
     private let trackGroups: [(members: [CMPersistentTrackID], enabled: CMPersistentTrackID?)]
     private let transform: CGAffineTransform
     /// Ambient viewing environment from the source format description. VideoToolbox has no session property for
-    /// it, so it rides on each frame as an attachment.
+    /// it, so it rides on each frame as an attachment. Nil for H.264, which carries no HDR metadata.
     private let ambientViewingEnvironment: CFData?
     private let scaler: FrameScaler
-    private let encoder: HEVCEncoder
+    private let encoder: VideoEncoder
     private let duration: Double
     private let progress: @Sendable (Double) -> Void
     private let output: URL
     private let beforeStartWriting: (@Sendable (URL) -> Void)?
     private let beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?
-    /// Decode and scale format: 10-bit for a 10-bit source, 8-bit for an 8-bit one.
+    /// Decode format: 10-bit for a 10-bit source, 8-bit for an 8-bit one. HEVC scales in it too; H.264 scales and
+    /// tone-maps into 8-bit BT.709.
     private let pixelFormat: OSType
 
     private var limiter: FrameRateLimiter
@@ -61,19 +62,31 @@ final class DownscaleJob {
         func data(_ key: CFString) -> CFData? {
             description.flatMap { CMFormatDescriptionGetExtension($0, extensionKey: key) as? Data } as CFData?
         }
-        ambientViewingEnvironment = data(kCMFormatDescriptionExtension_AmbientViewingEnvironment)
-        encoder = try HEVCEncoder(
-            .init(
-                width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
-                isTenBit: isTenBit,
-                expectedFrameRate: frameRate > 0 ? min(Double(frameRate), spec.maxFrameRate ?? .infinity) : nil,
-                colorPrimaries: color(kCMFormatDescriptionExtension_ColorPrimaries),
-                transferFunction: color(kCMFormatDescriptionExtension_TransferFunction),
-                matrix: color(kCMFormatDescriptionExtension_YCbCrMatrix),
-                masteringDisplay: data(kCMFormatDescriptionExtension_MasteringDisplayColorVolume),
-                contentLightLevel: data(kCMFormatDescriptionExtension_ContentLightLevelInfo),
-                preservesDolbyVision: preservesDolbyVision))
-        scaler = try FrameScaler(width: Int(size.width), height: Int(size.height), pixelFormat: pixelFormat)
+        let expectedFrameRate = frameRate > 0 ? min(Double(frameRate), spec.maxFrameRate ?? .infinity) : nil
+        switch spec.codec {
+        case .hevcKeepHDR:
+            ambientViewingEnvironment = data(kCMFormatDescriptionExtension_AmbientViewingEnvironment)
+            encoder = try VideoEncoder(
+                .init(
+                    width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
+                    isTenBit: isTenBit, expectedFrameRate: expectedFrameRate,
+                    colorPrimaries: color(kCMFormatDescriptionExtension_ColorPrimaries),
+                    transferFunction: color(kCMFormatDescriptionExtension_TransferFunction),
+                    matrix: color(kCMFormatDescriptionExtension_YCbCrMatrix),
+                    masteringDisplay: data(kCMFormatDescriptionExtension_MasteringDisplayColorVolume),
+                    contentLightLevel: data(kCMFormatDescriptionExtension_ContentLightLevelInfo),
+                    preservesDolbyVision: preservesDolbyVision))
+            scaler = try FrameScaler(width: Int(size.width), height: Int(size.height), pixelFormat: pixelFormat)
+        case .h264Compatible:
+            ambientViewingEnvironment = nil
+            encoder = try VideoEncoder(
+                .h264(
+                    width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
+                    expectedFrameRate: expectedFrameRate))
+            scaler = try FrameScaler(
+                width: Int(size.width), height: Int(size.height),
+                pixelFormat: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, toSDR709: true)
+        }
         self.transform = transform
         self.progress = progress
         limiter = FrameRateLimiter(maxFrameRate: spec.maxFrameRate)
@@ -199,7 +212,7 @@ final class DownscaleJob {
         let frameDuration = nextTime > pending.time ? nextTime - pending.time : CMTime.invalid
         try encoder.encode(pending.frame, presentationTime: pending.time, duration: frameDuration)
         if videoInput == nil {
-            // The writer needs the encoder's own format description (with its hvcC and dvvC atoms) as the hint.
+            // The writer needs the encoder's own format description (with its hvcC/avcC and dvvC atoms) as the hint.
             try encoder.completeFrames()
         }
         try await appendEncoded()

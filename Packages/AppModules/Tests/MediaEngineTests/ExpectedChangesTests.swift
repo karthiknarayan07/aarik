@@ -36,4 +36,23 @@ import Testing
         #expect(unexpected(changes) == ["video.frameRate"])
         #expect(unexpected(changes, spec: DownscaleSpec(maxFrameRate: 30)).isEmpty)
     }
+
+    @Test func h264AcceptsTheSDRColorAndBitDepthChanges() {
+        let changes = [
+            change("video.codec", "hvc1", "avc1"),
+            change("video.transferFunction", "ITU_R_2100_HLG", "ITU_R_709_2"),
+            change("video.colorPrimaries", "ITU_R_2020", "ITU_R_709_2"),
+            change("video.matrix", "ITU_R_2020", "ITU_R_709_2"),
+            change("video.bitDepth", "10", "8"),
+        ]
+        #expect(unexpected(changes, spec: DownscaleSpec(codec: .h264Compatible)).isEmpty)
+        // The same changes from an HEVC encode mean it went wrong.
+        #expect(
+            unexpected(changes)
+                == ["video.transferFunction", "video.colorPrimaries", "video.matrix", "video.bitDepth"])
+        // Anything else is still unexpected for H.264.
+        #expect(
+            unexpected([change("video.duration", "1000", "990")], spec: DownscaleSpec(codec: .h264Compatible))
+                == ["video.duration"])
+    }
 }

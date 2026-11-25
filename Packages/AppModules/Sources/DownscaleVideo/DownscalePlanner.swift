@@ -1,4 +1,5 @@
 import AppCore
+import CoreMedia
 import Foundation
 import MediaEngine
 
@@ -40,8 +41,23 @@ public enum DownscalePlanner {
         return .convert(spec, estimatedBytes: estimate, predicted: report)
     }
 
+    /// The `hdr.*` items an H.264 (SDR) output drops.
+    static let h264LostKeys: Set<String> = [
+        "hdr.dolbyVision", "hdr.masteringDisplay", "hdr.contentLightLevel", "hdr.ambientViewingEnvironment",
+    ]
+
+    /// What an H.264 output's format items become: H.264 8-bit BT.709 SDR. The values are the inventory's.
+    static let h264Values: [String: String] = [
+        "video.codec": "avc1",
+        "video.colorPrimaries": kCMFormatDescriptionColorPrimaries_ITU_R_709_2 as String,
+        "video.transferFunction": kCMFormatDescriptionTransferFunction_ITU_R_709_2 as String,
+        "video.matrix": kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2 as String,
+        "video.bitDepth": "8",
+    ]
+
     /// What the conversion is expected to change or drop: the dimensions (and the Dolby Vision level) when the
-    /// size shrinks, and auxiliary video tracks such as the Cinematic disparity track. All else is kept.
+    /// size shrinks, and auxiliary video tracks such as the Cinematic disparity track. For H.264 also the codec,
+    /// color and bit depth that differ from 8-bit BT.709, and every HDR item (lost). All else is kept.
     static func predicted(inventory: MetadataInventory, spec: DownscaleSpec) -> MetadataReport {
         predicted(inventory: inventory, source: SourceProfile(inventory: inventory, byteSize: 0), spec: spec)
     }
@@ -51,6 +67,7 @@ public enum DownscalePlanner {
     {
         let size = source.outputSize(shortSide: spec.targetShortSide)
         let resized = (size.width, size.height) != (source.width, source.height)
+        let isH264 = spec.codec == .h264Compatible
         var report = MetadataReport()
         var seen = Set<String>()
         // `track.<n>.kind` = `auxv/<subtype>` marks an auxiliary video track (Cinematic disparity); the downscaler
@@ -67,6 +84,11 @@ public enum DownscalePlanner {
                 report.lost.append(item)
             } else if auxPrefixes.contains(where: { item.key.hasPrefix($0) }) {
                 report.lost.append(item)
+            } else if isH264, h264LostKeys.contains(item.key) {
+                report.lost.append(item)
+            } else if isH264, let value = h264Values[item.key], value != item.value {
+                report.changed.append(
+                    MetadataChange(key: item.key, displayName: item.displayName, from: item.value, to: value))
             } else if resized, item.key == "video.dimensions" {
                 report.changed.append(
                     MetadataChange(

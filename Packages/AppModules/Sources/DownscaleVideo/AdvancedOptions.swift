@@ -47,11 +47,24 @@ public struct AdvancedOptions: Sendable, Equatable {
 
     /// The lowest bit rate the field accepts, in Mbps.
     public static let minimumMbps = 1.0
+    /// The bit rate the field starts at for HEVC, in Mbps.
+    public static let suggestedHEVCMbps = 10.0
+    /// H.264 needs about 1.6x the HEVC bit rate for similar quality.
+    static let h264BitRateFactor = 1.6
 
     public var isEnabled = false
     public var resolution = Resolution.p1080
-    public var bitRateMbps = 10.0
+    public var bitRateMbps = Self.suggestedHEVCMbps
     public var frameRate = FrameRate.keep
+    /// Switching format while the bit rate still holds the old format's suggestion moves it to the new one's, so an
+    /// untouched field follows the format and a typed value is left alone.
+    public var codec = VideoCodec.hevcKeepHDR {
+        didSet {
+            if codec != oldValue, bitRateMbps == Self.suggestedMbps(for: oldValue) {
+                bitRateMbps = Self.suggestedMbps(for: codec)
+            }
+        }
+    }
 
     public init() {}
 
@@ -61,7 +74,25 @@ public struct AdvancedOptions: Sendable, Equatable {
         let mbps = max(bitRateMbps.isFinite ? bitRateMbps : Self.minimumMbps, Self.minimumMbps)
         return DownscaleSpec(
             targetShortSide: resolution.shortSide, averageBitRate: Int((mbps * 1_000_000).rounded()),
-            maxFrameRate: frameRate.cap)
+            maxFrameRate: frameRate.cap, codec: codec)
+    }
+
+    /// The bit rate the field suggests for `codec`, in Mbps.
+    static func suggestedMbps(for codec: VideoCodec) -> Double {
+        switch codec {
+        case .hevcKeepHDR: suggestedHEVCMbps
+        case .h264Compatible: (suggestedHEVCMbps * h264BitRateFactor * 10).rounded() / 10
+        }
+    }
+}
+
+extension VideoCodec {
+    /// The Format picker's label.
+    public var title: String {
+        switch self {
+        case .hevcKeepHDR: "HEVC (keeps HDR)"
+        case .h264Compatible: "H.264 (most compatible)"
+        }
     }
 }
 

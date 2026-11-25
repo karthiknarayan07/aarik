@@ -25,10 +25,20 @@ import Testing
 
 @Suite struct DownscaleSpecCodingTests {
     @Test func roundTripsThroughJSON() throws {
-        for spec in [DownscaleSpec(), DownscaleSpec(targetShortSide: nil, averageBitRate: 5, maxFrameRate: 30)] {
+        for spec in [
+            DownscaleSpec(), DownscaleSpec(targetShortSide: nil, averageBitRate: 5, maxFrameRate: 30),
+            DownscaleSpec(targetShortSide: 720, averageBitRate: 8, codec: .h264Compatible),
+        ] {
             let data = try JSONEncoder().encode(spec)
             #expect(try JSONDecoder().decode(DownscaleSpec.self, from: data) == spec)
         }
+    }
+
+    @Test func olderJSONWithoutACodecDecodesAsHEVC() throws {
+        let json = Data(#"{"targetShortSide":1080,"averageBitRate":9000000}"#.utf8)
+        let spec = try JSONDecoder().decode(DownscaleSpec.self, from: json)
+        #expect(spec == DownscaleSpec(targetShortSide: 1080, averageBitRate: 9_000_000))
+        #expect(spec.codec == .hevcKeepHDR)
     }
 
     @Test func keepingResolutionOnlyEvensTheSize() {

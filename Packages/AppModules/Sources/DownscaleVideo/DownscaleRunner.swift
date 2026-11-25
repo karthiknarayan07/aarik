@@ -181,13 +181,20 @@ public struct DownscaleRunner: JobRunner {
         return lost + changed
     }
 
-    /// Deletes `.<final name>.partial-*` beside `output`: leftovers of an interrupted run of this very output.
+    /// Deletes `.<final name>.partial-<UUID>` files beside `output`: leftovers of an interrupted run of this very
+    /// output (or of a backup copy of it). Only names this app makes match: the suffix must parse as a UUID, and a
+    /// directory is never removed, so a user's own hidden file or folder with a similar name is left alone.
     static func removeStalePartials(of output: URL) {
         let directory = output.deletingLastPathComponent()
         let prefix = "." + output.lastPathComponent + ".partial-"
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         for name in names where name.hasPrefix(prefix) {
-            try? FileManager.default.removeItem(at: directory.appending(path: name))
+            guard UUID(uuidString: String(name.dropFirst(prefix.count))) != nil else { continue }
+            let url = directory.appending(path: name)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue
+            else { continue }
+            try? FileManager.default.removeItem(at: url)
         }
     }
 

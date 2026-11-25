@@ -1,17 +1,39 @@
 import CoreGraphics
 
-/// What a downscale produces: the short side, the average bit rate, and an optional frame-rate cap.
+/// The video format a downscale writes.
+public enum VideoCodec: String, Codable, Sendable, Hashable, CaseIterable {
+    /// HEVC at the source bit depth, keeping HDR, its static metadata and Dolby Vision.
+    case hevcKeepHDR
+    /// H.264 High, 8-bit BT.709 SDR: HDR sources are tone-mapped and lose their HDR metadata.
+    case h264Compatible
+}
+
+/// What a downscale produces: the short side, the average bit rate, an optional frame-rate cap and the codec.
 public struct DownscaleSpec: Sendable, Hashable, Codable {
     /// `nil` keeps the source resolution.
     public var targetShortSide: Int? = 1080
     public var averageBitRate: Int = 20_000_000
     /// `nil` keeps the source frame rate. A cap never increases the frame rate.
     public var maxFrameRate: Double? = nil
+    public var codec: VideoCodec = .hevcKeepHDR
 
-    public init(targetShortSide: Int? = 1080, averageBitRate: Int = 20_000_000, maxFrameRate: Double? = nil) {
+    public init(
+        targetShortSide: Int? = 1080, averageBitRate: Int = 20_000_000, maxFrameRate: Double? = nil,
+        codec: VideoCodec = .hevcKeepHDR
+    ) {
         self.targetShortSide = targetShortSide
         self.averageBitRate = averageBitRate
         self.maxFrameRate = maxFrameRate
+        self.codec = codec
+    }
+
+    /// Job JSON written before `codec` existed has no `codec` key; it decodes as HEVC, which it was.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        targetShortSide = try container.decodeIfPresent(Int.self, forKey: .targetShortSide)
+        averageBitRate = try container.decode(Int.self, forKey: .averageBitRate)
+        maxFrameRate = try container.decodeIfPresent(Double.self, forKey: .maxFrameRate)
+        codec = try container.decodeIfPresent(VideoCodec.self, forKey: .codec) ?? .hevcKeepHDR
     }
 
     /// Encoded (pre-transform) output size: short side = target, aspect kept, both even.

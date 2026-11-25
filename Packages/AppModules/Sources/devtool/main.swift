@@ -9,7 +9,7 @@ let usage = """
     usage:
       devtool fixture <out> [--sdr]
       devtool inspect <file>
-      devtool downscale <in> <out> [--short-side N] [--max-fps F] [--bitrate B]
+      devtool downscale <in> <out> [--short-side N] [--max-fps F] [--bitrate B] [--h264]
     """
 
 func printError(_ message: String) {
@@ -83,6 +83,8 @@ func runDownscale(_ args: [String]) async throws -> Int32 {
         case "--bitrate":
             guard let b = Int(value(for: arg)), b > 0 else { fail("--bitrate needs a positive whole number") }
             spec.averageBitRate = b
+        case "--h264":
+            spec.codec = .h264Compatible
         default:
             if arg.hasPrefix("--") { fail("Unknown option \(arg)", showUsage: true) }
             paths.append(arg)

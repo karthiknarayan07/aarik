@@ -4,7 +4,8 @@ import CoreMedia
 import Foundation
 
 /// Re-encodes the primary video track at a smaller size (HEVC at the source bit depth, HDR, static HDR metadata and
-/// Dolby Vision kept, with the track's own metadata and language) and passes audio, timed metadata, file-level
+/// Dolby Vision kept; or, for `.h264Compatible`, H.264 8-bit BT.709 SDR with HDR tone-mapped and its metadata
+/// dropped; either way with the track's own metadata and language) and passes audio, timed metadata, file-level
 /// metadata and file attributes through untouched, keeping each track's enabled state, alternate groups and audio
 /// fallbacks.
 public struct VideoDownscaler: Sendable {

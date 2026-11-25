@@ -4,14 +4,15 @@ import Foundation
 import Synchronization
 import VideoToolbox
 
-/// HEVC Main or Main10 encoding with a `VTCompressionSession`, so any VideoToolbox property can be set.
-/// Compressed frames are collected in decode order and handed out with `takeEncoded()`.
-final class HEVCEncoder {
+/// HEVC Main or Main10, or H.264 High, encoding with a `VTCompressionSession`, so any VideoToolbox property can be
+/// set. Compressed frames are collected in decode order and handed out with `takeEncoded()`.
+final class VideoEncoder {
     struct Configuration {
         var width: Int
         var height: Int
         var averageBitRate: Int
-        /// Main10 for a 10-bit source, Main for an 8-bit one, so the bit depth is kept.
+        var codec: VideoCodec = .hevcKeepHDR
+        /// HEVC: Main10 for a 10-bit source, Main for an 8-bit one, so the bit depth is kept. H.264 is always 8-bit.
         var isTenBit: Bool
         var expectedFrameRate: Double?
         /// Raw `kCMFormatDescriptionExtension_*` values copied from the source format description.
@@ -25,6 +26,17 @@ final class HEVCEncoder {
         /// `PreserveDynamicHDRMetadata = true`. False: `HDRMetadataInsertionMode = None`, so a source without Dolby
         /// Vision does not gain it (the encoder default is `Auto`).
         var preservesDolbyVision: Bool
+
+        /// H.264 High, 8-bit BT.709 SDR for frames already tone-mapped to it: no static HDR metadata and no Dolby
+        /// Vision, whatever the source had.
+        static func h264(width: Int, height: Int, averageBitRate: Int, expectedFrameRate: Double?) -> Configuration {
+            Configuration(
+                width: width, height: height, averageBitRate: averageBitRate, codec: .h264Compatible, isTenBit: false,
+                expectedFrameRate: expectedFrameRate, colorPrimaries: kCMFormatDescriptionColorPrimaries_ITU_R_709_2,
+                transferFunction: kCMFormatDescriptionTransferFunction_ITU_R_709_2,
+                matrix: kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2, masteringDisplay: nil, contentLightLevel: nil,
+                preservesDolbyVision: false)
+        }
     }
 
     private let session: VTCompressionSession
@@ -34,18 +46,22 @@ final class HEVCEncoder {
         var session: VTCompressionSession?
         let status = VTCompressionSessionCreate(
             allocator: nil, width: Int32(configuration.width), height: Int32(configuration.height),
-            codecType: kCMVideoCodecType_HEVC, encoderSpecification: nil, imageBufferAttributes: nil,
+            codecType: configuration.codec == .h264Compatible ? kCMVideoCodecType_H264 : kCMVideoCodecType_HEVC,
+            encoderSpecification: nil, imageBufferAttributes: nil,
             compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &session)
         guard status == noErr, let session else {
             throw DownscaleError.encoderFailed("VTCompressionSessionCreate failed: \(status)")
         }
         self.session = session
 
-        var properties: [(CFString, CFTypeRef)] = [
-            (
-                kVTCompressionPropertyKey_ProfileLevel,
+        let profile: CFString =
+            switch configuration.codec {
+            case .h264Compatible: kVTProfileLevel_H264_High_AutoLevel
+            case .hevcKeepHDR:
                 configuration.isTenBit ? kVTProfileLevel_HEVC_Main10_AutoLevel : kVTProfileLevel_HEVC_Main_AutoLevel
-            ),
+            }
+        var properties: [(CFString, CFTypeRef)] = [
+            (kVTCompressionPropertyKey_ProfileLevel, profile),
             (kVTCompressionPropertyKey_AverageBitRate, configuration.averageBitRate as CFNumber),
             (kVTCompressionPropertyKey_RealTime, kCFBooleanFalse),
         ]
@@ -72,7 +88,13 @@ final class HEVCEncoder {
             properties.append((kVTCompressionPropertyKey_ContentLightLevelInfo, value))
             optional.insert(kVTCompressionPropertyKey_ContentLightLevelInfo as String)
         }
-        if configuration.preservesDolbyVision {
+        if configuration.codec == .h264Compatible {
+            // H.264 never carries Dolby Vision or other dynamic HDR metadata. Its encoder refuses
+            // `HDRMetadataInsertionMode` with any value (kVTParameterErr on macOS 27.2), so instead it is told not to
+            // preserve dynamic HDR metadata, and FrameScaler hands it frames with nothing but BT.709 color tags.
+            // `H264OutputTests.h264FromHLGIsSDR` checks that a Dolby Vision source yields no Dolby Vision.
+            properties.append((kVTCompressionPropertyKey_PreserveDynamicHDRMetadata, kCFBooleanFalse))
+        } else if configuration.preservesDolbyVision {
             properties.append((kVTCompressionPropertyKey_HDRMetadataInsertionMode, kVTHDRMetadataInsertionMode_Auto))
             properties.append((kVTCompressionPropertyKey_PreserveDynamicHDRMetadata, kCFBooleanTrue))
         } else {
