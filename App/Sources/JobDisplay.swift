@@ -6,10 +6,16 @@ import LocalLibrary
 import SwiftUI
 
 extension Job {
-    var displayName: String { source.lastPathComponent }
+    /// The file's name; a Photos video's file name in Photos (its source is an address, not a file).
+    var displayName: String {
+        guard isPhotosJob else { return source.lastPathComponent }
+        return downscaleSettings?.photosFileName ?? "Video in Photos"
+    }
+
+    var isPhotosJob: Bool { toolID == DownscaleTool.photosToolID }
 
     private var downscaleSettings: DownscaleJobSettings? {
-        guard toolID == DownscaleTool.toolID else { return nil }
+        guard toolID == DownscaleTool.toolID || isPhotosJob else { return nil }
         return try? JSONDecoder().decode(DownscaleJobSettings.self, from: settings)
     }
 
@@ -71,7 +77,11 @@ struct JobThumbnail: View {
         .background(.quaternary)
         .clipShape(.rect(cornerRadius: 4))
         .accessibilityHidden(true)
-        .task(id: url) { image = await thumbnails.thumbnail(for: url, maxPixel: 96) }
+        // A Photos address isn't a file: it gets the generic icon.
+        .task(id: url) {
+            guard url.isFileURL else { return image = nil }
+            image = await thumbnails.thumbnail(for: url, maxPixel: 96)
+        }
     }
 }
 

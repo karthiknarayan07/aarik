@@ -172,6 +172,9 @@ These contradict or sharpen Tasks 4 to 8 of Plan 3.
   system confirmation, and a deleted asset can no longer be fetched, so after a delete the saver must not re-fetch
   to check; (b) a new asset carries an unnamed media-subtype bit, so verification must not compare subtypes for
   equality. Duration, pixel size and creation date/location checks are confirmed to work.
+  - Ruling (limited access): saving, album adds and deleting also run with limited access (PhotoKit only touches
+    assets the app can access); denied, restricted and not-determined access fail with a clear "access isn't
+    allowed" error. Not yet checked on a real library with limited access.
 - **Task 6 (runner):** step 5's "edited-version inputs back up the original resource via a second fetch of `.video`"
   is confirmed to work (44.7 MB downloaded on its own). Photos' rendering of an edit can drop the live-photo-info
   timed-metadata track and shift duration by about 2 ms, so the real-inventory check must not call that a verify

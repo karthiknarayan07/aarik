@@ -1,8 +1,10 @@
 import AppKit
 import AppUI
+import DownscaleVideo
 import LocalLibrary
 import PhotosLibrary
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Where System Settings opens for the two permissions this page can ask about.
 enum PrivacySettings {
@@ -90,8 +92,15 @@ private struct PhotosGridView: View {
         let photos = model.photos
         Group {
             if photos.items.isEmpty {
-                PhotosEmpty(isLoading: !photos.hasLoaded, error: photos.loadError) {
-                    Task { await photos.start() }
+                VStack(spacing: 0) {
+                    // The notes explain an empty grid too: limited access hides videos, and Full Disk Access
+                    // is about filters.
+                    if photos.hasLoaded {
+                        PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
+                    }
+                    PhotosEmpty(isLoading: !photos.hasLoaded, error: photos.loadError) {
+                        Task { await photos.start() }
+                    }
                 }
             } else {
                 VStack(spacing: 0) {
@@ -134,7 +143,7 @@ private struct PhotosGridView: View {
         } else {
             MediaGrid(sections: sections, selection: $browser.selection, onSpace: {}) { item, isSelected in
                 LibraryTile(item: item, isSelected: isSelected, thumbnails: model.thumbnailSource)
-                    .contextMenu { PhotoTileMenu() }
+                    .contextMenu { PhotoTileMenu(model: model, item: item) }
             }
         }
     }
@@ -236,19 +245,40 @@ private struct PhotosNotes: View {
     }
 }
 
-/// A tile's context menu on the Videos page; converting Photos videos isn't built yet.
+/// A tile's context menu on the Videos page.
 private struct PhotoTileMenu: View {
+    let model: AppModel
+    let item: VideoItem
+
     var body: some View {
-        Button("Add to queue", systemImage: "plus") {}
-            .disabled(true)
-            .help("Coming next")
+        Button("Add to queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }
     }
 }
 
-/// The inspector for the Videos page: what the selected videos are, and the conversion controls, switched off
-/// until Photos videos can be queued.
+/// The inspector for the Videos page: what the selected videos are, and how to convert them.
 struct PhotosInspector: View {
     @Bindable var model: AppModel
+    @State private var isChoosingFolder = false
+
+    private var preset: Binding<Preset?> {
+        Binding {
+            model.photoSelectionPreset
+        } set: {
+            model.photoSelectionPreset = $0
+        }
+    }
+
+    private var choice: Binding<PhotosSaveLocation.Choice> {
+        Binding {
+            model.photosSaveLocation.choice
+        } set: { newValue in
+            if newValue == .folder, model.photosSaveLocation.folderBookmark == nil {
+                isChoosingFolder = true
+            } else {
+                model.photosSaveLocation.choice = newValue
+            }
+        }
+    }
 
     var body: some View {
         let items = model.selectedPhotoItems
@@ -268,30 +298,58 @@ struct PhotosInspector: View {
                         .font(.headline)
                     }
                 }
-                Section("Convert") {
-                    Picker("Save to", selection: .constant(0)) {
-                        Text("Photos, as a new video").tag(0)
+                Section("Quality") {
+                    Picker("Quality preset for the selected videos", selection: preset) {
+                        if preset.wrappedValue == nil { Text("Mixed").tag(Preset?.none) }
+                        ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag(Preset?.some($0)) }
                     }
-                    Toggle("Replace the original", isOn: .constant(false))
-                }
-                .disabled(true)
-                .help("Coming next")
-            }
-            .formStyle(.grouped)
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 4) {
-                    Button {
-                    } label: {
-                        Label("Add to queue", systemImage: "plus").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(true)
-                    .help("Coming next")
-                    Text("Converting Photos videos is coming next.")
+                    .labelsHidden()
+                    Text("Details are checked when each video is converted.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Section("Save to") {
+                    Picker("Save to", selection: choice) {
+                        ForEach(PhotosSaveLocation.Choice.allCases) { Text($0.title).tag($0) }
+                    }
+                    .labelsHidden()
+                    .accessibilityLabel("Save to")
+                    if model.photosSaveLocation.choice == .folder, let folder = model.photosSaveLocation.folder {
+                        HStack {
+                            Label(folder.lastPathComponent, systemImage: "folder")
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(folder.path)
+                            Spacer()
+                            Button("Change…") { isChoosingFolder = true }
+                                .accessibilityLabel("Change the output folder")
+                        }
+                    }
+                    Text(
+                        "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos. "
+                            + "Replacing originals is coming next."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
+                guard case .success(let url) = result else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                try? model.photosSaveLocation.setFolder(url)
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    model.requestAddSelectionToQueue()
+                } label: {
+                    Label(model.addPhotosToQueueTitle, systemImage: "plus").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!model.canAddPhotosToQueue)
+                .help("Add to the queue (⌘⏎)")
                 .padding(12)
                 .background(.bar)
             }

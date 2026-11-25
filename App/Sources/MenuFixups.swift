@@ -2,8 +2,9 @@ import AppKit
 
 /// Keeps the menu bar SwiftUI builds for an AppKit-hosted window to Apple's standard shape:
 /// - AppKit parks a hidden "Toggle Sidebar" (⌥⌘S) in the Help menu for a window with a split view. View → Hide
-///   Sidebar (⌃⌘S) is the one sidebar command, so any item with that action is removed the moment it is added.
-/// - View gets Apple's standard Enter Full Screen (⌃⌘F).
+///   Sidebar (⌃⌘S) is the one sidebar command, so that item is removed from Help as soon as it is added.
+/// - View gets Apple's standard Enter Full Screen (⌃⌘F). AppKit has no public API for its localized title, so the
+///   title is English.
 ///
 /// Both work from `NSMenu.didAddItemNotification`, so no timer is involved: the fixes happen when the items do.
 @MainActor
@@ -13,18 +14,23 @@ final class MenuFixups {
 
     /// Starts observing menu changes. Call before SwiftUI builds the menus (`applicationWillFinishLaunching`).
     func start() {
+        guard observer == nil else { return }
         observer = NotificationCenter.default.addObserver(
             forName: NSMenu.didAddItemNotification, object: nil, queue: .main
         ) { notification in
             // Delivered on the main queue, so the notification never leaves the main actor.
             nonisolated(unsafe) let notification = notification
             MainActor.assumeIsolated {
-                let menu = notification.object as? NSMenu
-                let index = notification.userInfo?["NSMenuItemIndex"] as? Int
-                guard let menu, let index, menu.items.indices.contains(index) else { return }
-                Self.fix(menu.items[index])
+                // The whole menu is checked, not the item at the notification's index: that index can be stale
+                // by the time the block runs.
+                if let menu = notification.object as? NSMenu { Self.fix(menu) }
             }
         }
+    }
+
+    func stop() {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
     }
 
     /// Fixes the items that were added before `start` or before the main menu existed. Call once after launch.
@@ -33,18 +39,17 @@ final class MenuFixups {
     }
 
     private static func sweep(_ menu: NSMenu) {
+        fix(menu)
         for item in menu.items {
-            fix(item)
             if let submenu = item.submenu { sweep(submenu) }
         }
     }
 
-    private static func fix(_ item: NSMenuItem) {
-        if item.action == toggleSidebar {
-            item.menu?.removeItem(item)
-        } else if isSidebarCommand(item), let menu = item.menu {
-            addFullScreenItem(to: menu)
+    private static func fix(_ menu: NSMenu) {
+        if menu === NSApp.helpMenu {
+            for item in menu.items where item.action == toggleSidebar { menu.removeItem(item) }
         }
+        if menu.items.contains(where: isSidebarCommand) { addFullScreenItem(to: menu) }
     }
 
     /// Our own sidebar command, recognised by its shortcut (⌃⌘S), not by its title: it sits in the View menu.

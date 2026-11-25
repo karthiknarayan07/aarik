@@ -1,4 +1,5 @@
 import AppKit
+import PhotosLibrary
 import QuickRunService
 import UserNotifications
 
@@ -6,8 +7,8 @@ import UserNotifications
 /// quitting.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    let model = AppModel.shared
-    let updater = Updater()
+    let model: AppModel
+    let updater: Updater
     private var isTerminating = false
     private var volumeObservers: [any NSObjectProtocol] = []
     /// The main window lives as long as the app; closing it only hides it.
@@ -30,19 +31,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ])
     }
 
+    override init() {
+        let model = AppModel.shared
+        self.model = model
+        updater = Updater(relaunchGate: model.relaunchGate)
+        super.init()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { await model.start() }
         windowController = MainWindowController(model: model)
-        // Files that came with the launch are a quick run and leave the window hidden; any other launch (or a
-        // notification click that needs the window) shows it.
-        let files = openedFiles.launchFinished()
-        let responses = notificationResponses.launchFinished()
-        if LaunchWindowPlan.plan(openedFileCount: files.count, hasNotificationResponse: !responses.isEmpty) == .show {
-            model.showMainWindow()
-        }
-        if !files.isEmpty { model.openFiles(files) }
-        for runID in responses { Task { await model.reviewQuickRun(runID) } }
         menuFixups.sweep()
+        // Photos input left behind by a crash or quit is cleared before the queue starts, so a job can't create
+        // its folder while the sweep runs. Opened files and notification responses stay buffered until the queue
+        // runs, so a quick run can't start it early.
+        let workFolder = WorkFolder.standard()
+        Task {
+            await Task.detached(priority: .utility) { workFolder.sweep() }.value
+            await model.start()
+            routeLaunch()
+        }
         #if DEBUG
             if PhotosSpike.isRequested { PhotosSpike.start() }
         #endif
@@ -54,6 +61,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     MainActor.assumeIsolated { self?.refreshLibrary() }
                 })
         }
+    }
+
+    /// Files that came with the launch are a quick run and leave the window hidden; any other launch (or a
+    /// notification click that needs the window) shows it.
+    private func routeLaunch() {
+        let files = openedFiles.launchFinished()
+        let responses = notificationResponses.launchFinished()
+        if LaunchWindowPlan.plan(openedFileCount: files.count, hasNotificationResponse: !responses.isEmpty) == .show {
+            model.showMainWindow()
+        }
+        if !files.isEmpty { model.openFiles(files) }
+        for runID in responses { Task { await model.reviewQuickRun(runID) } }
     }
 
     /// Quick runs outlive the window, so closing it never quits.

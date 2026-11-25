@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import os
 
 /// Runs jobs one at a time, in order, persisting after every state change.
@@ -56,6 +57,7 @@ public actor JobQueue {
         for index in loaded.indices {
             if case .running = loaded[index].state {
                 loaded[index].state = .queued
+                loaded[index].phase = nil
                 recovered = true
             }
         }
@@ -153,6 +155,17 @@ public actor JobQueue {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         if case .running = items[index].state { return }
         items.remove(at: index)
+        changed()
+    }
+
+    /// Changes the outcome of a finished (completed) job and saves it: for what happens after the run, such as
+    /// an original that was moved to Recently Deleted once the user confirmed. Other jobs are left alone.
+    public func updateOutcome(id: UUID, transform: (inout JobOutcome) -> Void) {
+        guard let index = items.firstIndex(where: { $0.id == id }),
+            case .completed(var outcome) = items[index].state
+        else { return }
+        transform(&outcome)
+        items[index].state = .completed(outcome)
         changed()
     }
 
@@ -274,12 +287,30 @@ public actor JobQueue {
         // Progress arrives in order through a stream that keeps only the newest value, so a fast runner never
         // piles up work here; what reaches subscribers is throttled further (`publishProgress`).
         let (progressValues, progressSink) = AsyncStream.makeStream(
-            of: Double.self, bufferingPolicy: .bufferingNewest(1))
+            of: RunProgress.self, bufferingPolicy: .bufferingNewest(1))
+        let latest = Mutex(RunProgress())
         let progressReader = Task {
             for await value in progressValues { updateProgress(value, for: id) }
         }
         // Its own task, so `cancel` can stop this job alone; cancelling the worker (shutdown) cancels it too.
-        let task = Task { try await runner.run(job, progress: { progressSink.yield($0) }) }
+        let task = Task {
+            try await runner.run(
+                job,
+                // Yielded inside the lock, so the stream sees the snapshots in the order they were made.
+                progress: { value in
+                    latest.withLock {
+                        $0.progress = value
+                        progressSink.yield($0)
+                    }
+                },
+                phase: { name in
+                    latest.withLock {
+                        $0.phase = name
+                        $0.progress = 0
+                        progressSink.yield($0)
+                    }
+                })
+        }
         current = (id, task)
         let result = await withTaskCancellationHandler {
             await task.result
@@ -317,6 +348,7 @@ public actor JobQueue {
 
     private func apply(_ disposition: Disposition, to id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].phase = nil
         switch disposition {
         case .finished(let state): items[index].state = state
         case .requeue: items[index].state = .queued
@@ -325,13 +357,20 @@ public actor JobQueue {
         changed()
     }
 
-    private func updateProgress(_ value: Double, for id: UUID) {
+    private func updateProgress(_ value: RunProgress, for id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }),
             case .running = items[index].state
         else { return }
-        items[index].state = .running(progress: min(max(value, 0), 1))
+        items[index].state = .running(progress: min(max(value.progress, 0), 1))
+        items[index].phase = value.phase
         publishProgress()
     }
+}
+
+/// What a run reported last: its phase and the progress within it.
+private struct RunProgress: Sendable {
+    var phase: String?
+    var progress = 0.0
 }
 
 /// Identifies "the same file for the same tool" across spellings of its path.
@@ -347,6 +386,8 @@ struct SourceKey: Hashable {
     /// The real path with symlinks and `..` resolved (`/tmp/a.mov` and `/private/tmp/a.mov` match). A missing file
     /// resolves through its parent folder; failing that, the standardized path.
     static func path(of url: URL) -> String {
+        // Not a file (a Photos video's `x-photos-asset:` address): the address itself says which video it is.
+        guard url.isFileURL else { return url.absoluteString }
         let standardized = url.standardizedFileURL
         if let real = realPath(standardized.path) { return real }
         let parent = standardized.deletingLastPathComponent().path

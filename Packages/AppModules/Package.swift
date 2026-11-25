@@ -41,7 +41,7 @@ let package = Package(
         ),
         .target(
             name: "DownscaleVideo",
-            dependencies: ["AppUI", "MediaEngine", "AppCore"],
+            dependencies: ["AppUI", "MediaEngine", "AppCore", "PhotosLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -86,7 +86,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DownscaleVideoTests",
-            dependencies: ["DownscaleVideo", "MediaTestSupport"],
+            dependencies: ["DownscaleVideo", "PhotosLibrary", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

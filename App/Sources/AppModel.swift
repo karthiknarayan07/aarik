@@ -44,12 +44,18 @@ final class AppModel {
     var presetOverrides = PresetOverrides<UUID>()
     var advanced = AdvancedOptions()
     var saveLocation: SaveLocation
+    /// Where the Videos page puts converted copies.
+    var photosSaveLocation = PhotosSaveLocation()
 
     // MARK: Queue
     var jobs: [Job] = []
     /// Counts, saved total and running progress for the Activity rows, updated with `jobs`.
     var activity = ActivitySummary(jobs: [])
-    var isQueuePaused = false
+    var isQueuePaused = false {
+        didSet { relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused) }
+    }
+    /// Holds an update's relaunch while a job runs or jobs are waiting; the updater asks it, the queue feeds it.
+    @ObservationIgnored let relaunchGate = RelaunchGate()
     var isConfirmingReplace = false
     /// The first Replace in a session asks for confirmation; later ones don't, once videos were added with it.
     @ObservationIgnored var replaceConsent = ReplaceConsent()
@@ -66,6 +72,8 @@ final class AppModel {
     /// The Videos page's own grouping, sort, search, filters and selection.
     let photosBrowser: LibraryBrowser
     let queue: JobQueue
+    /// Photos originals whose copy is saved and verified, waiting for the batch delete.
+    let pendingDeletions: PendingDeletions
     let thumbnails = ThumbnailCache()
     let thumbnailSource: ThumbnailSource
     let tools: [ToolEntry] = ToolRegistry.tools
@@ -104,12 +112,21 @@ final class AppModel {
         self.photosBrowser = LibraryBrowser(collection: photos)
         self.thumbnailSource = ThumbnailSource(cache: thumbnails, photos: photoStore)
         // The runner asks for the backup folder at each Replace, so the setting applies without rebuilding the queue.
-        let runner = DownscaleRunner(originalsBackup: AppSettings.originalsBackupProvider(defaults))
+        let backupProvider = AppSettings.originalsBackupProvider(defaults)
+        let runner = DownscaleRunner(originalsBackup: backupProvider)
+        let pendingDeletions = PendingDeletions(directory: directory)
+        self.pendingDeletions = pendingDeletions
+        // Photos jobs fetch into the Work folder, which the launch sweep clears before the queue starts.
+        let photosRunner = PhotosDownscaleRunner(
+            store: photoStore, workFolder: .standard(), pendingDeletions: pendingDeletions,
+            originalsBackup: backupProvider)
         // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause.
         let autoStart = AppSettings.autoStartQueue(defaults)
         self.isQueuePaused = !autoStart
         self.queue = JobQueue(
-            store: JobStore(directory: directory), runners: [DownscaleTool.toolID: runner], startPaused: !autoStart)
+            store: JobStore(directory: directory),
+            runners: [DownscaleTool.toolID: runner, DownscaleTool.photosToolID: photosRunner],
+            startPaused: !autoStart)
     }
 
     /// Application Support/<bundle id>.
