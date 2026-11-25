@@ -91,8 +91,39 @@ extension AppModel {
 
     /// From a tile's context menu: the visible selection when the tile is part of it, else just that tile.
     func removeFromLibrary(clicked item: LibraryItem) {
-        let selected = Set(selectedItems.map(\.id))
-        removeFromLibrary(selected.contains(item.id) ? selected : [item.id])
+        removeFromLibrary(contextTargetIDs(clicked: item))
+    }
+
+    /// The ids a tile's context menu acts on (`ContextMenuTargets`).
+    private func contextTargetIDs(clicked item: LibraryItem) -> Set<UUID> {
+        ContextMenuTargets.ids(clicked: item.id, selection: Set(selectedItems.map(\.id)))
+    }
+
+    /// The items a tile's context menu acts on, in grid order.
+    func contextTargets(clicked item: LibraryItem) -> [LibraryItem] {
+        let ids = contextTargetIDs(clicked: item)
+        return ids == [item.id] ? [item] : selectedItems.filter { ids.contains($0.id) }
+    }
+
+    /// Selects what a context menu acts on, as Finder does when the clicked item isn't part of the selection.
+    private func selectContextTargets(clicked item: LibraryItem) {
+        browser.selection = contextTargetIDs(clicked: item)
+    }
+
+    /// Context menu: Add to queue, for the selection or the clicked tile.
+    func addToQueue(clicked item: LibraryItem) {
+        selectContextTargets(clicked: item)
+        requestAddSelectionToQueue()
+    }
+
+    func canAddToQueue(clicked item: LibraryItem) -> Bool {
+        saveLocation.destination != nil && contextTargets(clicked: item).contains(where: \.isAvailable)
+    }
+
+    /// Context menu: Quick Look, for the selection or the clicked tile (Space does the same for the selection).
+    func quickLook(clicked item: LibraryItem) {
+        selectContextTargets(clicked: item)
+        quickLookURL = item.url
     }
 
     private func removeFromLibrary(_ ids: Set<UUID>) {

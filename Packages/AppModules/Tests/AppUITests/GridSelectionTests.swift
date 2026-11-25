@@ -73,3 +73,10 @@ import Testing
         #expect(ByteFormat.savedPercent(before: 0, after: 0) == nil)
     }
 }
+
+/// A tile's context menu acts on the selection when the tile is part of it, else on that tile alone.
+@Test func contextMenuActsOnTheSelectionOnlyWhenTheClickedTileIsInIt() {
+    #expect(ContextMenuTargets.ids(clicked: 2, selection: [1, 2, 3]) == [1, 2, 3])
+    #expect(ContextMenuTargets.ids(clicked: 4, selection: [1, 2, 3]) == [4])
+    #expect(ContextMenuTargets.ids(clicked: 4, selection: []) == [4])
+}

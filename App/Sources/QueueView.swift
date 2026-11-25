@@ -25,7 +25,8 @@ struct QueueView: View {
             }
         }
         .navigationTitle("Queue")
-        .navigationSubtitle(model.isQueuePaused && !jobs.isEmpty ? "Paused" : "")
+        // Kept while empty too: videos added later wait until Resume.
+        .navigationSubtitle(model.isQueuePaused ? "Paused" : "")
         .toolbar {
             ToolbarItem(placement: .primaryAction) { PauseResumeButton(model: model) }
             ToolbarItem(placement: .primaryAction) {

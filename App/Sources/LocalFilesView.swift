@@ -1,3 +1,4 @@
+import AppKit
 import AppUI
 import DownscaleVideo
 import LocalLibrary
@@ -29,11 +30,15 @@ struct LocalFilesView: View {
                     QualityFilterBar(browser: browser)
                     Divider()
                     if sections.isEmpty {
-                        if browser.quality.isActive && browser.search.isEmpty {
-                            NoMatchingVideos { browser.quality = QualityFilter() }
-                        } else {
-                            ContentUnavailableView.search(text: browser.search)
+                        // Only the empty state fills the middle; the header, filters and status line stay put.
+                        Group {
+                            if browser.quality.isActive && browser.search.isEmpty {
+                                NoMatchingVideos { browser.quality = QualityFilter() }
+                            } else {
+                                ContentUnavailableView.search(text: browser.search)
+                            }
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         MediaGrid(sections: sections, selection: $browser.selection, onSpace: model.toggleQuickLook) {
                             item, isSelected in
@@ -42,9 +47,7 @@ struct LocalFilesView: View {
                                 presetOverride: model.presetOverrides.shownOverride(
                                     for: item.id, default: model.preset)?.displayName
                             )
-                            .contextMenu {
-                                Button("Remove from library") { model.removeFromLibrary(clicked: item) }
-                            }
+                            .contextMenu { TileMenu(model: model, item: item) }
                         }
                         .onDeleteCommand { model.removeSelectionFromLibrary() }
                     }
@@ -97,6 +100,28 @@ private struct LocalFilesWelcome: View {
                 .buttonStyle(.borderedProminent)
                 .help("Choose videos or folders, or drag them into this window")
         }
+    }
+}
+
+/// A tile's context menu; each item acts on the selection when the tile is part of it, else on that tile.
+private struct TileMenu: View {
+    let model: AppModel
+    let item: VideoItem
+
+    var body: some View {
+        Button("Add to queue", systemImage: "plus") { model.addToQueue(clicked: item) }
+            .disabled(!model.canAddToQueue(clicked: item))
+        Divider()
+        Button("Show in Finder", systemImage: "folder") {
+            let urls = model.contextTargets(clicked: item).filter(\.isAvailable).map(\.url)
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
+        }
+        .disabled(!item.isAvailable)
+        // Space does the same for the selection (the grid's own key handling).
+        Button("Quick Look", systemImage: "eye") { model.quickLook(clicked: item) }
+            .disabled(!item.isAvailable)
+        Divider()
+        Button("Remove from library", systemImage: "minus.circle") { model.removeFromLibrary(clicked: item) }
     }
 }
 

@@ -107,3 +107,11 @@ struct GridSelection<ID: Hashable> {
         return flat[min(lower, upper)...max(lower, upper)]
     }
 }
+
+/// What a grid tile's context menu acts on (Finder-like): the selection when the clicked tile is part of it, else
+/// that tile alone.
+public enum ContextMenuTargets {
+    public static func ids<ID: Hashable>(clicked: ID, selection: Set<ID>) -> Set<ID> {
+        selection.contains(clicked) ? selection : [clicked]
+    }
+}
