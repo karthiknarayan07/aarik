@@ -36,7 +36,7 @@ public struct VideoDownscaler: Sendable {
 
         let job = try await DownscaleJob(
             asset: asset, videoTrack: videoTrack, output: output, spec: spec,
-            isTenBit: inventory["video.bitDepth"]?.value != "8",
+            isTenBit: Self.encodesTenBit(bitDepth: inventory["video.bitDepth"]?.value),
             preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, beforeStartWriting: beforeStartWriting,
             beforePassthroughDrain: beforePassthroughDrain, progress: progress)
         do {
@@ -48,6 +48,11 @@ public struct VideoDownscaler: Sendable {
             throw error
         }
         progress(1.0)
+    }
+
+    /// Main10 unless the source is known to be 8-bit: an unknown bit depth never drops to 8 bits.
+    static func encodesTenBit(bitDepth: String?) -> Bool {
+        bitDepth != "8"
     }
 
     private func primaryVideoTrack(of asset: AVAsset) async throws -> AVAssetTrack? {

@@ -2,7 +2,7 @@ import AVFoundation
 import AarikCore
 import Foundation
 
-/// Reads every file-level metadata item (no allow-list) as `qt.` items.
+/// Reads every file-level metadata item (no allow-list) as `qt.` items, and track-level items the same way.
 enum AssetMetadataReader {
     private static let displayNames: [String: String] = [
         "com.apple.quicktime.make": "Camera make",
@@ -15,19 +15,35 @@ enum AssetMetadataReader {
     ]
 
     static func items(of asset: AVAsset) async throws -> [MetadataItem] {
+        try await items(from: asset.load(.metadata), keyPrefix: "qt.") { keyString in
+            (category(of: keyString), displayName(of: keyString))
+        }
+    }
+
+    /// Track-level items as `trackmeta.<trackIndex>.<key>`, with the same key and value normalization as file level.
+    static func trackItems(of track: AVAssetTrack, trackIndex: Int) async throws -> [MetadataItem] {
+        try await items(from: track.load(.metadata), keyPrefix: "trackmeta.\(trackIndex).") { keyString in
+            (.track, "Track \(trackIndex + 1) \(displayName(of: keyString))")
+        }
+    }
+
+    /// `<keyPrefix><key>` for the QuickTime metadata key space, `<keyPrefix><keySpace>/<key>` for any other.
+    private static func items(
+        from metadata: [AVMetadataItem], keyPrefix: String,
+        describe: (String) -> (category: MetadataCategory, displayName: String)
+    ) async throws -> [MetadataItem] {
         var result: [MetadataItem] = []
-        for item in try await asset.load(.metadata) {
+        for item in metadata {
             let keyString = keyString(of: item)
             let key =
                 if item.keySpace == .quickTimeMetadata {
-                    "qt.\(keyString)"
+                    keyPrefix + keyString
                 } else {
-                    "qt.\(item.keySpace?.rawValue ?? "unknown")/\(keyString)"
+                    "\(keyPrefix)\(item.keySpace?.rawValue ?? "unknown")/\(keyString)"
                 }
+            let (category, displayName) = describe(keyString)
             result.append(
-                MetadataItem(
-                    key: key, category: category(of: keyString),
-                    displayName: displayName(of: keyString), value: try await value(of: item)))
+                MetadataItem(key: key, category: category, displayName: displayName, value: try await value(of: item)))
         }
         return result
     }

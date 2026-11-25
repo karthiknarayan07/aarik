@@ -1,3 +1,4 @@
+import AarikCore
 import CoreMedia
 import Foundation
 import MediaTestSupport
@@ -67,6 +68,75 @@ import Testing
         let timed = try #require(inventory["timed.mdta/com.aarik.test.timed"])
         #expect(timed.value == "present")
         #expect(timed.category == .timedMetadata)
+    }
+
+    @Test func inventoriesTrackDurationsAndAudioState() async throws {
+        let url = try await FixtureFactory.makeClip(smallClip { $0.includeTimedMetadataTrack = true })
+        let inventory = try await MediaInspector().inventory(of: url)
+        #expect(inventory["video.duration"]?.value == "1000")
+        #expect(inventory["audio.0.duration"]?.value == "1000")
+        #expect(inventory["timed.mdta/com.aarik.test.timed.duration"]?.value == "1000")
+        #expect(inventory["audio.0.enabled"]?.value == "true")
+        #expect(inventory["audio.0.alternateGroup"]?.value == "none")
+        #expect(inventory["audio.0.fallback"]?.value == "none")
+    }
+
+    // MARK: - Format description items (constructed descriptions)
+
+    private func hevcDescription(extensions: [CFString: Any] = [:]) throws -> CMFormatDescription {
+        var description: CMFormatDescription?
+        let status = CMVideoFormatDescriptionCreate(
+            allocator: nil, codecType: kCMVideoCodecType_HEVC, width: 1920, height: 1080,
+            extensions: extensions as CFDictionary, formatDescriptionOut: &description)
+        #expect(status == noErr)
+        return try #require(description)
+    }
+
+    private func atoms(_ atoms: [String: Data]) -> [CFString: Any] {
+        [kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms: atoms]
+    }
+
+    private func value(_ key: String, in items: [MetadataItem]) -> String? {
+        items.first { $0.key == key }?.value
+    }
+
+    @Test func bitDepthIsUnknownWhenNothingSaysIt() throws {
+        let items = TrackInspector.formatItems(try hevcDescription())
+        #expect(value("video.bitDepth", in: items) == "unknown")
+        #expect(VideoDownscaler.encodesTenBit(bitDepth: "unknown"))
+        #expect(VideoDownscaler.encodesTenBit(bitDepth: "10"))
+        #expect(!VideoDownscaler.encodesTenBit(bitDepth: "8"))
+    }
+
+    @Test func eightBitH264ProfilesReadAsEightBit() throws {
+        // avcC: version 1, profile 100 (High), compat 0, level 40, lengthSize, 0 SPS, 0 PPS.
+        let avcC = Data([1, 100, 0, 40, 0xFF, 0xE0, 0])
+        var description: CMFormatDescription?
+        CMVideoFormatDescriptionCreate(
+            allocator: nil, codecType: kCMVideoCodecType_H264, width: 1920, height: 1080,
+            extensions: atoms(["avcC": avcC]) as CFDictionary, formatDescriptionOut: &description)
+        let items = TrackInspector.formatItems(try #require(description))
+        #expect(value("video.bitDepth", in: items) == "8")
+    }
+
+    @Test(arguments: ["lhvC", "vexu"]) func multiviewAtomMarksStereo(atom: String) throws {
+        let items = TrackInspector.formatItems(try hevcDescription(extensions: atoms([atom: Data([1, 2, 3])])))
+        #expect(value("hdr.stereo", in: items) == "multiview (\(atom))")
+    }
+
+    @Test func staticHDRMetadataIsInventoriedAsHex() throws {
+        let mastering = Data((0..<24).map { UInt8($0) })
+        let lightLevel = Data([0x03, 0xE8, 0x01, 0x90])
+        let ambient = Data([0, 0, 0x13, 0x88, 0x3D, 0x13, 0x40, 0x42])
+        let items = TrackInspector.formatItems(
+            try hevcDescription(extensions: [
+                kCMFormatDescriptionExtension_MasteringDisplayColorVolume: mastering,
+                kCMFormatDescriptionExtension_ContentLightLevelInfo: lightLevel,
+                kCMFormatDescriptionExtension_AmbientViewingEnvironment: ambient,
+            ]))
+        #expect(value("hdr.masteringDisplay", in: items) == "000102030405060708090a0b0c0d0e0f1011121314151617")
+        #expect(value("hdr.contentLightLevel", in: items) == "03e80190")
+        #expect(value("hdr.ambientViewingEnvironment", in: items) == "000013883d134042")
     }
 
     @Test func fileAttributesCopy() async throws {
