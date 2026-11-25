@@ -131,7 +131,7 @@ import Testing
 
         let batch = JobFactory.makeJobs(
             for: [(url: urls[0], preset: .high), (url: urls[1], preset: .smaller)], settings: settings,
-            losses: [urls[1]: ["Location"]], lostKeys: [urls[1]: ["qt.uiso/loci"]])
+            losses: [urls[1]: PredictedLoss(id: UUID(), lost: ["Location"], keys: ["qt.uiso/loci"])])
 
         let decoded = try batch.jobs.map { try JSONDecoder().decode(DownscaleJobSettings.self, from: $0.settings) }
         #expect(batch.jobs.map(\.source) == urls)

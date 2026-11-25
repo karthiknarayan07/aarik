@@ -126,7 +126,7 @@ extension AppModel {
         replaceConsent.videosAdded()
         let batch = JobFactory.makeJobs(
             for: items.map { (url: $0.url, preset: presets[$0.id] ?? settings.preset) }, settings: settings,
-            losses: losses.mapValues(\.lost), lostKeys: losses.mapValues(\.keys))
+            losses: losses)
         let autoStart = AppSettings.autoStartQueue(defaults)
         if autoStart { isQueuePaused = false }
         send { [weak self] queue in
