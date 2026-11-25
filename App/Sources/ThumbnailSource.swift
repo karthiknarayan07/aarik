@@ -15,7 +15,8 @@ struct ThumbnailSource: Sendable {
         case .photos(let identifier):
             let size = Self.size(for: item.pixelSize, maxPixel: maxPixel)
             let photos = photos
-            return await cache.thumbnail(forKey: "photos:\(identifier)", maxPixel: maxPixel) {
+            let key = PhotoItemBuilder.thumbnailKey(for: item) ?? "photos:\(identifier)"
+            return await cache.thumbnail(forKey: key, maxPixel: maxPixel) {
                 await photos.thumbnail(for: identifier, size: size)
             }
         }

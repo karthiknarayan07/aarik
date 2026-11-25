@@ -52,12 +52,14 @@ public struct PhotoAsset: Sendable, Hashable, Identifiable {
     public let originalByteSize: Int64?
     /// Whether the original is on this Mac (false when only in iCloud); nil when Photos doesn't say.
     public let isLocallyAvailable: Bool?
+    /// When the asset last changed in Photos (an edit changes it); nil when Photos doesn't say.
+    public let modificationDate: Date?
 
     public init(
         id: String, creationDate: Date? = nil, location: PhotoLocation? = nil, pixelSize: CGSize,
         duration: Double, isFavorite: Bool = false, isHidden: Bool = false, hasAdjustments: Bool = false,
         subtypes: PhotoSubtypes = [], originalFileName: String, originalByteSize: Int64? = nil,
-        isLocallyAvailable: Bool? = nil
+        isLocallyAvailable: Bool? = nil, modificationDate: Date? = nil
     ) {
         self.id = id
         self.creationDate = creationDate
@@ -71,6 +73,7 @@ public struct PhotoAsset: Sendable, Hashable, Identifiable {
         self.originalFileName = originalFileName
         self.originalByteSize = originalByteSize
         self.isLocallyAvailable = isLocallyAvailable
+        self.modificationDate = modificationDate
     }
 
     public func hash(into hasher: inout Hasher) {

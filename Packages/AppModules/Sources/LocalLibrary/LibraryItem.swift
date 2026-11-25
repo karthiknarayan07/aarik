@@ -31,11 +31,13 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
     public let badges: Set<MediaBadge>
     public var isAvailable: Bool
     public let inventory: MetadataInventory
+    /// When a Photos video last changed there (an edit changes it); nil for a file or when unknown.
+    public let modifiedDate: Date?
 
     public init(
         id: UUID, source: ItemSource, name: String, byteSize: Int64, duration: Double, pixelSize: CGSize,
         frameRate: Double, captureDate: Date?, badges: Set<MediaBadge>, isAvailable: Bool,
-        inventory: MetadataInventory
+        inventory: MetadataInventory, modifiedDate: Date? = nil
     ) {
         self.id = id
         self.source = source
@@ -48,6 +50,7 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
         self.badges = badges
         self.isAvailable = isAvailable
         self.inventory = inventory
+        self.modifiedDate = modifiedDate
     }
 
     /// A file item named after the file.
@@ -79,6 +82,7 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
             && lhs.name == rhs.name && lhs.badges == rhs.badges && lhs.duration == rhs.duration
             && lhs.pixelSize == rhs.pixelSize
             && lhs.frameRate == rhs.frameRate && lhs.captureDate == rhs.captureDate && lhs.inventory == rhs.inventory
+            && lhs.modifiedDate == rhs.modifiedDate
     }
 
     /// By id only, which agrees with `==` (equal items share their id).

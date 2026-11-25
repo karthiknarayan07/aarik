@@ -78,7 +78,8 @@ public final class PhotoKitStore: PhotoStore {
             pixelSize: CGSize(width: asset.pixelWidth, height: asset.pixelHeight), duration: asset.duration,
             isFavorite: asset.isFavorite, isHidden: asset.isHidden, hasAdjustments: asset.hasAdjustments,
             subtypes: subtypes(asset.mediaSubtypes), originalFileName: original.map(fileName) ?? "",
-            originalByteSize: original.flatMap(byteSize), isLocallyAvailable: original.flatMap(isLocallyAvailable))
+            originalByteSize: original.flatMap(byteSize), isLocallyAvailable: original.flatMap(isLocallyAvailable),
+            modificationDate: asset.modificationDate)
     }
 
     private static func subtypes(_ subtypes: PHAssetMediaSubtype) -> PhotoSubtypes {
