@@ -250,6 +250,26 @@ enum Fixtures {
         #expect(library.items.first?.isAvailable == true)
     }
 
+    /// Moved in Finder after it was queued: the run followed the bookmark to the new path, but the item is still at
+    /// the old one. Trying the run's path first, then the job's own, still finds it.
+    @Test func replacementOfAFileMovedSinceItWasQueuedFindsTheItemByItsOldPath() async throws {
+        let folder = try Fixtures.tempDirectory()
+        let clip = try Fixtures.copy(try await Fixtures.clip(width: 640, height: 360), into: folder, as: "a.mov")
+        let library = LocalLibrary(directory: try Fixtures.tempDirectory())
+        library.add([clip])
+        await Fixtures.settle(library)
+        let id = try #require(library.items.first?.id)
+
+        let moved = folder.appending(path: "moved.mov")
+        try FileManager.default.removeItem(at: clip)
+        try FileManager.default.copyItem(at: try await Fixtures.clip(width: 320, height: 180), to: moved)
+        await library.fileWasReplaced(at: [moved, clip], by: moved)
+
+        #expect(library.items.map(\.id) == [id])
+        #expect(library.items.first?.url.lastPathComponent == "moved.mov")
+        #expect(library.items.first?.inventory["video.dimensions"]?.value == "320x180")
+    }
+
     @Test func replacementOfAFileNotInTheLibraryChangesNothing() async throws {
         let folder = try Fixtures.tempDirectory()
         let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "a.mov")

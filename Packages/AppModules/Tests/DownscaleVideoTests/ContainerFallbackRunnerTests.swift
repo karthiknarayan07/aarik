@@ -66,12 +66,14 @@ import Testing
             for url in [m4v, mov] { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         }
         let missing = URL(filePath: "/nonexistent/c.mp4")
+        let missingMOV = URL(filePath: "/nonexistent/d.mov")
 
         let found = await LossCheck.quickTimeFallbacks(among: [
-            (id: 1, url: m4v), (id: 2, url: mov), (id: 3, url: missing),
+            (id: 1, url: m4v), (id: 2, url: mov), (id: 3, url: missing), (id: 4, url: missingMOV),
         ])
 
-        #expect(found == [1])
+        // An MPEG-4 file that can't be read counts as falling back, so its loss is shown rather than missed.
+        #expect(found == [1, 3])
     }
 
     // MARK: - Runs
@@ -81,7 +83,9 @@ import Testing
             name: "x.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        // What the sheet showed before the job was added.
+        let settings = DownscaleJobSettings(
+            preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: ["Location", "Creation date"])
 
         let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -93,6 +97,36 @@ import Testing
         #expect(outcome.report.lost.contains { $0.key == "qt.uiso/loci" })
         #expect(outcome.isVerified)
         #expect(outcome.notes == ["Saved as a .mov file because M4V can't hold all of its tracks"])
+    }
+
+    /// The add-time probe missed the fallback (or the job predates the prediction): what QuickTime loses was never
+    /// shown, so the copy is not kept.
+    @Test(.timeLimit(.minutes(2)), arguments: [[String]?.some([]), nil])
+    func fallbackFoundOnlyAtRunTimeKeepsTheOriginalAsIs(_ predictedLost: [String]?) async throws {
+        let source = try await RunnerFixture.source(
+            name: "x.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
+        let directory = source.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let settings = DownscaleJobSettings(
+            preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: predictedLost)
+
+        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+
+        #expect(state == .keptAsIs(reason: "Its file format can't keep all of its details"))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
+    }
+
+    @Test func fallbackLossCountsAsShownOnlyWhenEveryNameWasPredicted() {
+        let inventory = MetadataInventory(items: [
+            MetadataItem(key: "qt.uiso/loci", category: .location, displayName: "Location", value: "+1+2/"),
+            MetadataItem(key: "qt.uiso/date", category: .date, displayName: "Creation date", value: "2026"),
+        ])
+        #expect(DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: ["Creation date", "Location", "x"]))
+        #expect(!DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: ["Location"]))
+        #expect(!DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: []))
+        #expect(!DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: nil))
+        // Nothing to lose: nothing to have been shown.
+        #expect(DownscaleRunner.fallbackLossWasShown(MetadataInventory(items: []), predictedLost: nil))
     }
 
     @Test(.timeLimit(.minutes(2)), arguments: [SaveDestination.nextToOriginal, .replace])

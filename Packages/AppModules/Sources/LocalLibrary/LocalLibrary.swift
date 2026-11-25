@@ -159,8 +159,19 @@ public final class LocalLibrary {
     /// item in place: same id, the new file's size, metadata, badges and a fresh bookmark. Nothing happens when
     /// no item has `original`'s path, or when the replacement can't be read (the item is then re-checked).
     public func fileWasReplaced(at original: URL, by replacement: URL) async {
-        let key = LibraryScanner.pathKey(original)
-        guard let id = keyByID.first(where: { $0.value == key })?.key else { return }
+        await fileWasReplaced(at: [original], by: replacement)
+    }
+
+    /// `fileWasReplaced(at:by:)` for the first of `originals` that is an item's path: for example the file the run
+    /// read (where its bookmark found it after a move in Finder), then the path the job was added with, which is
+    /// where the item still is until the next launch.
+    public func fileWasReplaced(at originals: [URL], by replacement: URL) async {
+        let keys = originals.map(LibraryScanner.pathKey)
+        guard
+            let (id, key) = keys.lazy.compactMap({ key in
+                self.keyByID.first(where: { $0.value == key }).map { ($0.key, key) }
+            }).first
+        else { return }
         let scanned = await LibraryScanner.inspectFile(replacement)
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         guard let scanned else {
