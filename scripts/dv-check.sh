@@ -17,35 +17,51 @@ if ! command -v ffprobe >/dev/null 2>&1; then
   echo "dv-check: ffprobe not found. Install it with: brew install ffmpeg" >&2
   exit 1
 fi
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "dv-check: python3 not found (install the Xcode command line tools)." >&2
+
+probe_failed=0
+errfile=$(mktemp "${TMPDIR:-/tmp}/dv-check.XXXXXX")
+trap 'rm -f "$errfile"' EXIT
+
+# Stream ffprobe straight into awk (nothing is held in a shell variable). pipefail makes an ffprobe
+# failure fail the script; any stderr output (decode errors) is treated as a failure below.
+frame_counts=$(ffprobe -v error -select_streams v:0 -show_frames \
+  -show_entries frame=side_data_list -of compact "$file" 2>"$errfile" |
+  awk '/^frame\|/ { n++; if (index($0, "Dolby Vision RPU")) r++ } END { print n + 0, r + 0 }') ||
+  probe_failed=1
+
+stream_info=$(ffprobe -v error -select_streams v:0 -show_streams \
+  -show_entries stream=nb_frames:stream_side_data_list -of compact "$file" 2>>"$errfile" |
+  awk -F'|' '
+    /^stream\|/ {
+      for (i = 2; i <= NF; i++) {
+        if ($i ~ /^nb_frames=/) nb = substr($i, 11)
+        if ($i ~ /dovi_configuration_record:dv_profile=/) p = substr($i, index($i, "=") + 1)
+        if ($i ~ /dovi_configuration_record:dv_level=/) l = substr($i, index($i, "=") + 1)
+        if ($i ~ /dovi_configuration_record:dv_bl_signal_compatibility_id=/) c = substr($i, index($i, "=") + 1)
+      }
+    }
+    END {
+      cfg = (p == "" ? "none" : p "/" l "/" c)
+      print (nb == "" ? "N/A" : nb), cfg
+    }') || probe_failed=1
+
+if [[ $probe_failed -ne 0 ]]; then
+  echo "dv-check: ffprobe failed on $file:" >&2
+  cat "$errfile" >&2
   exit 1
 fi
+read -r frames rpu_frames <<<"$frame_counts"
+read -r nb_frames config <<<"$stream_info"
+echo "frames=$frames nb_frames=$nb_frames rpu_frames=$rpu_frames config=$config"
 
-frames_json=$(ffprobe -v error -select_streams v:0 -show_frames \
-  -show_entries frame=side_data_list -of json "$file")
-stream_json=$(ffprobe -v error -select_streams v:0 -show_streams \
-  -show_entries stream=side_data_list -of json "$file")
-
-summary=$(
-  FRAMES=$frames_json STREAM=$stream_json python3 -I -c '
-import json, os
-frames = json.loads(os.environ["FRAMES"]).get("frames", [])
-rpu = sum(
-    1 for f in frames
-    if any("Dolby Vision RPU" in sd.get("side_data_type", "") for sd in f.get("side_data_list", []))
-)
-config = "none"
-for s in json.loads(os.environ["STREAM"]).get("streams", []):
-    for sd in s.get("side_data_list", []):
-        if "DOVI configuration record" in sd.get("side_data_type", ""):
-            config = "{}/{}/{}".format(
-                sd.get("dv_profile", "?"), sd.get("dv_level", "?"),
-                sd.get("dv_bl_signal_compatibility_id", "?"))
-print("{} {} {}".format(len(frames), rpu, config))
-'
-)
-read -r frames rpu_frames config <<<"$summary"
-echo "frames=$frames rpu_frames=$rpu_frames config=$config"
+if [[ -s $errfile ]]; then
+  echo "dv-check: ffprobe reported errors; the file may be truncated or corrupt:" >&2
+  cat "$errfile" >&2
+  exit 1
+fi
+if [[ $nb_frames =~ ^[0-9]+$ && $frames -ne $nb_frames ]]; then
+  echo "dv-check: counted $frames frames but the stream declares $nb_frames." >&2
+  exit 1
+fi
 if [[ $frames -gt 0 && $frames -eq $rpu_frames ]]; then exit 0; fi
 exit 1
