@@ -143,7 +143,7 @@ public final class LocalLibrary {
     /// and bookmark saved. Bookmarks are resolved off the main actor, and only for those items.
     private func followMovedFiles() async {
         let candidates = items.filter { !$0.isAvailable }.compactMap { item in
-            entries[item.id].map { (id: item.id, url: item.url, entry: $0) }
+            item.fileURL.flatMap { url in entries[item.id].map { (id: item.id, url: url, entry: $0) } }
         }
         guard !candidates.isEmpty else { return }
         let moves = await Self.moves(of: candidates)
@@ -152,7 +152,7 @@ public final class LocalLibrary {
             // The item may have changed meanwhile (removed, replaced, moved): only the one still at the old path,
             // with the entry that was resolved, moves; never onto another item's path.
             let newKey = LibraryScanner.pathKey(move.to)
-            guard let index = items.firstIndex(where: { $0.id == move.id }), items[index].url == move.from,
+            guard let index = items.firstIndex(where: { $0.id == move.id }), items[index].fileURL == move.from,
                 let entry = entries[move.id], entry == move.entry, !pathKeys.contains(newKey),
                 let item = LibraryItemBuilder.build(
                     url: move.to, inventory: entry.inventory, byteSize: entry.byteSize, id: move.id)
@@ -189,7 +189,7 @@ public final class LocalLibrary {
     }
 
     private func refreshExistence() async {
-        let files = items.map { (id: $0.id, url: $0.url) }
+        let files = items.compactMap { item in item.fileURL.map { (id: item.id, url: $0) } }
         let checkedURLs = Dictionary(files.map { ($0.id, $0.url) }) { first, _ in first }
         let available = await availability(files)
         // Items may have changed meanwhile; only those still here at the path that was checked are updated (a
@@ -198,7 +198,7 @@ public final class LocalLibrary {
         var changed = false
         for index in updated.indices {
             let item = updated[index]
-            guard let isAvailable = available[item.id], checkedURLs[item.id] == item.url,
+            guard let isAvailable = available[item.id], checkedURLs[item.id] == item.fileURL,
                 item.isAvailable != isAvailable
             else { continue }
             updated[index].isAvailable = isAvailable
@@ -218,7 +218,7 @@ public final class LocalLibrary {
     /// its size differs; otherwise its date is recorded.
     private func refreshChangedFiles() async {
         let files = items.filter(\.isAvailable).compactMap { item in
-            entries[item.id].map { (id: item.id, url: item.url, stored: $0) }
+            item.fileURL.flatMap { url in entries[item.id].map { (id: item.id, url: url, stored: $0) } }
         }
         guard !files.isEmpty else { return }
         let stamps = await Self.stamps(of: files.map { (id: $0.id, url: $0.url) })
@@ -249,7 +249,7 @@ public final class LocalLibrary {
             return
         }
         unreadable[id] = nil
-        guard let index = items.firstIndex(where: { $0.id == id }), items[index].url == url, entries[id] == stored,
+        guard let index = items.firstIndex(where: { $0.id == id }), items[index].fileURL == url, entries[id] == stored,
             let item = LibraryItemBuilder.build(
                 url: url, inventory: scanned.item.inventory, byteSize: scanned.item.byteSize, id: id)
         else { return }
@@ -297,14 +297,14 @@ public final class LocalLibrary {
         else { return }
         let scanned = await LibraryScanner.inspectFile(replacement)
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        guard let scanned else {
+        guard let scanned, let replacementURL = scanned.item.fileURL else {
             await refreshAvailability()
             return
         }
         let item = LibraryItemBuilder.build(
-            url: scanned.item.url, inventory: scanned.item.inventory, byteSize: scanned.item.byteSize, id: id)
+            url: replacementURL, inventory: scanned.item.inventory, byteSize: scanned.item.byteSize, id: id)
         guard let item else { return }
-        let newKey = LibraryScanner.pathKey(item.url)
+        let newKey = LibraryScanner.pathKey(replacementURL)
         if newKey != key {
             // Another item already at the new path would make two entries for one file; keep the existing one.
             guard !pathKeys.contains(newKey) else { return }
@@ -314,7 +314,8 @@ public final class LocalLibrary {
         }
         items[index] = item
         entries[id] = BookmarkStore.Entry(
-            id: id, path: item.url.path, bookmark: scanned.bookmark, byteSize: item.byteSize, inventory: item.inventory,
+            id: id, path: replacementURL.path, bookmark: scanned.bookmark, byteSize: item.byteSize,
+            inventory: item.inventory,
             modifiedAt: scanned.modifiedAt)
         persist()
     }
@@ -337,12 +338,13 @@ public final class LocalLibrary {
     private func receive(_ batch: [ScannedFile]) {
         for file in batch {
             let item = file.item
-            let key = LibraryScanner.pathKey(item.url)
+            guard let url = item.fileURL else { continue }
+            let key = LibraryScanner.pathKey(url)
             guard pathKeys.insert(key).inserted else { continue }
             keyByID[item.id] = key
             items.append(item)
             entries[item.id] = BookmarkStore.Entry(
-                id: item.id, path: item.url.path, bookmark: file.bookmark, byteSize: item.byteSize,
+                id: item.id, path: url.path, bookmark: file.bookmark, byteSize: item.byteSize,
                 inventory: item.inventory, modifiedAt: file.modifiedAt)
         }
         persist()
@@ -372,7 +374,7 @@ public final class LocalLibrary {
                     url: resolved.url, inventory: entry.inventory, byteSize: entry.byteSize, id: entry.id,
                     isAvailable: available)
             else { continue }
-            let key = LibraryScanner.pathKey(item.url)
+            let key = LibraryScanner.pathKey(resolved.url)
             guard pathKeys.insert(key).inserted else { continue }
             keyByID[item.id] = key
             items.append(item)

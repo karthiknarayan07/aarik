@@ -64,7 +64,11 @@ enum Samples {
         #expect(item.captureDate == asset.creationDate)
         #expect(item.isAvailable)
         #expect(item.inventory == MetadataInventory())
-        #expect(PhotoItemBuilder.localIdentifier(from: item.url) == asset.id)
+        #expect(item.source == .photos(asset.id))
+        #expect(item.photosIdentifier == asset.id)
+        #expect(item.name == "IMG_4211.MOV")
+        // A Photos video has no file location, so nothing can build a path from it.
+        #expect(item.fileURL == nil)
     }
 
     @Test func unknownSizeIsZero() {
@@ -83,21 +87,6 @@ enum Samples {
         let uuid = PhotoItemBuilder.itemID(for: "A/L0/001").uuid
         #expect(uuid.6 >> 4 == 8)
         #expect(uuid.8 >> 6 == 0b10)
-    }
-
-    @Test(arguments: [
-        "6F1B8A2C-1D3E-4F5A-9B7C-0E2D4F6A8B1C/L0/001", "plain", "with space/and?query#hash", "%2F already", "é/ü",
-    ])
-    func urlRoundTrips(identifier: String) {
-        let url = PhotoItemBuilder.url(for: identifier)
-        #expect(url.scheme == PhotoItemBuilder.urlScheme)
-        #expect(!url.absoluteString.dropFirst(PhotoItemBuilder.urlScheme.count + 1).contains("/"))
-        #expect(PhotoItemBuilder.localIdentifier(from: url) == identifier)
-    }
-
-    @Test func otherURLsHaveNoIdentifier() {
-        #expect(PhotoItemBuilder.localIdentifier(from: URL(filePath: "/tmp/a.mov")) == nil)
-        #expect(PhotoItemBuilder.localIdentifier(from: URL(string: "x-photos-asset:")!) == nil)
     }
 }
 

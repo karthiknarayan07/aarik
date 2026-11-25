@@ -37,7 +37,7 @@ public final class LibraryBrowser {
     /// The grid's selection. A search can hide some of it; `selectedItems` leaves those out.
     public var selection: Set<UUID> = []
 
-    public let library: LocalLibrary
+    public let collection: any MediaCollection
 
     /// Test seams: how often the snapshot and derived values were rebuilt.
     @ObservationIgnored public private(set) var snapshotBuilds = 0
@@ -56,17 +56,17 @@ public final class LibraryBrowser {
     @ObservationIgnored private var current = Snapshot(groups: [])
     @ObservationIgnored private var derived: [AnyHashable: Any] = [:]
 
-    public init(library: LocalLibrary) {
-        self.library = library
+    public init(collection: any MediaCollection) {
+        self.collection = collection
     }
 
     public var snapshot: Snapshot {
         let next = Query(
-            revision: library.revision, grouping: grouping, sort: sort, filter: filter,
+            revision: collection.revision, grouping: grouping, sort: sort, filter: filter,
             search: search.trimmingCharacters(in: .whitespacesAndNewlines), quality: quality)
         if next != query {
             query = next
-            current = Self.snapshot(library.items, query: next)
+            current = Self.snapshot(collection.items, query: next)
             derived.removeAll()
             snapshotBuilds += 1
         }
@@ -94,7 +94,7 @@ public final class LibraryBrowser {
     private static func snapshot(_ items: [LibraryItem], query: Query) -> Snapshot {
         let collection = items.filter { item in
             (query.filter.map(item.badges.contains) ?? true)
-                && (query.search.isEmpty || item.url.lastPathComponent.localizedStandardContains(query.search))
+                && (query.search.isEmpty || item.name.localizedStandardContains(query.search))
         }
         let (kept, facets) = query.quality.apply(to: collection)
         let groups = LibraryGrouper.groups(kept, by: query.grouping, sort: query.sort, filter: nil)

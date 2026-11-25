@@ -17,7 +17,10 @@ public enum MediaBadge: String, Sendable, CaseIterable, Hashable {
 /// One movie file in the library.
 public struct LibraryItem: Identifiable, Sendable, Hashable {
     public let id: UUID
-    public let url: URL
+    /// Where the video is. Use `fileURL` for a file path; a Photos item has none.
+    public let source: ItemSource
+    /// The name shown for the video: the file's name, or the original file name Photos has for it.
+    public let name: String
     public let byteSize: Int64
     /// Seconds.
     public let duration: Double
@@ -30,11 +33,13 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
     public let inventory: MetadataInventory
 
     public init(
-        id: UUID, url: URL, byteSize: Int64, duration: Double, pixelSize: CGSize, frameRate: Double,
-        captureDate: Date?, badges: Set<MediaBadge>, isAvailable: Bool, inventory: MetadataInventory
+        id: UUID, source: ItemSource, name: String, byteSize: Int64, duration: Double, pixelSize: CGSize,
+        frameRate: Double, captureDate: Date?, badges: Set<MediaBadge>, isAvailable: Bool,
+        inventory: MetadataInventory
     ) {
         self.id = id
-        self.url = url
+        self.source = source
+        self.name = name
         self.byteSize = byteSize
         self.duration = duration
         self.pixelSize = pixelSize
@@ -45,11 +50,34 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
         self.inventory = inventory
     }
 
+    /// A file item named after the file.
+    public init(
+        id: UUID, url: URL, byteSize: Int64, duration: Double, pixelSize: CGSize, frameRate: Double,
+        captureDate: Date?, badges: Set<MediaBadge>, isAvailable: Bool, inventory: MetadataInventory
+    ) {
+        self.init(
+            id: id, source: .file(url), name: url.lastPathComponent, byteSize: byteSize, duration: duration,
+            pixelSize: pixelSize, frameRate: frameRate, captureDate: captureDate, badges: badges,
+            isAvailable: isAvailable, inventory: inventory)
+    }
+
+    /// The file's location, or nil for an item that isn't a file (a Photos video).
+    public var fileURL: URL? {
+        if case .file(let url) = source { url } else { nil }
+    }
+
+    /// The Photos local identifier, or nil for a file.
+    public var photosIdentifier: String? {
+        if case .photos(let identifier) = source { identifier } else { nil }
+    }
+
     /// Every field counts, so a view showing an item redraws when it changes (it went missing, or a Replace
     /// shrank it).
     public static func == (lhs: LibraryItem, rhs: LibraryItem) -> Bool {
-        lhs.id == rhs.id && lhs.isAvailable == rhs.isAvailable && lhs.byteSize == rhs.byteSize && lhs.url == rhs.url
-            && lhs.badges == rhs.badges && lhs.duration == rhs.duration && lhs.pixelSize == rhs.pixelSize
+        lhs.id == rhs.id && lhs.isAvailable == rhs.isAvailable && lhs.byteSize == rhs.byteSize
+            && lhs.source == rhs.source
+            && lhs.name == rhs.name && lhs.badges == rhs.badges && lhs.duration == rhs.duration
+            && lhs.pixelSize == rhs.pixelSize
             && lhs.frameRate == rhs.frameRate && lhs.captureDate == rhs.captureDate && lhs.inventory == rhs.inventory
     }
 
