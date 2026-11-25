@@ -64,7 +64,7 @@ let package = Package(
         ),
         .testTarget(
             name: "LocalLibraryTests",
-            dependencies: ["LocalLibrary"],
+            dependencies: ["LocalLibrary", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
