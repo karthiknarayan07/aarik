@@ -1,8 +1,10 @@
+import AppUI
 import LocalLibrary
 import SwiftUI
 
 /// Quality, size, length, codec and dynamic-range menus above the grid. Each lists only the options present in the
-/// current collection, with how many videos each would show; the counts come from the browser's cached snapshot.
+/// current collection, with how many videos each would show and their total size; the counts come from the browser's
+/// cached snapshot.
 struct QualityFilterBar: View {
     @Bindable var browser: LibraryBrowser
 
@@ -54,7 +56,7 @@ private struct FilterMenu<Value: Hashable & Sendable & Comparable>: View {
     /// Present options plus chosen ones the collection no longer has, so a choice can always be turned off.
     private var rows: [QualityFacets.Option<Value>] {
         let present = Set(options.map(\.value))
-        let missing = selection.subtracting(present).map { QualityFacets.Option(value: $0, count: 0) }
+        let missing = selection.subtracting(present).map { QualityFacets.Option(value: $0, count: 0, bytes: 0) }
         return (options + missing).sorted { $0.value < $1.value }
     }
 
@@ -64,9 +66,9 @@ private struct FilterMenu<Value: Hashable & Sendable & Comparable>: View {
             Menu {
                 ForEach(rows, id: \.value) { row in
                     Toggle(isOn: isOn(row.value)) {
-                        Text(verbatim: "\(name(row.value)) (\(row.count))")
+                        Text(verbatim: optionTitle(name(row.value), row))
                     }
-                    .accessibilityLabel("\(name(row.value)), \(videoCount(row.count))")
+                    .accessibilityLabel(optionTitle(name(row.value), row))
                 }
                 if !selection.isEmpty {
                     Divider()
@@ -114,7 +116,7 @@ private struct SizeMenu: View {
 
     private var rows: [QualityFacets.Option<SizeThreshold>] {
         guard let selection, !options.contains(where: { $0.value == selection }) else { return options }
-        return (options + [QualityFacets.Option(value: selection, count: 0)]).sorted { $0.value < $1.value }
+        return (options + [QualityFacets.Option(value: selection, count: 0, bytes: 0)]).sorted { $0.value < $1.value }
     }
 
     var body: some View {
@@ -124,9 +126,9 @@ private struct SizeMenu: View {
                 Picker("Size", selection: $selection) {
                     Text("Any size").tag(SizeThreshold?.none)
                     ForEach(rows, id: \.value) { row in
-                        Text(verbatim: "\(row.value.title) (\(row.count))")
+                        Text(verbatim: optionTitle(row.value.title, row))
                             .tag(Optional(row.value))
-                            .accessibilityLabel("\(row.value.title), \(videoCount(row.count))")
+                            .accessibilityLabel(optionTitle(row.value.title, row))
                     }
                 }
                 .pickerStyle(.inline)
@@ -144,6 +146,15 @@ private struct SizeMenu: View {
     }
 }
 
-private func videoCount(_ count: Int) -> String {
-    count == 1 ? "1 video" : "\(count) videos"
+/// "4K60 — 218 videos · 29.8 GB", or "4K60 — none" for a choice the collection no longer has.
+private func optionTitle<Value>(_ name: String, _ option: QualityFacets.Option<Value>) -> String {
+    guard option.count > 0 else { return "\(name) — none" }
+    return "\(name) — \(VideoCount.summary(count: option.count, bytes: option.bytes))"
+}
+
+/// "1 video · 1.2 GB" / "218 videos · 29.8 GB", shared by the filter menus, the window subtitle and the status line.
+enum VideoCount {
+    static func summary(count: Int, bytes: Int64) -> String {
+        "\(count == 1 ? "1 video" : "\(count) videos") · \(ByteFormat.string(bytes))"
+    }
 }

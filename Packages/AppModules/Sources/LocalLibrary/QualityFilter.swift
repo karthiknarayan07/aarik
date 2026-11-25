@@ -293,29 +293,29 @@ public struct QualityFilter: Sendable, Hashable {
     /// Faceted counts: each dimension counts the items that pass every other dimension, so an option's count is
     /// what the grid would show if that option were the only choice in its dimension.
     private struct FacetCounts {
-        var qualities: [QualityBucket: Int] = [:]
-        var sizes: [SizeThreshold: Int] = [:]
-        var lengths: [LengthRange: Int] = [:]
-        var codecs: [CodecFamily: Int] = [:]
-        var ranges: [DynamicRange: Int] = [:]
+        var qualities: [QualityBucket: Tally] = [:]
+        var sizes: [SizeThreshold: Tally] = [:]
+        var lengths: [LengthRange: Tally] = [:]
+        var codecs: [CodecFamily: Tally] = [:]
+        var ranges: [DynamicRange: Tally] = [:]
 
         mutating func add(_ traits: Traits, _ match: Match) {
             if match.size && match.length && match.codec && match.range {
-                qualities[traits.quality, default: 0] += 1
+                qualities[traits.quality, default: .zero].add(traits.byteSize)
             }
             if match.quality && match.length && match.codec && match.range {
                 for threshold in SizeThreshold.allCases where traits.byteSize > threshold.rawValue {
-                    sizes[threshold, default: 0] += 1
+                    sizes[threshold, default: .zero].add(traits.byteSize)
                 }
             }
             if match.quality && match.size && match.codec && match.range {
-                lengths[traits.length, default: 0] += 1
+                lengths[traits.length, default: .zero].add(traits.byteSize)
             }
             if match.quality && match.size && match.length && match.range {
-                codecs[traits.codec, default: 0] += 1
+                codecs[traits.codec, default: .zero].add(traits.byteSize)
             }
             if match.quality && match.size && match.length && match.codec {
-                ranges[traits.range, default: 0] += 1
+                ranges[traits.range, default: .zero].add(traits.byteSize)
             }
         }
 
@@ -325,22 +325,38 @@ public struct QualityFilter: Sendable, Hashable {
                 codecs: Self.options(codecs), ranges: Self.options(ranges))
         }
 
-        private static func options<Value: Comparable>(_ counts: [Value: Int]) -> [QualityFacets.Option<Value>] {
-            counts.map { QualityFacets.Option(value: $0.key, count: $0.value) }.sorted { $0.value < $1.value }
+        private static func options<Value: Comparable>(_ counts: [Value: Tally]) -> [QualityFacets.Option<Value>] {
+            counts.map { QualityFacets.Option(value: $0.key, count: $0.value.count, bytes: $0.value.bytes) }
+                .sorted { $0.value < $1.value }
+        }
+    }
+
+    private struct Tally {
+        var count = 0
+        var bytes: Int64 = 0
+
+        static let zero = Tally()
+
+        mutating func add(_ byteSize: Int64) {
+            count += 1
+            bytes += byteSize
         }
     }
 }
 
-/// The options present in a collection, in display order, with how many items each would show. Options with no
-/// items are absent.
+/// The options present in a collection, in display order, with how many items each would show and their total
+/// size. Options with no items are absent.
 public struct QualityFacets: Sendable, Equatable {
     public struct Option<Value: Hashable & Sendable>: Sendable, Hashable {
         public let value: Value
         public let count: Int
+        /// The items' total size in bytes.
+        public let bytes: Int64
 
-        public init(value: Value, count: Int) {
+        public init(value: Value, count: Int, bytes: Int64) {
             self.value = value
             self.count = count
+            self.bytes = bytes
         }
     }
 
