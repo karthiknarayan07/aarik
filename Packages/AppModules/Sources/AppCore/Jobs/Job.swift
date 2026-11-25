@@ -67,6 +67,8 @@ public enum JobState: Codable, Sendable, Equatable {
 public struct Job: Codable, Sendable, Identifiable, Equatable {
     public let id: UUID
     public var toolID: String
+    /// The file the job works on. A job of a tool whose videos aren't files has an address here instead (an
+    /// `x-photos-asset:` URL): check `isFileURL` before using it as a path.
     public var source: URL
     public var sourceBookmark: Data
     /// Tool-encoded settings; only the tool's runner interprets these bytes.

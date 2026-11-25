@@ -63,7 +63,7 @@ import Testing
 
         _ = try await log.run(rig.runner(), try rig.job())
 
-        #expect(log.phases.first == "Copying from Photos…")
+        #expect(log.phases.first == "Getting from Photos…")
     }
 
     @Test(.timeLimit(.minutes(2))) func anEditsRenderingMayBeAFewMillisecondsLonger() async throws {

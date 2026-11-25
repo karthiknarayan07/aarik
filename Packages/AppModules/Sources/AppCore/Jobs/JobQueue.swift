@@ -160,7 +160,7 @@ public actor JobQueue {
 
     /// Changes the outcome of a finished (completed) job and saves it: for what happens after the run, such as
     /// an original that was moved to Recently Deleted once the user confirmed. Other jobs are left alone.
-    public func updateOutcome(id: UUID, _ transform: (inout JobOutcome) -> Void) {
+    public func updateOutcome(id: UUID, transform: (inout JobOutcome) -> Void) {
         guard let index = items.firstIndex(where: { $0.id == id }),
             case .completed(var outcome) = items[index].state
         else { return }
@@ -296,17 +296,19 @@ public actor JobQueue {
         let task = Task {
             try await runner.run(
                 job,
+                // Yielded inside the lock, so the stream sees the snapshots in the order they were made.
                 progress: { value in
-                    progressSink.yield(
-                        latest.withLock {
-                            $0.progress = value; return $0
-                        })
+                    latest.withLock {
+                        $0.progress = value
+                        progressSink.yield($0)
+                    }
                 },
                 phase: { name in
-                    progressSink.yield(
-                        latest.withLock {
-                            $0.phase = name; $0.progress = 0; return $0
-                        })
+                    latest.withLock {
+                        $0.phase = name
+                        $0.progress = 0
+                        progressSink.yield($0)
+                    }
                 })
         }
         current = (id, task)

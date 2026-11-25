@@ -124,9 +124,10 @@ public struct DownscaleRunner: JobRunner {
     /// The part of a run that doesn't depend on where the video came from: plan, encode into the folder
     /// `outputFolder` gives, remove the output when it saves too little, and compare its metadata with the source's.
     /// Any way out that doesn't hand back the output has removed it. `source` is read in place, never changed.
+    /// `nameAfter` is the file the output is named after, when that isn't `source` (a Photos video's own name).
     func convert(
         source: URL, byteSize: Int64, inventory: MetadataInventory, settings: DownscaleJobSettings,
-        requireLossShown: Bool = false, outputFolder: () throws -> (url: URL, stop: () -> Void),
+        nameAfter: URL? = nil, requireLossShown: Bool = false, outputFolder: () throws -> (url: URL, stop: () -> Void),
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> ConversionResult {
         // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
@@ -158,7 +159,7 @@ public struct DownscaleRunner: JobRunner {
         // A video whose details couldn't be listed when it was added (a Photos video isn't read until it runs) may
         // only lose what the user was shown then.
         if requireLossShown, let unshown = Self.unshownLoss(predicted, inventory: inventory, settings: settings) {
-            return .keptAsIs("Converting would lose \(unshown). Add it again to review what is lost.")
+            return .keptAsIs("Converting would lose \(unshown), which wasn't known when it was added")
         }
 
         let folder = try outputFolder()
@@ -168,7 +169,7 @@ public struct DownscaleRunner: JobRunner {
         let output: URL
         do {
             output = try await encode(
-                source: source, spec: spec, label: label, directory: folder.url,
+                source: source, nameAfter: nameAfter ?? source, spec: spec, label: label, directory: folder.url,
                 pathExtension: container.pathExtension, progress: progress)
         } catch DownscaleError.sourceAlreadySmall {
             return .keptAsIs("Already small")
@@ -309,11 +310,11 @@ public struct DownscaleRunner: JobRunner {
     /// Names the output at write time, clears this job's stale partials, and encodes. A name taken between naming
     /// and commit moves on to the next name, up to `maxNamingAttempts`; nothing is overwritten.
     private func encode(
-        source: URL, spec: DownscaleSpec, label: String, directory: URL, pathExtension: String,
+        source: URL, nameAfter: URL, spec: DownscaleSpec, label: String, directory: URL, pathExtension: String,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         for _ in 0..<Self.maxNamingAttempts {
-            let output = OutputNamer.url(for: source, label: label, in: directory, pathExtension: pathExtension)
+            let output = OutputNamer.url(for: nameAfter, label: label, in: directory, pathExtension: pathExtension)
             Self.removeStalePartials(of: output)
             do {
                 try await VideoDownscaler().downscale(

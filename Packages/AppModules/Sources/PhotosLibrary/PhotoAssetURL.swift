@@ -13,7 +13,8 @@ public enum PhotoAssetURL {
 
     public static func url(for localIdentifier: String) -> URL {
         let encoded = localIdentifier.addingPercentEncoding(withAllowedCharacters: unreserved) ?? localIdentifier
-        return URL(string: "\(scheme):\(encoded)") ?? URL(filePath: "/")
+        // `encoded` holds only unreserved characters, so this cannot fail; never fall back to a file URL.
+        return URL(string: "\(scheme):\(encoded)")!
     }
 
     /// The local identifier an address stands for; nil for a file or any other address.

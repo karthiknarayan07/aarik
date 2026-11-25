@@ -8,10 +8,14 @@ import Synchronization
 public enum PhotosRunnerError: Error, LocalizedError, Equatable {
     /// The job's source isn't a Photos address.
     case notAPhotosJob
+    /// The Mac doesn't have room for the download and the converted copy.
+    case notEnoughSpace(needed: Int64)
 
     public var errorDescription: String? {
         switch self {
         case .notAPhotosJob: "This isn't a video in Photos"
+        case .notEnoughSpace(let needed):
+            "Not enough free space on this Mac to download this video (about \(needed / 1_000_000) MB needed)"
         }
     }
 }
@@ -59,7 +63,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     }
 
     static let downloadingPhase = "Downloading from iCloud…"
-    static let copyingPhase = "Copying from Photos…"
+    static let copyingPhase = "Getting from Photos…"
     static let renderingPhase = "Rendering the edited version…"
     static let convertingPhase = "Converting…"
     static let savingPhase = "Saving to Photos…"
@@ -98,18 +102,22 @@ public struct PhotosDownscaleRunner: JobRunner {
 
         let jobFolder = try workFolder.create(for: job.id)
         defer { workFolder.remove(jobID: job.id) }
+        try Self.checkFreeSpace(for: queued, in: jobFolder)
 
         // 1. The current version.
         let input = try await fetchInput(
             id: id, asset: queued, into: jobFolder, fetcher: fetcher, progress: progress, phase: phase)
         let inventory = try await MediaInspector().inventory(of: input.url)
-        // The video as Photos has it now, for the copy's date, location and the checks on the new video.
-        let current = try await fetcher.asset(id: id)
+        // The video as the fetch read it before downloading: what the copy is made from, so what the new video is
+        // checked against and what "unchanged" means. A re-read now could already include an edit made while the
+        // download ran.
+        let current = input.asset
 
         // 2. Plan, downscale and check, in the job's folder (or the chosen one).
         phase(Self.convertingPhase)
         let result = try await core.convert(
             source: input.url, byteSize: input.bytes, inventory: inventory, settings: settings,
+            nameAfter: URL(filePath: PhotoInputFetcher.fileName(for: current, isEdited: false)),
             requireLossShown: true,
             outputFolder: {
                 if case .folder(let bookmark) = destination {
@@ -194,7 +202,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         if replace {
             if !warnings.isEmpty {
                 warnings.append(Self.keptBecause("the copy couldn't be verified"))
-            } else if let problem = await prepareReplace(
+            } else if let problem = try await prepareReplace(
                 job, id: id, input: input, current: current, newID: newID, jobFolder: jobFolder, fetcher: fetcher,
                 phase: phase)
             {
@@ -216,23 +224,32 @@ public struct PhotosDownscaleRunner: JobRunner {
     private func prepareReplace(
         _ job: Job, id: String, input: FetchedInput, current: PhotoAsset, newID: String, jobFolder: URL,
         fetcher: PhotoInputFetcher, phase: @escaping @Sendable (String?) -> Void
-    ) async -> String? {
+    ) async throws -> String? {
         guard await originalIsUnchanged(id: id, since: current, fetcher: fetcher) else {
             return Self.originalChanged
         }
+        // A cancel from here on ends the job as cancelled: the original is not recorded, and nothing is left behind
+        // (the new video was already saved and checked, so it stays).
+        try Task.checkCancellation()
         if let backup = originalsBackup() {
             do {
                 try await backUp(
                     input: input, id: id, into: backup.folder, jobFolder: jobFolder, fetcher: fetcher, phase: phase)
             } catch let error as OriginalsBackupError {
                 return Self.keptBecause(error.keptBecause)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch PhotoFetchError.cancelled {
+                throw CancellationError()
             } catch {
                 return Self.keptBecause("its original couldn't be downloaded for the backup")
             }
+            try Task.checkCancellation()
             guard await originalIsUnchanged(id: id, since: current, fetcher: fetcher) else {
                 return Self.originalChanged
             }
         }
+        try Task.checkCancellation()
         pendingDeletions.add(assetID: id, jobID: job.id, replacedBy: newID)
         return nil
     }
@@ -255,6 +272,17 @@ public struct PhotosDownscaleRunner: JobRunner {
             original = try await fetcher.fetchOriginal(id: id, into: jobFolder)
         }
         _ = try core.backUp(original.url, byteSize: original.bytes, into: folder)
+    }
+
+    /// Needs room for the download and a bit more for the converted copy; a full disk would otherwise surface as a
+    /// generic fetch failure after a long download.
+    private static func checkFreeSpace(for asset: PhotoAsset, in folder: URL) throws {
+        guard let size = asset.originalByteSize, size > 0,
+            let free = try? folder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                .volumeAvailableCapacityForImportantUsage
+        else { return }
+        let needed = size + size / 4
+        if free < needed { throw PhotosRunnerError.notEnoughSpace(needed: needed) }
     }
 
     private static func keptBecause(_ reason: String) -> String {
