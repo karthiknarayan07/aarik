@@ -1,0 +1,6 @@
+// The only place the product's brand lives. To rename the app, edit these values (plus assets and docs).
+// Every other build setting and all code refer to these variables, never to the literal name.
+
+APP_DISPLAY_NAME = aarik
+APP_PRODUCT_NAME = aarik
+APP_BUNDLE_ID_PREFIX = io.github.karthiknarayan07

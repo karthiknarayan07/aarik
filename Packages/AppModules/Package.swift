@@ -7,6 +7,9 @@ let package = Package(
     products: [
         .library(name: "AppCore", targets: ["AppCore"]),
         .library(name: "MediaEngine", targets: ["MediaEngine"]),
+        .library(name: "AppUI", targets: ["AppUI"]),
+        .library(name: "LocalLibrary", targets: ["LocalLibrary"]),
+        .library(name: "DownscaleVideo", targets: ["DownscaleVideo"]),
         .executable(name: "devtool", targets: ["devtool"]),
     ],
     targets: [
@@ -17,6 +20,21 @@ let package = Package(
         .target(
             name: "MediaEngine",
             dependencies: ["AppCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "AppUI",
+            dependencies: ["AppCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "LocalLibrary",
+            dependencies: ["MediaEngine", "AppCore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "DownscaleVideo",
+            dependencies: ["AppUI", "MediaEngine", "AppCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -37,6 +55,21 @@ let package = Package(
         .testTarget(
             name: "MediaEngineTests",
             dependencies: ["MediaEngine", "MediaTestSupport"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "AppUITests",
+            dependencies: ["AppUI"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "LocalLibraryTests",
+            dependencies: ["LocalLibrary"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "DownscaleVideoTests",
+            dependencies: ["DownscaleVideo"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
