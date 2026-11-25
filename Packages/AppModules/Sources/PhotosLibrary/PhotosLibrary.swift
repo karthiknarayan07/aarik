@@ -45,6 +45,10 @@ public final class PhotosLibrary: MediaCollection {
     @ObservationIgnored private var observer: Task<Void, Never>?
     @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private var fetchAgain = false
+    /// Which fetch task is the live one, so a cancelled old task finishing late leaves a newer one alone.
+    @ObservationIgnored private var fetchGeneration = 0
+    /// The access level the last started fetch ran under; a different one needs a new fetch.
+    @ObservationIgnored private var fetchedAuthorization: PhotoAuthorization?
 
     public init(store: any PhotoStore, loadIndex: IndexLoader? = nil) {
         self.store = store
@@ -63,10 +67,12 @@ public final class PhotosLibrary: MediaCollection {
             stop()
             items = []
             hasLoaded = false
+            fetchedAuthorization = nil
             return
         }
         follow()
-        if !hasLoaded { await fetchAndWait() }
+        // Limited to full access (or back) changes which videos exist, and no library change says so.
+        if !hasLoaded || fetchedAuthorization != authorization { await fetchAndWait() }
     }
 
     /// Asks for access (the system prompt shows the first time), then loads when it was given.
@@ -115,13 +121,15 @@ public final class PhotosLibrary: MediaCollection {
             fetchAgain = true
             return
         }
+        fetchGeneration &+= 1
+        let generation = fetchGeneration
         fetchTask = Task { [weak self] in
             guard let self else { return }
             repeat {
                 fetchAgain = false
-                await fetchOnce()
+                await fetchOnce(generation: generation)
             } while fetchAgain && !Task.isCancelled
-            fetchTask = nil
+            if fetchGeneration == generation { fetchTask = nil }
         }
     }
 
@@ -130,9 +138,10 @@ public final class PhotosLibrary: MediaCollection {
         await waitUntilIdle()
     }
 
-    private func fetchOnce() async {
+    private func fetchOnce(generation: Int) async {
         isScanning = !hasLoaded
-        defer { isScanning = false }
+        defer { if fetchGeneration == generation { isScanning = false } }
+        fetchedAuthorization = authorization
         do {
             let videos = try await store.videos()
             guard !Task.isCancelled else { return }
@@ -145,6 +154,7 @@ public final class PhotosLibrary: MediaCollection {
             hasLoaded = true
             loadError = nil
         } catch {
+            guard !Task.isCancelled else { return }
             loadError = (error as? PhotoStoreError)?.errorDescription ?? "Couldn't read your Photos library."
         }
     }

@@ -237,6 +237,56 @@ private actor Gate {
         #expect(photos.indexStatus == .loaded(count: 1))
         #expect(photos.items.first?.frameRate == 24)
     }
+
+    @Test func aCancelledOldFetchDoesNotClearANewerOne() async throws {
+        let store = FakePhotoStore(assets: [asset(1)])
+        let first = Gate()
+        let second = Gate()
+        let calls = Locked(0)
+        store.beforeVideos = {
+            calls.value += 1
+            await (calls.value == 1 ? first : second).wait()
+        }
+        let photos = library(store)
+        let firstStart = Task { await photos.start() }
+        while store.videosCallCount < 1 { await Task.yield() }
+        photos.stop()
+        let secondStart = Task { await photos.start() }
+        while store.videosCallCount < 2 { await Task.yield() }
+        // The old fetch ends while the new one is still running.
+        await first.open()
+        try await Task.sleep(for: .milliseconds(50))
+        // A change now must wait for the live fetch instead of starting a second one beside it.
+        store.emitChange()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(store.videosCallCount == 2)
+        await second.open()
+        await secondStart.value
+        await firstStart.value
+        await photos.waitUntilIdle()
+        #expect(photos.hasLoaded)
+        #expect(!photos.isScanning)
+    }
+
+    @Test func goingFromLimitedToFullAccessRefetches() async {
+        let store = FakePhotoStore(assets: [asset(1)], authorization: .limited)
+        let photos = library(store)
+        await photos.start()
+        #expect(photos.items.count == 1)
+        store.assets = [asset(1), asset(2)]
+        store.currentAuthorization = .authorized
+        await photos.start()
+        #expect(photos.authorization == .authorized)
+        #expect(photos.items.count == 2)
+    }
+
+    @Test func startingAgainWithTheSameAccessDoesNotRefetch() async {
+        let store = FakePhotoStore(assets: [asset(1)])
+        let photos = library(store)
+        await photos.start()
+        await photos.start()
+        #expect(store.videosCallCount == 1)
+    }
 }
 
 import Synchronization
