@@ -22,11 +22,24 @@ public actor JobQueue {
     public private(set) var loadError: String?
     /// False when the saved queue couldn't be read or set aside: saving would overwrite it.
     private let savesChanges: Bool
+    /// Progress alone is published at most once per interval; state changes go out at once (each also carries
+    /// the latest progress).
+    private let progressInterval: Duration
+    private var lastPublished: ContinuousClock.Instant?
+    /// Publishes progress held back by `progressInterval` once the interval is up; a state change publishes it
+    /// sooner and cancels this.
+    private var heldProgress: Task<Void, Never>?
 
     public init(store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false) {
+        self.init(store: store, runners: runners, startPaused: startPaused, progressInterval: .milliseconds(100))
+    }
+
+    /// `progressInterval`: the shortest time between two updates for progress alone (a test seam).
+    init(store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false, progressInterval: Duration) {
         self.store = store
         self.runners = runners
         self.paused = startPaused
+        self.progressInterval = progressInterval
         let result = store.loadReportingProblems()
         savesChanges = !result.mustNotSave
         if let aside = result.setAside {
@@ -166,6 +179,8 @@ public actor JobQueue {
         let worker = self.worker
         worker?.cancel()
         await worker?.value
+        heldProgress?.cancel()
+        heldProgress = nil
         for continuation in subscribers.values { continuation.finish() }
         subscribers.removeAll()
     }
@@ -176,9 +191,40 @@ public actor JobQueue {
         subscribers[key] = nil
     }
 
+    /// A state change: saved, and published at once.
     private func changed() {
         if savesChanges { try? store.save(items) }
+        publish()
+    }
+
+    /// Sends the jobs to every subscriber; any held-back progress goes with them.
+    private func publish() {
+        heldProgress?.cancel()
+        heldProgress = nil
+        lastPublished = .now
         for continuation in subscribers.values { continuation.yield(items) }
+    }
+
+    /// Progress alone: published at most once per `progressInterval`, the latest value last.
+    private func publishProgress() {
+        guard let lastPublished else { return publish() }
+        let wait = progressInterval - lastPublished.duration(to: .now)
+        guard wait > .zero else { return publish() }
+        guard heldProgress == nil else { return }
+        heldProgress = Task { [weak self] in
+            do {
+                try await Task.sleep(for: wait)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self?.publishHeldProgress()
+        }
+    }
+
+    private func publishHeldProgress() {
+        guard heldProgress != nil, !stopped else { return }
+        publish()
     }
 
     private func startWorkerIfNeeded() {
@@ -221,17 +267,23 @@ public actor JobQueue {
             return .finished(.failed(reason: "No tool can run this job"))
         }
         let id = job.id
-        // Its own task, so `cancel` can stop this job alone; cancelling the worker (shutdown) cancels it too.
-        let progress: @Sendable (Double) -> Void = { [weak self] value in
-            Task { await self?.updateProgress(value, for: id) }
+        // Progress arrives in order through a stream that keeps only the newest value, so a fast runner never
+        // piles up work here; what reaches subscribers is throttled further (`publishProgress`).
+        let (progressValues, progressSink) = AsyncStream.makeStream(
+            of: Double.self, bufferingPolicy: .bufferingNewest(1))
+        let progressReader = Task {
+            for await value in progressValues { updateProgress(value, for: id) }
         }
-        let task = Task { try await runner.run(job, progress: progress) }
+        // Its own task, so `cancel` can stop this job alone; cancelling the worker (shutdown) cancels it too.
+        let task = Task { try await runner.run(job, progress: { progressSink.yield($0) }) }
         current = (id, task)
         let result = await withTaskCancellationHandler {
             await task.result
         } onCancel: {
             task.cancel()
         }
+        progressSink.finish()
+        await progressReader.value
         current = nil
         let cancelled = cancelledByUser.remove(id) != nil
         switch result {
@@ -261,7 +313,7 @@ public actor JobQueue {
             case .running = items[index].state
         else { return }
         items[index].state = .running(progress: min(max(value, 0), 1))
-        for continuation in subscribers.values { continuation.yield(items) }
+        publishProgress()
     }
 }
 
