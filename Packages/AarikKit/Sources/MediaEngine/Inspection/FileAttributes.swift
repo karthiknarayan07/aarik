@@ -4,10 +4,14 @@ import Foundation
 
 /// Finder tags, extended attributes and dates: read as `fs.*` items, and copied between files.
 enum FileAttributes {
-    /// System-managed attributes, never read or copied.
+    /// System-managed or SIP-protected attributes, never read or copied.
     static let excludedAttributes: Set<String> = [
         "com.apple.quarantine", "com.apple.provenance", "com.apple.lastuseddate#PS",
+        "com.apple.macl", "com.apple.rootless",
     ]
+
+    /// `setxattr` failures that skip one attribute instead of failing the copy.
+    private static let skippableErrors: Set<Int32> = [EPERM, EACCES, ENOTSUP]
 
     static func read(_ url: URL) throws -> [MetadataItem] {
         var items: [MetadataItem] = []
@@ -34,13 +38,19 @@ enum FileAttributes {
     }
 
     /// Copies tags, every non-excluded extended attribute, and the creation and modification dates.
+    /// Best-effort per attribute: one the destination refuses (EPERM, EACCES, ENOTSUP) is skipped, so it shows up
+    /// as lost when source and output inventories are diffed. Other errors, and tag or date failures, throw.
     static func copy(from source: URL, to destination: URL) throws {
         for name in try attributeNames(source) {
             let data = try attribute(name, of: source)
             let result = data.withUnsafeBytes {
                 setxattr(destination.path, name, $0.baseAddress, data.count, 0, XATTR_NOFOLLOW)
             }
-            if result != 0 { throw posixError() }
+            if result != 0 {
+                let code = errno
+                if skippableErrors.contains(code) { continue }
+                throw posixError(code)
+            }
         }
 
         // Tags normally travel in their xattr above; set them only if that did not carry them.
@@ -94,7 +104,7 @@ enum FileAttributes {
         return fresh
     }
 
-    private static func posixError() -> POSIXError {
-        POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+    private static func posixError(_ code: Int32 = errno) -> POSIXError {
+        POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
     }
 }

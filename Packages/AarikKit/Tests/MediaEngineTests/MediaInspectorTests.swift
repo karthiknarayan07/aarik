@@ -91,4 +91,33 @@ import Testing
         #expect(destinationItems.first { $0.key == "fs.xattr.com.aarik.copy" }?.value == sourceXattr.value)
         #expect(destinationItems.first { $0.key == "fs.tags" }?.value == "Green")
     }
+
+    @Test func fileAttributesCopySkipsExcludedSystemAttributes() async throws {
+        // A real `com.apple.macl` can be written by an unsandboxed test process; `com.apple.rootless` cannot.
+        let source = try await FixtureFactory.makeClip(
+            smallClip {
+                $0.finderTags = ["Green"]
+                $0.extendedAttributes = ["com.apple.macl": Data("acl".utf8), "com.aarik.keep": Data("k".utf8)]
+            })
+        #expect(getxattr(source.path, "com.apple.macl", nil, 0, 0, 0) == 3)
+        for name in ["com.apple.macl", "com.apple.rootless"] {
+            #expect(FileAttributes.excludedAttributes.contains(name))
+        }
+
+        let sourceItems = try FileAttributes.read(source)
+        #expect(!sourceItems.contains { $0.key == "fs.xattr.com.apple.macl" })
+        #expect(sourceItems.contains { $0.key == "fs.xattr.com.aarik.keep" })
+
+        let created = Date(timeIntervalSince1970: 1_600_000_000)
+        try FileManager.default.setAttributes([.creationDate: created], ofItemAtPath: source.path)
+        let destination = source.deletingLastPathComponent().appending(path: "copy.mov")
+        try Data("dest".utf8).write(to: destination)
+        try FileAttributes.copy(from: source, to: destination)
+
+        #expect(getxattr(destination.path, "com.apple.macl", nil, 0, 0, 0) == -1)
+        let values = try destination.resourceValues(forKeys: [.tagNamesKey, .creationDateKey])
+        #expect(values.tagNames == ["Green"])
+        #expect(values.creationDate == created)
+        #expect(try FileAttributes.read(destination).contains { $0.key == "fs.xattr.com.aarik.keep" })
+    }
 }
