@@ -35,7 +35,16 @@ public struct WorkFolder: Sendable {
     public func create(for jobID: UUID) throws -> URL {
         let folder = url(for: jobID)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        excludeFromBackup()
         return folder
+    }
+
+    /// Inputs can be many gigabytes and are disposable, so Time Machine skips the work folder.
+    private func excludeFromBackup() {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var folder = root
+        try? folder.setResourceValues(values)
     }
 
     /// Removes one job's folder and everything in it. Safe to call when it doesn't exist or twice.

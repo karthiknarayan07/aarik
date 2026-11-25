@@ -175,5 +175,9 @@ private actor Latch {
         #expect(name("", edited: false) == "video.mov")
         #expect(name("", edited: true) == "video-edited.mov")
         #expect(name("../../evil.MOV", edited: false) == "evil.MOV")
+        for odd in [".", "..", "/", "a/..", "../.."] {
+            #expect(name(odd, edited: false) == "video.mov", "\(odd)")
+            #expect(name(odd, edited: true) == "video-edited.mov", "\(odd)")
+        }
     }
 }

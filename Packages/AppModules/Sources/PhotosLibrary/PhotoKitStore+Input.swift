@@ -45,8 +45,9 @@ extension PhotoKitStore {
         let options = PHAssetResourceRequestOptions()
         options.isNetworkAccessAllowed = true
         options.progressHandler = { fraction in progress(.downloading(min(max(fraction, 0), 1))) }
-        let transfer = ResourceTransfer(file: try FileHandle(forWritingTo: url))
         let manager = PHAssetResourceManager.default()
+        let transfer = ResourceTransfer(
+            file: try FileHandle(forWritingTo: url), cancelRequest: { manager.cancelDataRequest($0) })
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 guard transfer.start(continuation) else { return }
@@ -54,11 +55,13 @@ extension PhotoKitStore {
                     for: resource, options: options,
                     dataReceivedHandler: { data in transfer.receive(data) },
                     completionHandler: { error in transfer.finish(error.map(Self.mapTransferError)) })
-                transfer.setID(requestID)
+                if transfer.setID(requestID) { manager.cancelDataRequest(requestID) }
             }
         } onCancel: {
             if let requestID = transfer.cancel() { manager.cancelDataRequest(requestID) }
         }
+        // A video already on this Mac reports no progress, so end the phase explicitly.
+        progress(.downloading(1))
     }
 
     // MARK: - Edited version
@@ -84,7 +87,7 @@ extension PhotoKitStore {
                     nonisolated(unsafe) let session = session
                     request.deliver(session.map(SessionBox.init), failure: Self.exportFailure(info))
                 }
-                request.setID(requestID)
+                if request.setID(requestID) { manager.cancelImageRequest(requestID) }
             }
         } onCancel: {
             if let requestID = request.cancel() { manager.cancelImageRequest(requestID) }
@@ -145,13 +148,13 @@ extension PhotoKitStore {
 }
 
 /// An export session handed across tasks. PhotoKit gives it to one request and only that request's export uses it.
-private struct SessionBox: @unchecked Sendable {
+struct SessionBox: @unchecked Sendable {
     let session: AVAssetExportSession
 }
 
 /// One `requestExportSession` call: resumes its continuation exactly once, with the session or the reason there
 /// was none, and ends it when the task is cancelled first.
-private final class ExportSessionRequest: Sendable {
+final class ExportSessionRequest: Sendable {
     private struct State {
         var continuation: CheckedContinuation<SessionBox, any Error>?
         var requestID: PHImageRequestID?
@@ -170,8 +173,13 @@ private final class ExportSessionRequest: Sendable {
         return !cancelled
     }
 
-    func setID(_ id: PHImageRequestID) {
-        state.withLock { $0.requestID = id }
+    /// Stores the PhotoKit request id. True when the request already ended (cancelled between `start` and now):
+    /// the caller must cancel it at once, or PhotoKit keeps working.
+    func setID(_ id: PHImageRequestID) -> Bool {
+        state.withLock { state in
+            state.requestID = id
+            return state.isDone
+        }
     }
 
     func deliver(_ box: SessionBox?, failure: @autoclosure () -> any Error) {
@@ -200,68 +208,90 @@ private final class ExportSessionRequest: Sendable {
 }
 
 /// One `requestData` transfer into a file: bytes are appended as they arrive, and the continuation is resumed
-/// exactly once, when it completes, fails to write, or is cancelled.
-private final class ResourceTransfer: Sendable {
+/// exactly once, when it completes, fails to write (the request is then cancelled), or is cancelled.
+///
+/// The file is written and closed under one lock, so a close never lands in the middle of a write.
+final class ResourceTransfer: Sendable {
     private struct State {
         var continuation: CheckedContinuation<Void, any Error>?
         var requestID: PHAssetResourceDataRequestID?
         var isDone = false
-        var writeFailure: (any Error)?
+        var isClosed = false
     }
 
     private let state = Mutex(State())
     private let file: FileHandle
+    private let cancelRequest: @Sendable (PHAssetResourceDataRequestID) -> Void
 
-    init(file: FileHandle) {
+    init(file: FileHandle, cancelRequest: @escaping @Sendable (PHAssetResourceDataRequestID) -> Void) {
         self.file = file
+        self.cancelRequest = cancelRequest
     }
 
+    /// False when the task was cancelled first; the continuation is then resumed with a cancellation.
     func start(_ continuation: CheckedContinuation<Void, any Error>) -> Bool {
         let cancelled = state.withLock { state in
             if !state.isDone { state.continuation = continuation }
             return state.isDone
         }
         if cancelled {
-            try? file.close()
+            closeFile()
             continuation.resume(throwing: CancellationError())
         }
         return !cancelled
     }
 
-    func setID(_ id: PHAssetResourceDataRequestID) {
-        state.withLock { $0.requestID = id }
+    /// Stores the PhotoKit request id. True when the transfer already ended (cancelled or failed between `start`
+    /// and now): the caller must cancel the request at once, or PhotoKit keeps downloading.
+    func setID(_ id: PHAssetResourceDataRequestID) -> Bool {
+        state.withLock { state in
+            state.requestID = id
+            return state.isDone
+        }
     }
 
     /// Called on PhotoKit's serial queue, in order.
     func receive(_ data: Data) {
-        let alreadyFailed = state.withLock { $0.writeFailure != nil || $0.isDone }
-        guard !alreadyFailed else { return }
-        do {
-            try file.write(contentsOf: data)
-        } catch {
-            state.withLock { $0.writeFailure = error }
+        let failure: (any Error)? = state.withLock { state in
+            guard !state.isDone, !state.isClosed else { return nil }
+            do {
+                try file.write(contentsOf: data)
+                return nil
+            } catch {
+                return error
+            }
         }
+        if let failure { fail(failure) }
     }
 
-    func finish(_ error: (any Error)?) {
-        let (continuation, failure): (CheckedContinuation<Void, any Error>?, (any Error)?) = state.withLock { state in
+    /// A write failed (the disk is full, say): stop the download and report it.
+    private func fail(_ error: any Error) {
+        let (continuation, id): (CheckedContinuation<Void, any Error>?, PHAssetResourceDataRequestID?) = state.withLock
+        {
+            state in
             guard !state.isDone else { return (nil, nil) }
             state.isDone = true
             defer { state.continuation = nil }
-            return (state.continuation, error ?? state.writeFailure)
+            return (state.continuation, state.requestID)
         }
-        try? file.close()
-        guard let continuation else { return }
-        if let failure {
-            let mapped =
-                (failure as NSError).domain == NSCocoaErrorDomain
-                ? PhotoStoreError.unavailable(failure.localizedDescription) : failure
-            continuation.resume(throwing: mapped)
-        } else {
-            continuation.resume()
-        }
+        closeFile()
+        continuation?.resume(throwing: PhotoStoreError.unavailable(error.localizedDescription))
+        if let id { cancelRequest(id) }
     }
 
+    func finish(_ error: (any Error)?) {
+        let continuation: CheckedContinuation<Void, any Error>? = state.withLock { state in
+            guard !state.isDone else { return nil }
+            state.isDone = true
+            defer { state.continuation = nil }
+            return state.continuation
+        }
+        closeFile()
+        guard let continuation else { return }
+        if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+    }
+
+    /// Ends the transfer, returning the PhotoKit id to cancel, if there is one yet.
     func cancel() -> PHAssetResourceDataRequestID? {
         let (continuation, id): (CheckedContinuation<Void, any Error>?, PHAssetResourceDataRequestID?) = state.withLock
         {
@@ -271,13 +301,16 @@ private final class ResourceTransfer: Sendable {
             state.continuation = nil
             return (continuation, state.requestID)
         }
-        try? file.close()
+        closeFile()
         continuation?.resume(throwing: CancellationError())
         return id
     }
 
-    /// Closes the file after a successful transfer (already closed by `finish`).
-    func close() throws {
-        try? file.close()
+    private func closeFile() {
+        state.withLock { state in
+            guard !state.isClosed else { return }
+            state.isClosed = true
+            try? file.close()
+        }
     }
 }

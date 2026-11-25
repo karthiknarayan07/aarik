@@ -11,10 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var volumeObservers: [any NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Photos input left behind by a crash or quit; no job can be using it yet.
+        // Photos input left behind by a crash or quit is cleared before the queue starts, so a job can't create
+        // its folder while the sweep runs.
         let workFolder = WorkFolder.standard()
-        Task.detached(priority: .utility) { workFolder.sweep() }
-        Task { await model.start() }
+        Task {
+            await Task.detached(priority: .utility) { workFolder.sweep() }.value
+            await model.start()
+        }
         #if DEBUG
             if PhotosSpike.isRequested { PhotosSpike.start() }
         #endif

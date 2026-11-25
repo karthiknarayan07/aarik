@@ -66,7 +66,9 @@ public struct PhotoInputFetcher: Sendable {
         let isEdited = asset.hasAdjustments
         let url = workFolder.appending(
             path: Self.fileName(for: asset, isEdited: isEdited), directoryHint: .notDirectory)
-        try? FileManager.default.removeItem(at: url)
+        // Every delete goes through the containment check: only a file inside the job folder is removed.
+        let jobFolder = WorkFolder(root: workFolder)
+        jobFolder.remove(url)
         do {
             if isEdited {
                 try await store.exportCurrentVersion(id: id, to: url, progress: progress)
@@ -78,7 +80,7 @@ public struct PhotoInputFetcher: Sendable {
             guard bytes > 0 else { throw PhotoFetchError.failed("Photos wrote an empty file.") }
             return FetchedInput(url: url, isEditedVersion: isEdited, bytes: bytes)
         } catch {
-            try? FileManager.default.removeItem(at: url)
+            jobFolder.remove(url)
             throw Self.map(error)
         }
     }
@@ -86,10 +88,11 @@ public struct PhotoInputFetcher: Sendable {
     /// The original's own name (its last path component only), or the same stem with `-edited.mov` for the
     /// export, so a second fetch of the original into the same folder keeps its own file.
     static func fileName(for asset: PhotoAsset, isEdited: Bool) -> String {
-        let original = URL(filePath: asset.originalFileName.isEmpty ? "video.mov" : asset.originalFileName)
-        let name = original.lastPathComponent
+        var name = asset.originalFileName.split(separator: "/").last.map(String.init) ?? ""
+        // A name that is empty or points at the folder itself or its parent is never used as a file name.
+        if ["", ".", "..", "/"].contains(name) { name = "video.mov" }
         guard isEdited else { return name }
-        return original.deletingPathExtension().lastPathComponent + "-edited.mov"
+        return (name as NSString).deletingPathExtension + "-edited.mov"
     }
 
     static func map(_ error: any Error) -> PhotoFetchError {

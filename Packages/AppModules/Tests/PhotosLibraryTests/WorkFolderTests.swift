@@ -24,6 +24,13 @@ import Testing
         #expect(folder.deletingLastPathComponent().lastPathComponent == "Work")
     }
 
+    @Test func theWorkFolderIsExcludedFromBackup() throws {
+        let (parent, work, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        try work.create(for: UUID())
+        #expect(try work.root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
     @Test func removesOneJobAndLeavesOthers() throws {
         let (parent, work, _) = try fixture()
         defer { try? FileManager.default.removeItem(at: parent) }
