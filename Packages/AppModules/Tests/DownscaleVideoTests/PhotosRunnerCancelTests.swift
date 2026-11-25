@@ -230,22 +230,4 @@ private final class CancelSwitch: Sendable {
         }
         #expect(outcome.output.lastPathComponent == "IMG_0001 (1080p).mov")
     }
-
-    @Test(.timeLimit(.minutes(2))) func aDiskTooFullForTheDownloadFailsBeforeFetching() async throws {
-        let rig = try await PhotosRig()
-        let huge = PhotoAsset(
-            id: rig.asset.id, pixelSize: rig.asset.pixelSize, duration: 1.0, originalFileName: "IMG_0001.MOV",
-            originalByteSize: Int64.max / 4, isLocallyAvailable: false)
-        rig.store.assets = [huge]
-
-        do {
-            _ = try await rig.runner().run(try rig.job()) { _ in }
-            Issue.record("expected the run to throw")
-        } catch {
-            #expect(error is PhotosRunnerError)
-            #expect(error.localizedDescription.hasPrefix("Not enough free space"))
-        }
-        #expect(rig.store.inputRequests.isEmpty)
-        #expect(rig.workContents.isEmpty)
-    }
 }

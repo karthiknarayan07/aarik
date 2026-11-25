@@ -72,6 +72,15 @@ struct SourceProfile {
     var audioTrackCount = 0
     var byteSize: Int64
 
+    /// What is known without reading the file: a Photos asset's size, length and file size (30 fps, one audio track).
+    init(width: Int, height: Int, durationSeconds: Double, byteSize: Int64) {
+        self.width = width
+        self.height = height
+        self.durationSeconds = durationSeconds
+        self.byteSize = byteSize
+        audioTrackCount = 1
+    }
+
     init(inventory: MetadataInventory, byteSize: Int64) {
         self.byteSize = byteSize
         let parts = inventory["video.dimensions"]?.value.split(separator: "x").compactMap { Int($0) } ?? []

@@ -8,14 +8,10 @@ import Synchronization
 public enum PhotosRunnerError: Error, LocalizedError, Equatable {
     /// The job's source isn't a Photos address.
     case notAPhotosJob
-    /// The Mac doesn't have room for the download and the converted copy.
-    case notEnoughSpace(needed: Int64)
 
     public var errorDescription: String? {
         switch self {
         case .notAPhotosJob: "This isn't a video in Photos"
-        case .notEnoughSpace(let needed):
-            "Not enough free space on this Mac to download this video (about \(needed / 1_000_000) MB needed)"
         }
     }
 }
@@ -100,9 +96,10 @@ public struct PhotosDownscaleRunner: JobRunner {
         let queued = try await fetcher.asset(id: id)
         if queued.subtypes.contains(.spatial) { return .keptAsIs(reason: DownscalePlanner.spatialReason) }
 
+        // Nothing is written, not even the job's folder, unless every volume involved has room.
+        try checkFreeSpaceBeforeDownload(queued, settings: settings, destination: destination, jobID: job.id)
         let jobFolder = try workFolder.create(for: job.id)
         defer { workFolder.remove(jobID: job.id) }
-        try Self.checkFreeSpace(for: queued, in: jobFolder)
 
         // 1. The current version.
         let input = try await fetchInput(
@@ -157,19 +154,21 @@ public struct PhotosDownscaleRunner: JobRunner {
         let first = asset.isLocallyAvailable == true ? Self.copyingPhase : Self.downloadingPhase
         let last = Mutex<String?>(first)
         phase(first)
-        return try await fetcher.fetch(id: id, into: folder) { event in
-            let label =
-                switch event {
-                case .downloading: first
-                case .exporting: Self.renderingPhase
+        return try await Signposts.interval(.download) {
+            try await fetcher.fetch(id: id, into: folder) { event in
+                let label =
+                    switch event {
+                    case .downloading: first
+                    case .exporting: Self.renderingPhase
+                    }
+                if last.withLock({ current in
+                    defer { current = label }
+                    return current != label
+                }) {
+                    phase(label)
                 }
-            if last.withLock({ current in
-                defer { current = label }
-                return current != label
-            }) {
-                phase(label)
+                progress(event.fraction)
             }
-            progress(event.fraction)
         }
     }
 
@@ -193,9 +192,11 @@ public struct PhotosDownscaleRunner: JobRunner {
             warnings.append("The new video couldn't be added to the original's albums")
         }
         // Throws when Photos refuses, or when the new video doesn't check out (it is then removed again).
-        let newID = try await PhotoSaver(store: store).save(
-            file: converted.output, like: current, albums: albums,
-            expectedPixelSize: Self.displaySize(of: converted.outputInventory))
+        let newID = try await Signposts.interval(.save) {
+            try await PhotoSaver(store: store).save(
+                file: converted.output, like: current, albums: albums,
+                expectedPixelSize: Self.displaySize(of: converted.outputInventory))
+        }
         progress(1)
         notes.append(Self.savedNote)
 
@@ -267,6 +268,10 @@ public struct PhotosDownscaleRunner: JobRunner {
         phase: @escaping @Sendable (String?) -> Void
     ) async throws {
         var original = input
+        // The copy goes to the backup volume, and an edited video's original is fetched into the job's folder first.
+        var needs = [SpaceNeed(url: folder, bytes: input.bytes)]
+        if input.isEditedVersion { needs.append(SpaceNeed(url: jobFolder, bytes: input.bytes)) }
+        do { try core.diskSpace.verify(needs) } catch { throw OriginalsBackupError.notEnoughSpace }
         if input.isEditedVersion {
             phase(Self.backupPhase)
             original = try await fetcher.fetchOriginal(id: id, into: jobFolder)
@@ -274,15 +279,40 @@ public struct PhotosDownscaleRunner: JobRunner {
         _ = try core.backUp(original.url, byteSize: original.bytes, into: folder)
     }
 
-    /// Needs room for the download and a bit more for the converted copy; a full disk would otherwise surface as a
-    /// generic fetch failure after a long download.
-    private static func checkFreeSpace(for asset: PhotoAsset, in folder: URL) throws {
-        guard let size = asset.originalByteSize, size > 0,
-            let free = try? folder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-                .volumeAvailableCapacityForImportantUsage
-        else { return }
-        let needed = size + size / 4
-        if free < needed { throw PhotosRunnerError.notEnoughSpace(needed: needed) }
+    // MARK: - Free space
+
+    /// Before a download (and before the job's folder exists): the Work volume must hold the video as Photos has it,
+    /// plus the converted copy when that is written there; a chosen output folder, the converted copy; an originals
+    /// backup, the original (and, for an edited video, the original's own download in the Work volume too). Each
+    /// volume also keeps `DiskSpaceCheck.margin` free. The converted copy's size is the planner's estimate for what
+    /// Photos reports about the video; the exact estimate is checked again once the video is read
+    /// (`DownscaleRunner.convert`). Skipped when Photos doesn't say how big the video is.
+    private func checkFreeSpaceBeforeDownload(
+        _ asset: PhotoAsset, settings: DownscaleJobSettings, destination: PhotosDestination, jobID: UUID
+    ) throws {
+        guard let size = asset.originalByteSize, size > 0 else { return }
+        let profile = SourceProfile(
+            width: Int(asset.pixelSize.width), height: Int(asset.pixelSize.height), durationSeconds: asset.duration,
+            byteSize: size)
+        let spec = settings.custom ?? settings.preset.spec(for: profile)
+        let output = min(Estimator.estimatedBytes(source: profile, spec: spec), size)
+        let work = workFolder.url(for: jobID)
+
+        var needs = [SpaceNeed(url: work, bytes: size)]
+        if case .folder(let bookmark) = destination {
+            // An unusable folder is reported when the output is about to be written.
+            if let folder = try? DownscaleRunner.outputFolder(for: .folder(bookmark: bookmark), source: work) {
+                needs.append(SpaceNeed(url: folder.url, bytes: output))
+                folder.stop()
+            }
+        } else {
+            needs.append(SpaceNeed(url: work, bytes: output))
+        }
+        if destination == .replace, let backup = originalsBackup() {
+            needs.append(SpaceNeed(url: backup.folder, bytes: size))
+            if asset.hasAdjustments { needs.append(SpaceNeed(url: work, bytes: size)) }
+        }
+        try core.diskSpace.verify(needs)
     }
 
     private static func keptBecause(_ reason: String) -> String {
