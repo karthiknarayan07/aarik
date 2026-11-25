@@ -40,7 +40,11 @@ final class AppModel {
     var jobs: [Job] = []
     /// Counts, saved total and running progress for the Activity rows, updated with `jobs`.
     var activity = ActivitySummary(jobs: [])
-    var isQueuePaused = false
+    var isQueuePaused = false {
+        didSet { relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused) }
+    }
+    /// Holds an update's relaunch while a job runs or jobs are waiting; the updater asks it, the queue feeds it.
+    @ObservationIgnored let relaunchGate = RelaunchGate()
     var isConfirmingReplace = false
     /// The first Replace in a session asks for confirmation; later ones don't, once videos were added with it.
     @ObservationIgnored var replaceConsent = ReplaceConsent()

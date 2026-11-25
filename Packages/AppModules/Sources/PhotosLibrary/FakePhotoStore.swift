@@ -290,10 +290,11 @@ public final class FakePhotoStore: PhotoStore {
     private func addSavedAsset(_ request: PhotoSaveRequest, size: Int64?) throws -> String {
         try state.withLock { state in
             state.operations.append(.save)
+            guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
             if let error = state.saveError { throw error }
             state.savedCount += 1
             let id = "new-\(state.savedCount)"
-            let added = request.albums.filter { state.existingAlbums.contains($0) }
+            let added = request.albumsToAdd(existing: state.existingAlbums)
             var asset = PhotoAsset(
                 id: id, creationDate: request.creationDate, location: request.location,
                 pixelSize: state.savedPixelSize, duration: state.savedDuration ?? 10,
@@ -313,7 +314,12 @@ public final class FakePhotoStore: PhotoStore {
     public func deleteAssets(ids: [String]) async throws {
         try state.withLock { state in
             state.operations.append(.delete(ids))
+            guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
             if let error = state.deleteError { throw error }
+            // Like the real store: nothing is deleted when any asset is missing.
+            if let missing = ids.first(where: { id in !state.assets.contains { $0.id == id } }) {
+                throw PhotoStoreError.notInLibrary(missing)
+            }
             state.assets.removeAll { ids.contains($0.id) }
             for id in ids { state.albums[id] = nil }
             state.deletedIDs.append(contentsOf: ids)

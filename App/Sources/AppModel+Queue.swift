@@ -35,6 +35,7 @@ extension AppModel {
 
     private func receive(_ jobs: [Job]) {
         self.jobs = jobs
+        relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused)
         activity = ActivitySummary(jobs: jobs)
         if let summary = runTracker.observe(jobs) {
             notifier.postUnlessFrontmost(title: "Queue finished", body: ActivityText.notificationBody(summary))

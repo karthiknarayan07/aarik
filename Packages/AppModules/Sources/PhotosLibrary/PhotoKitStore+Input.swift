@@ -121,6 +121,9 @@ extension PhotoKitStore {
         case PHPhotosErrorDomain:
             if networkErrorCodes.contains(nsError.code) { return PhotoStoreError.downloadFailed(describe(nsError)) }
             if nsError.code == userCancelledCode { return CancellationError() }
+        case NSCocoaErrorDomain:
+            // A declined system confirmation can arrive as NSUserCancelledError instead.
+            if nsError.code == userCancelledCode { return CancellationError() }
         case NSURLErrorDomain:
             return PhotoStoreError.downloadFailed(describe(nsError))
         default:
