@@ -1,3 +1,4 @@
+import AppCore
 import Foundation
 import Observation
 import Sparkle
@@ -23,11 +24,15 @@ final class Updater {
     @ObservationIgnored private let controller: SPUStandardUpdaterController
     @ObservationIgnored private var canCheckObservation: NSKeyValueObservation?
 
-    init(bundle: Bundle = .main) {
+    @ObservationIgnored private let delegate: RelaunchDelegate
+
+    /// `relaunchGate` decides when an installed update may relaunch the app: not while the queue is working.
+    init(relaunchGate: RelaunchGate, bundle: Bundle = .main) {
         let configured = Self.hasValue(bundle, "SUFeedURL") && Self.hasValue(bundle, "SUPublicEDKey")
         isConfigured = configured
+        delegate = RelaunchDelegate(gate: relaunchGate)
         controller = SPUStandardUpdaterController(
-            startingUpdater: configured, updaterDelegate: nil, userDriverDelegate: nil)
+            startingUpdater: configured, updaterDelegate: delegate, userDriverDelegate: nil)
         automaticallyChecksForUpdates = configured && controller.updater.automaticallyChecksForUpdates
         guard configured else { return }
         canCheckObservation = controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new]) {
@@ -48,4 +53,28 @@ final class Updater {
         let value = bundle.object(forInfoDictionaryKey: key) as? String ?? ""
         return !value.trimmingCharacters(in: .whitespaces).isEmpty
     }
+}
+
+/// Sparkle's delegate (it keeps only a weak reference, so `Updater` owns it). Delays the relaunch after an install
+/// until the queue is idle; the update itself still downloads and installs in the background.
+private final class RelaunchDelegate: NSObject, SPUUpdaterDelegate {
+    /// Sparkle calls its delegate on the main thread.
+    private let gate: RelaunchGate
+
+    init(gate: RelaunchGate) { self.gate = gate }
+
+    func updater(
+        _ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem,
+        untilInvokingBlock installHandler: @escaping () -> Void
+    ) -> Bool {
+        let handler = UncheckedSendable(installHandler)
+        return MainActor.assumeIsolated {
+            gate.postpone { handler.value() }
+        }
+    }
+}
+
+private struct UncheckedSendable<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
 }
