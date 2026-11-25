@@ -121,8 +121,14 @@ public final class LocalLibrary {
     }
 
     /// Re-checks which files still exist (not in a Trash), off the main actor. Nothing is mounted and no UI is
-    /// shown; a file on a disconnected drive is simply unavailable until the drive is back.
+    /// shown; a file on a disconnected drive is simply unavailable until the drive is back. Then reads again, in
+    /// place, the files that changed on disk (`refreshChangedFiles`).
     public func refreshAvailability() async {
+        await refreshExistence()
+        await refreshChangedFiles()
+    }
+
+    private func refreshExistence() async {
         let files = items.map { (id: $0.id, url: $0.url) }
         let checkedURLs = Dictionary(files.map { ($0.id, $0.url) }) { first, _ in first }
         let available = await availability(files)
@@ -144,6 +150,57 @@ public final class LocalLibrary {
     @concurrent
     private nonisolated static func availability(of files: [(id: UUID, url: URL)]) async -> [UUID: Bool] {
         checkAvailability(of: files)
+    }
+
+    /// Reads again the available files whose size or modification date is no longer the stored one (edited or
+    /// replaced outside the app, or stored wrong): same id, new size, metadata and badges, saved. Stamps are read
+    /// and files inspected off the main actor. An entry stored before dates were kept counts as changed only when
+    /// its size differs; otherwise its date is recorded.
+    private func refreshChangedFiles() async {
+        let files = items.filter(\.isAvailable).compactMap { item in
+            entries[item.id].map { (id: item.id, url: item.url, stored: $0) }
+        }
+        guard !files.isEmpty else { return }
+        let stamps = await Self.stamps(of: files.map { (id: $0.id, url: $0.url) })
+        var dated = false
+        for file in files {
+            guard let stamp = stamps[file.id] else { continue }
+            let stored = file.stored
+            if stored.modifiedAt == nil, stamp.size == stored.byteSize {
+                if entries[file.id] == stored {
+                    entries[file.id]?.modifiedAt = stamp.modified
+                    dated = true
+                }
+                continue
+            }
+            guard !stamp.matches(size: stored.byteSize, modified: stored.modifiedAt) else { continue }
+            await readAgain(file.id, at: file.url, replacing: stored)
+        }
+        if dated { persist() }
+    }
+
+    /// Inspects the item's file again and updates it in place, unless the item moved, went away or was updated
+    /// meanwhile (its entry is no longer `stored`), or the file can't be read.
+    private func readAgain(_ id: UUID, at url: URL, replacing stored: BookmarkStore.Entry) async {
+        guard let scanned = await LibraryScanner.inspectFile(url) else { return }
+        guard let index = items.firstIndex(where: { $0.id == id }), items[index].url == url, entries[id] == stored,
+            let item = LibraryItemBuilder.build(
+                url: url, inventory: scanned.item.inventory, byteSize: scanned.item.byteSize, id: id)
+        else { return }
+        items[index] = item
+        entries[id] = BookmarkStore.Entry(
+            id: id, path: url.path, bookmark: scanned.bookmark ?? stored.bookmark, byteSize: item.byteSize,
+            inventory: item.inventory, modifiedAt: scanned.modifiedAt)
+        persist()
+    }
+
+    @concurrent
+    private nonisolated static func stamps(of files: [(id: UUID, url: URL)]) async -> [UUID: FileStamp] {
+        var result: [UUID: FileStamp] = [:]
+        for file in files {
+            result[file.id] = FileStamp.read(file.url)
+        }
+        return result
     }
 
     nonisolated static func checkAvailability(of files: [(id: UUID, url: URL)]) -> [UUID: Bool] {
@@ -191,7 +248,8 @@ public final class LocalLibrary {
         }
         items[index] = item
         entries[id] = BookmarkStore.Entry(
-            id: id, path: item.url.path, bookmark: scanned.bookmark, byteSize: item.byteSize, inventory: item.inventory)
+            id: id, path: item.url.path, bookmark: scanned.bookmark, byteSize: item.byteSize, inventory: item.inventory,
+            modifiedAt: scanned.modifiedAt)
         persist()
     }
 
@@ -219,7 +277,7 @@ public final class LocalLibrary {
             items.append(item)
             entries[item.id] = BookmarkStore.Entry(
                 id: item.id, path: item.url.path, bookmark: file.bookmark, byteSize: item.byteSize,
-                inventory: item.inventory)
+                inventory: item.inventory, modifiedAt: file.modifiedAt)
         }
         persist()
     }
