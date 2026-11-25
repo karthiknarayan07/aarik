@@ -17,25 +17,47 @@ public struct PredictedLoss<ID: Hashable & Sendable>: Sendable, Equatable, Ident
 /// What a conversion would lose, before anything runs (spec 8.4: no silent metadata loss).
 public enum LossCheck {
     /// The names of what converting with `preset` (or `custom`) would lose; empty when nothing would be lost or
-    /// the video would be kept as is.
+    /// the video would be kept as is. `fallsBackToQuickTime` counts what leaving MPEG-4 for QuickTime loses.
     public static func lostNames(
-        byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil
+        byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil,
+        fallsBackToQuickTime: Bool = false
     ) -> [String] {
         let decision = SavingsCalculator.decision(
-            byteSize: byteSize, inventory: inventory, preset: preset, custom: custom)
+            byteSize: byteSize, inventory: inventory, preset: preset, custom: custom,
+            fallsBackToQuickTime: fallsBackToQuickTime)
         guard case .convert(_, _, let predicted) = decision else { return [] }
         return names(of: predicted.lost)
     }
 
-    /// The videos that would lose something, in the order given; videos that lose nothing are left out.
+    /// The videos that would lose something, in the order given; videos that lose nothing are left out. The ones
+    /// in `quickTimeFallbacks` (from `quickTimeFallbacks(among:)`) also lose what QuickTime can't keep.
     public static func losses<ID: Hashable & Sendable>(
-        for sources: [(id: ID, source: SavingsCalculator.Source)], preset: Preset, custom: DownscaleSpec? = nil
+        for sources: [(id: ID, source: SavingsCalculator.Source)], preset: Preset, custom: DownscaleSpec? = nil,
+        quickTimeFallbacks: Set<ID> = []
     ) -> [PredictedLoss<ID>] {
         sources.compactMap { entry in
             let lost = lostNames(
-                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: preset, custom: custom)
+                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: preset, custom: custom,
+                fallsBackToQuickTime: quickTimeFallbacks.contains(entry.id))
             return lost.isEmpty ? nil : PredictedLoss(id: entry.id, lost: lost)
         }
+    }
+
+    /// The files whose output will be QuickTime although they are MPEG-4 (`OutputContainer.decide(for:)`). Reads
+    /// each `.mp4` and `.m4v` file's tracks, off the caller's actor; other files are skipped without reading. A
+    /// file that can't be read is left out: its run will fail, or check the result itself.
+    @concurrent
+    public static func quickTimeFallbacks<ID: Hashable & Sendable>(among files: [(id: ID, url: URL)]) async
+        -> Set<ID>
+    {
+        var result = Set<ID>()
+        for file in files {
+            // `decide` answers a QuickTime source from its name alone.
+            if (try? await OutputContainer.decide(for: file.url))?.fallsBackToQuickTime == true {
+                result.insert(file.id)
+            }
+        }
+        return result
     }
 
     /// Readable names for predicted losses: an auxiliary video track and its track metadata (the only track

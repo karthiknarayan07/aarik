@@ -13,9 +13,10 @@ enum RunnerFixture {
 
     /// 2560x1440 so a 1080 short side really shrinks it; small and fast. Lives in its own temporary directory.
     /// `fileType` picks the container (the name's extension is the caller's), `timedMetadata` adds a timed
-    /// metadata track.
+    /// metadata track, `metadata` file-level QuickTime items (an MPEG-4 writer stores some as ISO user data).
     static func source(
-        name: String = "x.mov", fileType: AVFileType = .mov, timedMetadata: Bool = false
+        name: String = "x.mov", fileType: AVFileType = .mov, timedMetadata: Bool = false,
+        metadata: [String: String] = [:]
     ) async throws -> URL {
         var options = ClipOptions()
         options.width = 2560
@@ -26,6 +27,7 @@ enum RunnerFixture {
         options.videoBitRate = 20_000_000
         options.fileType = fileType
         options.includeTimedMetadataTrack = timedMetadata
+        options.quickTimeMetadata = metadata
         return try await renamed(FixtureFactory.makeClip(options), to: name)
     }
 
@@ -37,6 +39,12 @@ enum RunnerFixture {
         guard head.count == 12, String(decoding: head[4..<8], as: UTF8.self) == "ftyp" else { return "" }
         return String(decoding: head[8..<12], as: UTF8.self)
     }
+
+    /// A location and a creation date, which an MPEG-4 file keeps as ISO user data (`uiso/loci`, `uiso/date`).
+    static let locationMetadata = [
+        "com.apple.quicktime.location.ISO6709": "+37.3349-122.0090+010.000/",
+        "com.apple.quicktime.creationdate": "2026-11-25T10:00:00+0000",
+    ]
 
     /// 640x360 at a low bit rate: below a 1080 short side, so a 1080p downscale finds it already small.
     static func smallSource(name: String = "small.mov") async throws -> URL {

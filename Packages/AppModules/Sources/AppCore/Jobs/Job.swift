@@ -10,6 +10,11 @@ public struct JobOutcome: Codable, Sendable, Equatable {
     /// What the runner found wrong, decided once when the job finished: metadata lost or changed beyond what the
     /// conversion is expected to do, or a requested Replace that didn't happen. Empty means verified.
     public var warnings: [String]
+    /// Sentences explaining the result that are not problems, such as why the file got another name or format.
+    public var notes: [String]
+    /// The file the run read: the job's path, or where its bookmark found the file after it moved. Nil for
+    /// outcomes saved before this was recorded.
+    public var source: URL?
 
     public init(
         output: URL,
@@ -17,7 +22,9 @@ public struct JobOutcome: Codable, Sendable, Equatable {
         bytesAfter: Int64,
         report: MetadataReport,
         replacedOriginal: Bool,
-        warnings: [String] = []
+        warnings: [String] = [],
+        notes: [String] = [],
+        source: URL? = nil
     ) {
         self.output = output
         self.bytesBefore = bytesBefore
@@ -25,9 +32,11 @@ public struct JobOutcome: Codable, Sendable, Equatable {
         self.report = report
         self.replacedOriginal = replacedOriginal
         self.warnings = warnings
+        self.notes = notes
+        self.source = source
     }
 
-    /// Reads outcomes saved before `warnings` existed as having none.
+    /// Reads outcomes saved before `warnings`, `notes` or `source` existed as having none.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         output = try container.decode(URL.self, forKey: .output)
@@ -36,6 +45,8 @@ public struct JobOutcome: Codable, Sendable, Equatable {
         report = try container.decode(MetadataReport.self, forKey: .report)
         replacedOriginal = try container.decode(Bool.self, forKey: .replacedOriginal)
         warnings = try container.decodeIfPresent([String].self, forKey: .warnings) ?? []
+        notes = try container.decodeIfPresent([String].self, forKey: .notes) ?? []
+        source = try container.decodeIfPresent(URL.self, forKey: .source)
     }
 
     /// Nothing unexpected was lost or changed, and a requested Replace happened.
@@ -79,6 +90,12 @@ public struct Job: Codable, Sendable, Identifiable, Equatable {
         self.settings = settings
         self.state = state
         self.createdAt = createdAt
+    }
+
+    /// The file the job worked on: the one its finished run read when that is known, else its recorded path.
+    public var sourceUsed: URL {
+        if case .completed(let outcome) = state, let source = outcome.source { return source }
+        return source
     }
 }
 

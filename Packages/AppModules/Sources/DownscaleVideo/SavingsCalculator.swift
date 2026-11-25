@@ -27,12 +27,16 @@ public struct PresetEstimate: Sendable, Equatable, Identifiable {
 public enum SavingsCalculator {
     public typealias Source = (byteSize: Int64, inventory: MetadataInventory)
 
-    /// The planner's decision for a preset, or for `custom` when given.
+    /// The planner's decision for a preset, or for `custom` when given. `fallsBackToQuickTime`: see
+    /// `DownscalePlanner.decide(inventory:byteSize:spec:fallsBackToQuickTime:)`.
     public static func decision(
-        byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil
+        byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil,
+        fallsBackToQuickTime: Bool = false
     ) -> PlanDecision {
         let source = SourceProfile(inventory: inventory, byteSize: byteSize)
-        return DownscalePlanner.decide(source: source, inventory: inventory, spec: custom ?? preset.spec(for: source))
+        return DownscalePlanner.decide(
+            source: source, inventory: inventory, spec: custom ?? preset.spec(for: source),
+            fallsBackToQuickTime: fallsBackToQuickTime)
     }
 
     /// Sum of `byteSize - estimate` over the videos that would be converted.

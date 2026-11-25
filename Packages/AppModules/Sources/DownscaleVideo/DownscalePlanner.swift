@@ -24,16 +24,22 @@ public enum DownscalePlanner {
             inventory: inventory, byteSize: byteSize, spec: preset.spec(for: inventory, byteSize: byteSize))
     }
 
-    /// Decides for an explicit spec (a preset's or a custom one).
-    public static func decide(inventory: MetadataInventory, byteSize: Int64, spec: DownscaleSpec) -> PlanDecision {
-        decide(source: SourceProfile(inventory: inventory, byteSize: byteSize), inventory: inventory, spec: spec)
+    /// Decides for an explicit spec (a preset's or a custom one). `fallsBackToQuickTime` says the output leaves
+    /// the source's MPEG-4 container for QuickTime (`OutputContainer.decide(for:)`), which the prediction counts.
+    public static func decide(
+        inventory: MetadataInventory, byteSize: Int64, spec: DownscaleSpec, fallsBackToQuickTime: Bool = false
+    ) -> PlanDecision {
+        decide(
+            source: SourceProfile(inventory: inventory, byteSize: byteSize), inventory: inventory, spec: spec,
+            fallsBackToQuickTime: fallsBackToQuickTime)
     }
 
     /// Decides with an already-read source profile, so the inventory is parsed once per decision. The spec in a
     /// `.convert` decision is the one to encode and verify with: `spec`, minus its frame-rate cap for slo-mo.
-    static func decide(source: SourceProfile, inventory: MetadataInventory, spec requested: DownscaleSpec)
-        -> PlanDecision
-    {
+    static func decide(
+        source: SourceProfile, inventory: MetadataInventory, spec requested: DownscaleSpec,
+        fallsBackToQuickTime: Bool = false
+    ) -> PlanDecision {
         var spec = requested
         if source.isSloMo { spec.maxFrameRate = nil }
         let byteSize = source.byteSize
@@ -48,8 +54,19 @@ public enum DownscalePlanner {
         if Double(estimate) > Double(byteSize) * 0.9 {
             return .keptAsIs(reason: "Would save less than 10%")
         }
-        let report = predicted(inventory: inventory, source: source, spec: spec)
+        var report = predicted(inventory: inventory, source: source, spec: spec)
+        if fallsBackToQuickTime { report = movingToQuickTime(report, inventory: inventory) }
         return .convert(spec, estimatedBytes: estimate, predicted: report)
+    }
+
+    /// Moves what a QuickTime output of an MPEG-4 source loses from kept to lost.
+    static func movingToQuickTime(_ report: MetadataReport, inventory: MetadataInventory) -> MetadataReport {
+        let dropped = Set(OutputContainer.lostInQuickTimeFallback(inventory).map(\.key))
+        guard !dropped.isEmpty else { return report }
+        var report = report
+        report.lost += report.kept.filter { dropped.contains($0.key) }
+        report.kept.removeAll { dropped.contains($0.key) }
+        return report
     }
 
     /// The `hdr.*` items an H.264 (SDR) output drops.

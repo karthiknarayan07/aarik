@@ -72,6 +72,33 @@ private func makeStore() throws -> (JobStore, URL) {
     #expect(roundTrip == withWarnings)
 }
 
+@Test func outcomeNotesAndSourceDecodeWhenAbsentAndRoundTrip() throws {
+    // jobs.json written before notes and the resolved source existed.
+    let legacy = """
+        {"bytesAfter":5,"bytesBefore":10,"output":"file:///tmp/a.mov",
+         "replacedOriginal":true,"report":{"changed":[],"kept":[],"lost":[]},"warnings":[]}
+        """
+    let decoded = try JSONDecoder().decode(JobOutcome.self, from: Data(legacy.utf8))
+    #expect(decoded.notes == [])
+    #expect(decoded.source == nil)
+    // Notes explain; they are not warnings.
+    var noted = outcome(before: 2, after: 1)
+    noted.notes = ["Saved as a .mov file because MP4 can't hold all of its tracks"]
+    noted.source = URL(fileURLWithPath: "/tmp/moved.mp4")
+    #expect(noted.isVerified)
+    let roundTrip = try JSONDecoder().decode(JobOutcome.self, from: JSONEncoder().encode(noted))
+    #expect(roundTrip == noted)
+}
+
+@Test func replacedFileIsTheOneTheRunUsed() {
+    var used = outcome(before: 2, after: 1)
+    used.source = URL(fileURLWithPath: "/tmp/moved.mov")
+    #expect(job("a", .completed(used)).sourceUsed == URL(fileURLWithPath: "/tmp/moved.mov"))
+    // Older outcomes don't know; the job's own path stands in.
+    #expect(job("a", .completed(outcome(before: 2, after: 1))).sourceUsed == URL(fileURLWithPath: "/tmp/a.mov"))
+    #expect(job("a", .queued).sourceUsed == URL(fileURLWithPath: "/tmp/a.mov"))
+}
+
 // MARK: - Run tracking
 
 @Test func runTrackerReportsWhenQueueDrains() {

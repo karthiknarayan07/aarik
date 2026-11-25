@@ -65,12 +65,19 @@ public struct DownscaleRunner: JobRunner {
         let byteSize = identity.size
         let inventory = try await MediaInspector().inventory(of: source)
 
+        // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
+        // that loses, so it is predicted (and was shown before the job was added), not found afterwards.
+        let container = try await OutputContainer.decide(for: source)
+
         // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
         // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
         let requested = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
         let spec: DownscaleSpec
         let predicted: MetadataReport
-        switch DownscalePlanner.decide(inventory: inventory, byteSize: byteSize, spec: requested) {
+        let decision = DownscalePlanner.decide(
+            inventory: inventory, byteSize: byteSize, spec: requested,
+            fallsBackToQuickTime: container.fallsBackToQuickTime)
+        switch decision {
         case .keptAsIs(let reason): return .keptAsIs(reason: reason)
         case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
         }
@@ -78,31 +85,52 @@ public struct DownscaleRunner: JobRunner {
         let folder = try Self.outputFolder(for: settings.saveTo, source: source)
         defer { folder.stop() }
         let label = Self.label(for: spec, settings: settings)
-        let pathExtension = try await OutputContainer.pathExtension(forSource: source)
 
         let output: URL
         do {
             output = try await encode(
-                source: source, spec: spec, label: label, directory: folder.url, pathExtension: pathExtension,
-                progress: progress)
+                source: source, spec: spec, label: label, directory: folder.url,
+                pathExtension: container.pathExtension, progress: progress)
         } catch DownscaleError.sourceAlreadySmall {
             return .keptAsIs(reason: "Already small")
         }
-        // Cancelled once the output exists: remove it (it is ours) and leave the original alone.
-        try Self.stopIfCancelled(removing: output)
 
-        // The estimate can overstate the saving (heavy audio counted as video). If the real output is not at least
-        // 10% smaller, remove our own output and keep the original untouched.
-        let outputSize = try sizeOf(output)
-        if outputSize >= byteSize * 9 / 10 {
+        // From here the output exists and is ours: any way out that doesn't keep it removes it.
+        let outputSize: Int64
+        let outputInventory: MetadataInventory
+        do {
+            // Cancelled once the output exists: remove it and leave the original alone.
+            try Self.stopIfCancelled(removing: output)
+            // The estimate can overstate the saving (heavy audio counted as video). If the real output is not at
+            // least 10% smaller, remove our own output and keep the original untouched.
+            outputSize = try sizeOf(output)
+            if outputSize >= byteSize * 9 / 10 {
+                try? FileManager.default.removeItem(at: output)
+                return .keptAsIs(reason: "Would save less than 10%")
+            }
+            outputInventory = try await inspect(output)
+            try Self.stopIfCancelled(removing: output)
+        } catch {
             try? FileManager.default.removeItem(at: output)
-            return .keptAsIs(reason: "Would save less than 10%")
+            throw error
         }
-
-        let outputInventory = try await inspect(output)
-        try Self.stopIfCancelled(removing: output)
         let report = MetadataDiff.report(source: inventory, output: outputInventory)
+
+        // In another container, anything lost beyond the prediction is a loss nobody was told about: never keep
+        // such a copy, wherever it was to be saved.
+        if Self.changesContainer(source: source, output: output),
+            !Self.unpredictedLosses(report, predicted: predicted).isEmpty
+        {
+            try? FileManager.default.removeItem(at: output)
+            return .keptAsIs(reason: Self.formatCantKeepDetails)
+        }
         var warnings = Self.warnings(report, predicted: predicted, spec: spec)
+        var notes: [String] = []
+        if container.fallsBackToQuickTime {
+            notes.append(
+                "Saved as a .\(container.pathExtension) file because \(source.pathExtension.uppercased()) can't hold "
+                    + "all of its tracks")
+        }
 
         var finalURL = output
         var replaced = false
@@ -117,37 +145,48 @@ public struct DownscaleRunner: JobRunner {
                 finalURL = result.url
                 replaced = result.warning == nil
                 if let warning = result.warning { warnings.append(warning) }
+                if let note = result.note { notes.append(note) }
             }
         }
         return .completed(
             JobOutcome(
                 output: finalURL, bytesBefore: byteSize, bytesAfter: outputSize,
-                report: report, replacedOriginal: replaced, warnings: warnings))
+                report: report, replacedOriginal: replaced, warnings: warnings, notes: notes, source: source))
+    }
+
+    static let formatCantKeepDetails = "Its file format can't keep all of its details"
+
+    /// The output has another extension than the source, so another container.
+    static func changesContainer(source: URL, output: URL) -> Bool {
+        source.pathExtension.lowercased() != output.pathExtension.lowercased()
     }
 
     // MARK: - Replace
 
     /// Backs the original up when asked to, trashes it, and gives the output the original's name (with the
     /// output's extension, when the container changed) if that is still free. The original must still be the
-    /// file the conversion read. Returns where the output ends up, and the warning saying why the original was
-    /// kept when it was.
-    private func replace(_ source: URL, identity: FileIdentity, with output: URL) -> (url: URL, warning: String?) {
-        guard identity.matches(source) else { return (output, Self.originalChanged) }
+    /// file the conversion read. Returns where the output ends up, the warning saying why the original was kept
+    /// when it was, and a note when the output couldn't take the original's name.
+    private func replace(_ source: URL, identity: FileIdentity, with output: URL)
+        -> (url: URL, warning: String?, note: String?)
+    {
+        guard identity.matches(source) else { return (output, Self.originalChanged, nil) }
         if let backup = originalsBackup() {
             do {
                 _ = try backUp(source, byteSize: identity.size, into: backup.folder)
             } catch {
-                return (output, Self.keptBecause(error.keptBecause))
+                return (output, Self.keptBecause(error.keptBecause), nil)
             }
         }
-        guard identity.matches(source) else { return (output, Self.originalChanged) }
+        guard identity.matches(source) else { return (output, Self.originalChanged, nil) }
         guard (try? trash(source)) != nil else {
-            return (output, Self.keptBecause("it couldn't be moved to the Trash"))
+            return (output, Self.keptBecause("it couldn't be moved to the Trash"), nil)
         }
-        // Take the original's name if it is still free, else keep the output's own name.
+        // Take the original's name if it is still free, else keep the output's own name and say why.
         let target = Self.replacementURL(for: source, output: output)
-        if (try? AtomicOutput.moveWithoutReplacing(output, to: target)) != nil { return (target, nil) }
-        return (output, nil)
+        if (try? AtomicOutput.moveWithoutReplacing(output, to: target)) != nil { return (target, nil, nil) }
+        let why = FileManager.default.fileExists(atPath: target.path) ? "already exists" : "couldn't be used"
+        return (output, nil, "Saved as “\(output.lastPathComponent)” because “\(target.lastPathComponent)” \(why)")
     }
 
     /// The original's path, with the output's extension when the output is in another container
@@ -203,10 +242,15 @@ public struct DownscaleRunner: JobRunner {
         warnings(report, predicted: predicted, spec: spec).isEmpty
     }
 
+    /// What the output lost that the prediction didn't name.
+    static func unpredictedLosses(_ report: MetadataReport, predicted: MetadataReport) -> [MetadataItem] {
+        let predictedLost = Set(predicted.lost.map(\.key))
+        return report.lost.filter { !predictedLost.contains($0.key) }
+    }
+
     /// One line per item lost beyond what was predicted, then one per unexpected change.
     static func warnings(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec) -> [String] {
-        let predictedLost = Set(predicted.lost.map(\.key))
-        let lost = report.lost.filter { !predictedLost.contains($0.key) }.map { "\($0.displayName) is lost" }
+        let lost = unpredictedLosses(report, predicted: predicted).map { "\($0.displayName) is lost" }
         let changed = ExpectedChanges.unexpected(in: report, spec: spec).map {
             "\($0.displayName) changed from \($0.from) to \($0.to)"
         }
