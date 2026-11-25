@@ -68,6 +68,87 @@ import Testing
         #expect(try await store.albums(containing: id) == ["a", "c"])
     }
 
+    @Test func albumsToAddKeepsRequestedOrderAndDropsMissingAndDuplicates() {
+        let request = PhotoSaveRequest(
+            file: URL(filePath: "/x.mov"), creationDate: nil, location: nil, isFavorite: false, isHidden: false,
+            albums: ["a", "b", "c", "a"])
+        #expect(request.albumsToAdd(existing: ["c", "a", "z"]) == ["a", "c"])
+        #expect(request.albumsToAdd(existing: []) == [])
+    }
+
+    @Test(arguments: [PhotoAuthorization.authorized, .limited])
+    func savesWhenAccessIsFullOrLimited(access: PhotoAuthorization) async throws {
+        let store = makeStore()
+        store.currentAuthorization = access
+        _ = try await save(store)
+        #expect(store.saves.count == 1)
+    }
+
+    @Test(arguments: [PhotoAuthorization.denied, .restricted, .notDetermined])
+    func refusesToSaveWithoutAccess(access: PhotoAuthorization) async {
+        let store = makeStore()
+        store.currentAuthorization = access
+        let error = await verifyFailure(store)
+        guard case .saveFailed(let reason) = error else {
+            Issue.record("expected saveFailed, got \(String(describing: error))")
+            return
+        }
+        #expect(reason == PhotoStoreError.notAuthorized.localizedDescription)
+        #expect(store.assets.map(\.id) == ["src"])
+    }
+
+    @Test(arguments: [PhotoAuthorization.denied, .restricted, .notDetermined])
+    func refusesToDeleteWithoutAccess(access: PhotoAuthorization) async {
+        let store = makeStore()
+        store.currentAuthorization = access
+        await #expect(throws: PhotoStoreError.notAuthorized) { try await store.deleteAssets(ids: ["src"]) }
+        #expect(store.deletedIDs.isEmpty)
+    }
+
+    @Test func limitedAccessMayDelete() async throws {
+        let store = makeStore()
+        store.currentAuthorization = .limited
+        try await store.deleteAssets(ids: ["src"])
+        #expect(store.deletedIDs == ["src"])
+    }
+
+    @Test func dateWithinASecondAndSwappedOrientationVerify() async throws {
+        let store = makeStore()
+        store.savedPixelSize = CGSize(width: 1080, height: 1920)
+        store.adjustSaved = { asset in
+            PhotoAsset(
+                id: asset.id, creationDate: asset.creationDate?.addingTimeInterval(0.4),
+                location: asset.location, pixelSize: asset.pixelSize, duration: asset.duration,
+                originalFileName: "x", originalByteSize: 1)
+        }
+        _ = try await save(store)
+        #expect(store.deletedIDs.isEmpty)
+    }
+
+    @Test func dateTwoSecondsOffFails() async {
+        let store = makeStore()
+        store.adjustSaved = { asset in
+            PhotoAsset(
+                id: asset.id, creationDate: asset.creationDate?.addingTimeInterval(2),
+                location: asset.location, pixelSize: asset.pixelSize, duration: asset.duration,
+                originalFileName: "x", originalByteSize: 1)
+        }
+        guard case .verifyFailed? = await verifyFailure(store) else {
+            Issue.record("expected verifyFailed")
+            return
+        }
+    }
+
+    @Test func missingPlaceholderIsReportedAsPossiblyAdded() async {
+        let store = makeStore()
+        store.saveError = .unavailable("Photos gave no identifier; a video may have been added")
+        guard case .saveFailed(let reason) = await verifyFailure(store) else {
+            Issue.record("expected saveFailed")
+            return
+        }
+        #expect(reason.contains("may have been added"))
+    }
+
     @Test func neverChangesTheSourceAsset() async throws {
         let store = makeStore(albums: ["a"])
         store.albums["src"] = ["a"]
@@ -176,10 +257,10 @@ import Testing
         let url = try file()
         defer { try? FileManager.default.removeItem(at: url) }
         let task = Task {
-            try await PhotoSaver(store: store).save(
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await PhotoSaver(store: store).save(
                 file: url, like: source(), albums: [], expectedPixelSize: target)
         }
-        task.cancel()
         await #expect(throws: PhotoSaveError.cancelled) { try await task.value }
         #expect(store.operations.isEmpty)
     }

@@ -262,10 +262,11 @@ public final class FakePhotoStore: PhotoStore {
         let size = (try? request.file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
         return try state.withLock { state in
             state.operations.append(.save)
+            guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
             if let error = state.saveError { throw error }
             state.savedCount += 1
             let id = "new-\(state.savedCount)"
-            let added = request.albums.filter { state.existingAlbums.contains($0) }
+            let added = request.albumsToAdd(existing: state.existingAlbums)
             var asset = PhotoAsset(
                 id: id, creationDate: request.creationDate, location: request.location,
                 pixelSize: state.savedPixelSize, duration: state.savedDuration ?? 10,
@@ -285,6 +286,7 @@ public final class FakePhotoStore: PhotoStore {
     public func deleteAssets(ids: [String]) async throws {
         try state.withLock { state in
             state.operations.append(.delete(ids))
+            guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
             if let error = state.deleteError { throw error }
             state.assets.removeAll { ids.contains($0.id) }
             for id in ids { state.albums[id] = nil }
