@@ -19,6 +19,8 @@ public final class FakePhotoStore: PhotoStore {
         var inputBytes = 1_000
         var inputSteps = 4
         var inputError: PhotoStoreError?
+        var originalFiles: [String: URL] = [:]
+        var currentVersionFiles: [String: URL] = [:]
         var beforeInputStep: (@Sendable (Int) async -> Void)?
         var inputRequests: [InputRequest] = []
         var existingAlbums: Set<String> = []
@@ -28,6 +30,7 @@ public final class FakePhotoStore: PhotoStore {
         var savedDuration: Double?
         var savedByteSize: Int64?
         var adjustSaved: (@Sendable (PhotoAsset) -> PhotoAsset)?
+        var afterSave: (@Sendable () -> Void)?
         var saves: [SaveRecord] = []
         var deletedIDs: [String] = []
         var operations: [Operation] = []
@@ -130,6 +133,19 @@ public final class FakePhotoStore: PhotoStore {
         set { state.withLock { $0.inputSteps = max(newValue, 1) } }
     }
 
+    /// Files a fetch of the original resource writes (their contents, in `inputSteps` chunks) in place of filler,
+    /// by asset identifier; a test that converts the input needs a real video here.
+    public var originalFiles: [String: URL] {
+        get { state.withLock { $0.originalFiles } }
+        set { state.withLock { $0.originalFiles = newValue } }
+    }
+
+    /// Like `originalFiles`, for the export of the current (edited) version.
+    public var currentVersionFiles: [String: URL] {
+        get { state.withLock { $0.currentVersionFiles } }
+        set { state.withLock { $0.currentVersionFiles = newValue } }
+    }
+
     /// When set, a fetch writes its first chunk and then throws it, like a download that broke off.
     public var inputError: PhotoStoreError? {
         get { state.withLock { $0.inputError } }
@@ -186,6 +202,12 @@ public final class FakePhotoStore: PhotoStore {
     public var adjustSaved: (@Sendable (PhotoAsset) -> PhotoAsset)? {
         get { state.withLock { $0.adjustSaved } }
         set { state.withLock { $0.adjustSaved = newValue } }
+    }
+
+    /// Runs after each save has added its asset, so a test can change the library while a job is still running.
+    public var afterSave: (@Sendable () -> Void)? {
+        get { state.withLock { $0.afterSave } }
+        set { state.withLock { $0.afterSave = newValue } }
     }
 
     /// The saves served so far, in order.
@@ -260,7 +282,13 @@ public final class FakePhotoStore: PhotoStore {
 
     public func saveVideo(_ request: PhotoSaveRequest) async throws -> String {
         let size = (try? request.file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
-        return try state.withLock { state in
+        let id = try addSavedAsset(request, size: size)
+        afterSave?()
+        return id
+    }
+
+    private func addSavedAsset(_ request: PhotoSaveRequest, size: Int64?) throws -> String {
+        try state.withLock { state in
             state.operations.append(.save)
             guard state.authorization.allowsReading else { throw PhotoStoreError.notAuthorized }
             if let error = state.saveError { throw error }
@@ -315,11 +343,12 @@ public final class FakePhotoStore: PhotoStore {
     private func simulate(
         id: String, kind: InputRequest.Kind, url: URL, progress: @Sendable (FetchProgress) -> Void
     ) async throws {
-        let (known, bytes, steps, error, hook) = state.withLock { state in
+        let (known, bytes, steps, error, hook, given) = state.withLock { state in
             state.inputRequests.append(InputRequest(id: id, kind: kind, url: url))
+            let files = kind == .original ? state.originalFiles : state.currentVersionFiles
             return (
                 state.assets.contains { $0.id == id }, state.inputBytes, state.inputSteps, state.inputError,
-                state.beforeInputStep
+                state.beforeInputStep, files[id].flatMap { try? Data(contentsOf: $0) }
             )
         }
         guard known else { throw PhotoStoreError.notInLibrary(id) }
@@ -329,8 +358,16 @@ public final class FakePhotoStore: PhotoStore {
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         let chunk = Data(repeating: 0x2A, count: max(bytes / steps, 1))
+        let chunkSize = given.map { max($0.count / steps, 1) } ?? 0
         for step in 1...steps {
-            try handle.write(contentsOf: chunk)
+            if let given {
+                // The last chunk takes what the division left over.
+                let start = min((step - 1) * chunkSize, given.count)
+                let end = step == steps ? given.count : min(step * chunkSize, given.count)
+                try handle.write(contentsOf: given[start..<end])
+            } else {
+                try handle.write(contentsOf: chunk)
+            }
             progress(.downloading(Double(step) / Double(steps)))
             await hook?(step)
             try Task.checkCancellation()
