@@ -24,6 +24,8 @@ public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
     public var jobIDs: [UUID]
     public var skipped: [QuickRunSkip]
     public let notes: [String]
+    /// Where the run was started from; decides whether its notification can be skipped.
+    public let origin: QuickRunOrigin
     /// How the finished jobs ended, by job ID.
     public var results: [UUID: QuickRunResult] = [:]
     /// Set once the run's notification was handed over, so it is never posted twice.
@@ -39,11 +41,16 @@ public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
         jobIDs = try container.decode([UUID].self, forKey: .jobIDs)
         skipped = try container.decode([QuickRunSkip].self, forKey: .skipped)
         notes = try container.decode([String].self, forKey: .notes)
+        origin = try container.decodeIfPresent(QuickRunOrigin.self, forKey: .origin) ?? .background
         results = try container.decodeIfPresent([UUID: QuickRunResult].self, forKey: .results) ?? [:]
         notified = try container.decodeIfPresent(Bool.self, forKey: .notified) ?? false
     }
 
-    public init(runID: UUID, createdAt: Date, jobIDs: [UUID], skipped: [QuickRunSkip], notes: [String]) {
+    public init(
+        runID: UUID, createdAt: Date, jobIDs: [UUID], skipped: [QuickRunSkip], notes: [String],
+        origin: QuickRunOrigin = .background
+    ) {
+        self.origin = origin
         self.runID = runID
         self.createdAt = createdAt
         self.jobIDs = jobIDs

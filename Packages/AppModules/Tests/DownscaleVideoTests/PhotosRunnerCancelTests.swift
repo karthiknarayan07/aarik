@@ -8,7 +8,7 @@ import Testing
 
 /// Holds the task a test cancels from inside a callback; a cancel asked for before the task is set happens as soon
 /// as it is.
-private final class CancelSwitch: Sendable {
+final class CancelSwitch: Sendable {
     private struct State {
         var task: Task<JobState, any Error>?
         var wanted = false

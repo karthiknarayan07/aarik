@@ -67,6 +67,35 @@ public struct PhotosDownscaleRunner: JobRunner {
     static let savedNote = "Saved to Photos as a new video"
     static let recentlyDeletedNote = "Original will move to Recently Deleted"
     static let originalChanged = "The original changed during conversion"
+    static let movedNote = "Original moved to Recently Deleted"
+
+    /// Records on a finished job that its original was kept out of the batch, and why.
+    public static func markOriginalKept(_ outcome: inout JobOutcome, because reason: String) {
+        outcome.notes.removeAll { $0 == recentlyDeletedNote }
+        if !outcome.warnings.contains(reason) { outcome.warnings.append(reason) }
+    }
+
+    /// Records on a finished job that its original was already gone from Photos when the batch ran.
+    public static func markOriginalGone(_ outcome: inout JobOutcome) {
+        clearKeptWarnings(&outcome)
+        outcome.notes.removeAll { $0 == recentlyDeletedNote }
+        if !outcome.notes.contains(goneNote) { outcome.notes.append(goneNote) }
+    }
+
+    private static func clearKeptWarnings(_ outcome: inout JobOutcome) {
+        let messages = Set(PendingBlock.allCases.map(\.message))
+        outcome.warnings.removeAll { messages.contains($0) }
+    }
+
+    static let goneNote = "Original no longer in Photos"
+
+    /// Records on a finished job that its original was moved to Recently Deleted.
+    public static func markOriginalMoved(_ outcome: inout JobOutcome) {
+        outcome.replacedOriginal = true
+        clearKeptWarnings(&outcome)
+        outcome.notes.removeAll { $0 == recentlyDeletedNote || $0 == movedNote }
+        outcome.notes.append(movedNote)
+    }
 
     public func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
         try await run(job, progress: progress, phase: { _ in })
@@ -91,6 +120,20 @@ public struct PhotosDownscaleRunner: JobRunner {
         guard let id = PhotoAssetURL.identifier(from: job.source) else { throw PhotosRunnerError.notAPhotosJob }
         let destination = settings.photosDestination ?? .newAsset
         let fetcher = PhotoInputFetcher(store: store)
+
+        // A job put back in the queue after its copy was saved (a crash, or a quit) carries on from there: it never
+        // saves a second copy.
+        if let saved = pendingDeletions.savedCopy(for: job.id), saved.originalID == id {
+            switch destination {
+            case .folder: break
+            case .newAsset, .replace:
+                if let state = try await resume(
+                    job, saved: saved, replace: destination == .replace, fetcher: fetcher, phase: phase)
+                {
+                    return state
+                }
+            }
+        }
 
         // What Photos has now: gone, or spatial, ends the job before anything is downloaded.
         let queued = try await fetcher.asset(id: id)
@@ -182,7 +225,6 @@ public struct PhotosDownscaleRunner: JobRunner {
         phase(Self.savingPhase)
         progress(0)
         var warnings = converted.warnings
-        var notes = converted.notes
         var albums: [String] = []
         do {
             albums = try await store.albums(containing: id)
@@ -198,85 +240,160 @@ public struct PhotosDownscaleRunner: JobRunner {
                 expectedPixelSize: Self.displaySize(of: converted.outputInventory))
         }
         progress(1)
-        notes.append(Self.savedNote)
 
+        var outcome = JobOutcome(
+            output: PhotoAssetURL.url(for: newID), bytesBefore: input.bytes, bytesAfter: converted.outputSize,
+            report: converted.report, replacedOriginal: false, warnings: warnings,
+            notes: converted.notes + [Self.savedNote], source: job.source)
+        // From here a second attempt must not save again, so the saved copy is written down at once.
+        pendingDeletions.markSaved(
+            SavedCopy(
+                jobID: job.id, originalID: id, newID: newID, outcome: outcome,
+                originalModified: current.modificationDate, originalHadAdjustments: current.hasAdjustments))
         if replace {
-            if !warnings.isEmpty {
-                warnings.append(Self.keptBecause("the copy couldn't be verified"))
-            } else if let problem = try await prepareReplace(
-                job, id: id, input: input, current: current, newID: newID, jobFolder: jobFolder, fetcher: fetcher,
-                phase: phase)
-            {
-                warnings.append(problem)
-            } else {
-                notes.append(Self.recentlyDeletedNote)
-            }
+            try await finishReplace(
+                job, id: id, outcome: &outcome, input: input, jobFolder: jobFolder, fetcher: fetcher, phase: phase)
         }
-        return .completed(
-            JobOutcome(
-                output: PhotoAssetURL.url(for: newID), bytesBefore: input.bytes, bytesAfter: converted.outputSize,
-                report: converted.report, replacedOriginal: false, warnings: warnings, notes: notes,
-                source: job.source))
+        return .completed(outcome)
     }
 
-    /// The Replace steps after the new video is saved and checked: the original is still the one that was
-    /// converted, its backup is written when that is on, and only then it is recorded as pending deletion.
-    /// Returns the warning saying why the original was kept, or nil when it was recorded.
-    private func prepareReplace(
-        _ job: Job, id: String, input: FetchedInput, current: PhotoAsset, newID: String, jobFolder: URL,
-        fetcher: PhotoInputFetcher, phase: @escaping @Sendable (String?) -> Void
-    ) async throws -> String? {
-        guard await originalIsUnchanged(id: id, since: current, fetcher: fetcher) else {
-            return Self.originalChanged
+    // MARK: - Carrying on after a crash or a quit
+
+    /// The job's copy was saved by an earlier attempt that didn't finish. Returns the finished job, or nil when the
+    /// copy is no longer in Photos (the user removed it), so the video is converted again from the start.
+    private func resume(
+        _ job: Job, saved: SavedCopy, replace: Bool, fetcher: PhotoInputFetcher,
+        phase: @escaping @Sendable (String?) -> Void
+    ) async throws -> JobState? {
+        do {
+            _ = try await fetcher.asset(id: saved.newID)
+        } catch PhotoFetchError.notInLibrary {
+            pendingDeletions.forgetSavedCopy(forJob: job.id)
+            return nil
         }
-        // A cancel from here on ends the job as cancelled: the original is not recorded, and nothing is left behind
-        // (the new video was already saved and checked, so it stays).
+        var outcome = saved.outcome
+        guard replace else { return .completed(outcome) }
+        // The original may be gone by now; the copy is saved, so the job still finishes, with nothing to delete.
+        do {
+            _ = try await fetcher.asset(id: saved.originalID)
+        } catch PhotoFetchError.notInLibrary {
+            return .completed(outcome)
+        }
+        if pendingDeletions.all.contains(where: { $0.assetID == saved.originalID && $0.jobID == job.id }) {
+            if !outcome.notes.contains(Self.recentlyDeletedNote) { outcome.notes.append(Self.recentlyDeletedNote) }
+            return .completed(outcome)
+        }
+        let jobFolder = try workFolder.create(for: job.id)
+        defer { workFolder.remove(jobID: job.id) }
+        try await finishReplace(
+            job, id: saved.originalID, outcome: &outcome, input: nil, jobFolder: jobFolder, fetcher: fetcher,
+            phase: phase)
+        return .completed(outcome)
+    }
+
+    // MARK: - Replace
+
+    /// The Replace steps after the new video is saved and checked: adds to `outcome` the note that the original will
+    /// move to Recently Deleted, or the warning saying why it was kept.
+    private func finishReplace(
+        _ job: Job, id: String, outcome: inout JobOutcome, input: FetchedInput?, jobFolder: URL,
+        fetcher: PhotoInputFetcher, phase: @escaping @Sendable (String?) -> Void
+    ) async throws {
+        if !outcome.warnings.isEmpty {
+            outcome.warnings.append(Self.keptBecause("the copy couldn't be verified"))
+        } else if let problem = try await prepareReplace(
+            job, id: id, input: input, jobFolder: jobFolder, fetcher: fetcher, phase: phase)
+        {
+            outcome.warnings.append(problem)
+        } else {
+            outcome.notes.append(Self.recentlyDeletedNote)
+        }
+    }
+
+    /// The original is still the one that was converted, its backup is written when that is on, and only then it is
+    /// recorded as pending deletion. Returns the warning saying why the original was kept, or nil when it was
+    /// recorded.
+    ///
+    /// A cancel from here on ends the job as cancelled: the original is not recorded, and nothing is left behind
+    /// (the new video was already saved and checked, so it stays). That includes the backup written in this step: it
+    /// would have no record to say what it was for, so it is removed again. (A backup of an original that changed
+    /// meanwhile is kept: it is a whole, checked copy, and the job says why the original was kept.)
+    private func prepareReplace(
+        _ job: Job, id: String, input: FetchedInput?, jobFolder: URL, fetcher: PhotoInputFetcher,
+        phase: @escaping @Sendable (String?) -> Void
+    ) async throws -> String? {
+        guard let saved = pendingDeletions.savedCopy(for: job.id) else { return Self.originalChanged }
+        guard await originalIsUnchanged(id: id, saved: saved, fetcher: fetcher) else { return Self.originalChanged }
         try Task.checkCancellation()
-        if let backup = originalsBackup() {
-            do {
-                try await backUp(
-                    input: input, id: id, into: backup.folder, jobFolder: jobFolder, fetcher: fetcher, phase: phase)
-            } catch let error as OriginalsBackupError {
-                return Self.keptBecause(error.keptBecause)
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch PhotoFetchError.cancelled {
-                throw CancellationError()
-            } catch {
-                return Self.keptBecause("its original couldn't be downloaded for the backup")
+        var writtenBackup: URL?
+        do {
+            if let backup = originalsBackup() {
+                if let existing = saved.backup, FileManager.default.fileExists(atPath: existing.path) {
+                    // An earlier attempt already wrote it.
+                } else {
+                    do {
+                        let url = try await backUp(
+                            input: input, id: id, into: backup.folder, jobFolder: jobFolder, fetcher: fetcher,
+                            phase: phase)
+                        writtenBackup = url
+                        pendingDeletions.setBackup(url, forJob: job.id)
+                    } catch let error as OriginalsBackupError {
+                        return Self.keptBecause(error.keptBecause)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch PhotoFetchError.cancelled {
+                        throw CancellationError()
+                    } catch {
+                        return Self.keptBecause("its original couldn't be downloaded for the backup")
+                    }
+                }
+                try Task.checkCancellation()
+                guard await originalIsUnchanged(id: id, saved: saved, fetcher: fetcher) else {
+                    return Self.originalChanged
+                }
             }
             try Task.checkCancellation()
-            guard await originalIsUnchanged(id: id, since: current, fetcher: fetcher) else {
-                return Self.originalChanged
+            pendingDeletions.add(
+                assetID: id, jobID: job.id, replacedBy: saved.newID, originalModified: saved.originalModified,
+                originalHadAdjustments: saved.originalHadAdjustments)
+            return nil
+        } catch is CancellationError {
+            if let writtenBackup {
+                try? FileManager.default.removeItem(at: writtenBackup)
+                pendingDeletions.setBackup(nil, forJob: job.id)
             }
+            throw CancellationError()
         }
-        try Task.checkCancellation()
-        pendingDeletions.add(assetID: id, jobID: job.id, replacedBy: newID)
-        return nil
     }
 
-    /// The original is as it was when it was fetched: still in Photos, same edit state and modification date.
-    private func originalIsUnchanged(id: String, since: PhotoAsset, fetcher: PhotoInputFetcher) async -> Bool {
+    /// The original is as it was when the copy was made from it: still in Photos, same edit state and modification
+    /// date.
+    private func originalIsUnchanged(id: String, saved: SavedCopy, fetcher: PhotoInputFetcher) async -> Bool {
         guard let now = try? await fetcher.asset(id: id) else { return false }
-        return now.modificationDate == since.modificationDate && now.hasAdjustments == since.hasAdjustments
+        return now.modificationDate == saved.originalModified && now.hasAdjustments == saved.originalHadAdjustments
     }
 
-    /// Copies the original resource into the backup folder. The first fetch is the original itself unless the
-    /// video was edited; then it is Photos' rendering, and the original is fetched again.
+    /// Copies the original resource into the backup folder and returns the copy. The first fetch is the original
+    /// itself unless the video was edited; then it is Photos' rendering, and the original is fetched again. Without
+    /// the first fetch (a job carrying on after a restart) the original is fetched here.
     private func backUp(
-        input: FetchedInput, id: String, into folder: URL, jobFolder: URL, fetcher: PhotoInputFetcher,
+        input: FetchedInput?, id: String, into folder: URL, jobFolder: URL, fetcher: PhotoInputFetcher,
         phase: @escaping @Sendable (String?) -> Void
-    ) async throws {
+    ) async throws -> URL {
         var original = input
         // The copy goes to the backup volume, and an edited video's original is fetched into the job's folder first.
-        var needs = [SpaceNeed(url: folder, bytes: input.bytes)]
-        if input.isEditedVersion { needs.append(SpaceNeed(url: jobFolder, bytes: input.bytes)) }
-        do { try core.diskSpace.verify(needs) } catch { throw OriginalsBackupError.notEnoughSpace }
-        if input.isEditedVersion {
+        // (Without the first fetch the size isn't known yet; `core.backUp` checks once the original is fetched.)
+        if let input {
+            var needs = [SpaceNeed(url: folder, bytes: input.bytes)]
+            if input.isEditedVersion { needs.append(SpaceNeed(url: jobFolder, bytes: input.bytes)) }
+            do { try core.diskSpace.verify(needs) } catch { throw OriginalsBackupError.notEnoughSpace }
+        }
+        if input == nil || input?.isEditedVersion == true {
             phase(Self.backupPhase)
             original = try await fetcher.fetchOriginal(id: id, into: jobFolder)
         }
-        _ = try core.backUp(original.url, byteSize: original.bytes, into: folder)
+        guard let original else { throw OriginalsBackupError.copyFailed }
+        return try core.backUp(original.url, byteSize: original.bytes, into: folder)
     }
 
     // MARK: - Free space

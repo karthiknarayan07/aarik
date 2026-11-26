@@ -42,7 +42,7 @@ let package = Package(
         ),
         .target(
             name: "DownscaleVideo",
-            dependencies: ["AppUI", "MediaEngine", "AppCore", "PhotosLibrary"],
+            dependencies: ["AppUI", "MediaEngine", "AppCore", "LocalLibrary", "PhotosLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -97,7 +97,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DownscaleVideoTests",
-            dependencies: ["DownscaleVideo", "PhotosLibrary", "MediaTestSupport"],
+            dependencies: ["DownscaleVideo", "LocalLibrary", "PhotosLibrary", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // XCTest, not Swift Testing: `measure(metrics:)` and the clock and memory metrics are XCTest's.
