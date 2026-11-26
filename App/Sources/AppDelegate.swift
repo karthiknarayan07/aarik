@@ -17,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// The main window lives as long as the app; closing it only hides it.
     private var windowController: MainWindowController?
     private let menuFixups = MenuFixups()
+    private var statusItemController: StatusItemController?
+    /// Kept for the app's lifetime: `NSApp.servicesProvider` doesn't retain it.
+    private var serviceProvider: ServiceProvider?
+    /// Movies from the Services menu before launch finished; always a quick run, never the window.
+    private var serviceFiles = LaunchBuffer<URL>()
     /// Files opened (Dock drop, Open With) before launch finished; delivered once it has, exactly once.
     private var openedFiles = LaunchBuffer<URL>()
     /// Quick-run notification responses that arrived before launch finished (a click that relaunched the app).
@@ -49,6 +54,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Notification) {
         windowController = MainWindowController(model: model)
         menuFixups.sweep()
+        let statusItem = StatusItemController(model: model)
+        statusItem.start()
+        statusItemController = statusItem
+        let provider = ServiceProvider { [weak self] urls in self?.receiveServiceFiles(urls) }
+        serviceProvider = provider
+        NSApp.servicesProvider = provider
+        NSUpdateDynamicServices()
         // Photos input left behind by a crash or quit is cleared before the queue starts, so a job can't create
         // its folder while the sweep runs. Opened files and notification responses stay buffered until the queue
         // runs, so a quick run can't start it early.
@@ -77,16 +89,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// notification click that needs the window) shows it.
     private func routeLaunch() {
         let files = openedFiles.launchFinished()
+        let serviced = serviceFiles.launchFinished()
         let responses = notificationResponses.launchFinished()
         // An intent run that started this launch is a quick run: the window stays hidden. One that arrives later
         // leaves the window as it is.
         let intents = intentRuns.launchFinished()
         let plan = LaunchWindowPlan.plan(
-            openedFileCount: files.count, hasNotificationResponse: !responses.isEmpty, hasIntentRun: !intents.isEmpty)
+            openedFileCount: files.count + serviced.count, hasNotificationResponse: !responses.isEmpty,
+            hasIntentRun: !intents.isEmpty)
         if plan == .show {
             model.showMainWindow()
         }
         if !files.isEmpty { model.openFiles(files) }
+        if !serviced.isEmpty { model.runQuickly(serviced) }
         for runID in responses { Task { await model.reviewQuickRun(runID) } }
     }
 
@@ -104,6 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func application(_ application: NSApplication, open urls: [URL]) {
         let now = openedFiles.receive(urls)
         if !now.isEmpty { model.openFiles(now) }
+    }
+
+    /// The Services menu's "Shrink Videos": always a quick run. A service that launched the app waits for launch.
+    private func receiveServiceFiles(_ urls: [URL]) {
+        let now = serviceFiles.receive(urls)
+        if !now.isEmpty { model.runQuickly(now) }
     }
 
     /// A click on a quick run's notification (or its Review action) shows the skipped files.

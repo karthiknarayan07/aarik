@@ -49,7 +49,9 @@ public actor QuickRun {
     }
 
     /// Plans `urls` with the saved settings (or `overrides`), queues what converts cleanly and remembers the run.
-    public func run(urls: [URL], overrides: QuickRunOverrides?) async -> QuickRunReceipt {
+    public func run(
+        urls: [URL], overrides: QuickRunOverrides?, origin: QuickRunOrigin = .background
+    ) async -> QuickRunReceipt {
         let saved = await settings()
         let preset = overrides?.preset ?? saved.preset
         let (destination, notes) = Self.destination(for: overrides?.saveLocation ?? saved.saveLocation)
@@ -67,13 +69,16 @@ public actor QuickRun {
             unreadable += batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
         }
         return await enqueue(
-            jobs, order: unique, skipped: skippedByPlan + unreadable, notes: notes, startsQueue: saved.startsQueue)
+            jobs, order: unique, skipped: skippedByPlan + unreadable, notes: notes, startsQueue: saved.startsQueue,
+            origin: origin)
     }
 
     /// Plans Photos videos like `run(urls:overrides:)` plans files. Nothing is downloaded: what a video would lose
     /// comes from what Photos says about it (`PhotosLossCheck`), and the run keeps the original as is when it finds
     /// more. Copies go to Photos as new videos, or to the folder in `overrides`; never Replace.
-    public func runPhotos(_ videos: [QuickRunPhotoVideo], overrides: QuickRunOverrides?) async -> QuickRunReceipt {
+    public func runPhotos(
+        _ videos: [QuickRunPhotoVideo], overrides: QuickRunOverrides?, origin: QuickRunOrigin = .background
+    ) async -> QuickRunReceipt {
         let saved = await settings()
         let preset = overrides?.preset ?? saved.preset
         var seen = Set<String>()
@@ -113,17 +118,20 @@ public actor QuickRun {
         }
         return await enqueue(
             jobs, order: unique.map { PhotoAssetURL.url(for: $0.assetID) }, skipped: skipped, notes: notes,
-            startsQueue: saved.startsQueue)
+            startsQueue: saved.startsQueue, origin: origin)
     }
 
     /// Remembers the run, adds its jobs to the queue (skipping what is already in it) and starts the queue.
     private func enqueue(
-        _ jobs: [Job], order: [URL], skipped skippedByPlan: [QuickRunSkip], notes: [String], startsQueue: Bool
+        _ jobs: [Job], order: [URL], skipped skippedByPlan: [QuickRunSkip], notes: [String], startsQueue: Bool,
+        origin: QuickRunOrigin
     ) async -> QuickRunReceipt {
         // Remembered before the jobs exist in the queue, so the app never sees them as the window's own jobs, and
         // held back from `refresh` until the run is complete.
         let runID = UUID()
-        store.add(QuickRunRecord(runID: runID, createdAt: now(), jobIDs: jobs.map(\.id), skipped: [], notes: notes))
+        store.add(
+            QuickRunRecord(
+                runID: runID, createdAt: now(), jobIDs: jobs.map(\.id), skipped: [], notes: notes, origin: origin))
         starting.insert(runID)
         let added = await queue.enqueue(jobs)
         let addedSources = Set(added.map(\.source))
@@ -346,7 +354,9 @@ public actor QuickRun {
         if failed > 0 { sentences.append("\(failed) failed.") }
         if sentences.isEmpty { sentences.append("Nothing was converted.") }
         sentences += record.notes
-        return QuickRunNotice(runID: record.runID, title: "Quick run finished", body: sentences.joined(separator: " "))
+        return QuickRunNotice(
+            runID: record.runID, title: "Quick run finished", body: sentences.joined(separator: " "),
+            origin: record.origin, tally: QuickRunTally(converted: converted, skipped: skipped, failed: failed))
     }
 }
 

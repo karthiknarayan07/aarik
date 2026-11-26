@@ -68,4 +68,15 @@ public enum NotificationPolicy {
     public static func shouldPost(appIsActive: Bool, windowOnScreen: Bool) -> Bool {
         !(appIsActive && windowOnScreen)
     }
+
+    /// The rule for one quick run's notification. A run started from the menu bar item reports itself in the
+    /// popover, so its banner is skipped only while the popover is open; any other run follows the window rule.
+    public static func shouldPost(
+        origin: QuickRunOrigin, appIsActive: Bool, windowOnScreen: Bool, popoverVisible: Bool
+    ) -> Bool {
+        switch origin {
+        case .statusItem: !popoverVisible
+        case .background: shouldPost(appIsActive: appIsActive, windowOnScreen: windowOnScreen)
+        }
+    }
 }
