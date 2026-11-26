@@ -76,7 +76,7 @@ struct IOSRootView: View {
             restore()
             routePending()
         }
-        .onChange(of: shell.pendingRoute) { routePending() }
+        .onChange(of: shell.handoff) { routePending() }
         .onChange(of: hasOnboarded) { routePending() }
         .onChange(of: tab) { storedTab = tab.rawValue }
         .onChange(of: shell.convert.assistant.isAvailable) {
@@ -96,9 +96,7 @@ struct IOSRootView: View {
     /// Brings a staged hand-off to Convert's Queue (Browse tab, Convert pushed, Queue on top). It waits for the
     /// onboarding to finish and for the restored tab and stack, which would otherwise replace it on a cold launch.
     private func routePending() {
-        guard hasOnboarded, hasRestored, let route = shell.pendingRoute else { return }
-        shell.pendingRoute = nil
-        open(route)
+        if let route = shell.handoff.take(hasOnboarded: hasOnboarded, hasRestored: hasRestored) { open(route) }
     }
 
     private func restore() {
