@@ -55,8 +55,8 @@ final class RealAssistantSmokeTests: AppTestCase {
         }
         XCTAssertTrue(sent, "\(text) wasn't sent")
         _ = stopButton.waitForExistence(timeout: 20)
-        // While a confirmation card waits for a tap the answer is still "generating" (Stop stays), so a card also ends
-        // the wait; `onCard` then decides what to do with it.
+        // A confirmation card waiting for a tap shows Send again (the answer isn't being written), so a card ends the
+        // wait too; it is cancelled below, after which the model answers once more.
         let cancel = app.buttons["Cancel"].firstMatch
         let settled = NSPredicate { [stopButton] _, _ in !stopButton.exists || cancel.exists }
         let done = XCTNSPredicateExpectation(predicate: settled, object: nil)
@@ -69,6 +69,7 @@ final class RealAssistantSmokeTests: AppTestCase {
             XCTAssertTrue(
                 element(labelContaining: "Cancelled").waitForExistence(timeout: 5),
                 "The card didn't show it was cancelled")
+            _ = stopButton.waitForExistence(timeout: 10)
             let finished = XCTNSPredicateExpectation(
                 predicate: NSPredicate(format: "exists == false"), object: stopButton)
             XCTAssertEqual(XCTWaiter().wait(for: [finished], timeout: 120), .completed, "Stuck after Cancel")
@@ -108,6 +109,16 @@ final class RealAssistantSmokeTests: AppTestCase {
         XCTAssertTrue(
             tools.contains { $0.localizedCaseInsensitiveContains("Searched Library") },
             "No \"Searched Library\" tool-call row appeared; rows: \(tools)")
+
+        // 2b. Long-pressing the last reply offers Copy.
+        let lastReply = replies.element(boundBy: replies.count - 1)
+        XCTAssertTrue(lastReply.exists, "No reply to long-press")
+        lastReply.press(forDuration: 1.2)
+        let copy = app.buttons["Copy"].firstMatch
+        let offered = copy.waitForExistence(timeout: 5)
+        attachScreenshot("2b-copy-menu")
+        XCTAssertTrue(offered, "Long-pressing the reply didn't offer Copy")
+        if offered { copy.tap() }
 
         // 3. An action asks first; cancel and check nothing was queued.
         ask("Convert my biggest videos")
