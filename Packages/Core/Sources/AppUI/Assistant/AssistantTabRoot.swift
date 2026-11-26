@@ -145,6 +145,7 @@
             }
             .padding(.horizontal, 32)
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("assistant.empty")
         }
     }
 
@@ -201,6 +202,7 @@
                             .focused(isFocused)
                             .submitLabel(.send)
                             .onSubmit(send)
+                            .accessibilityIdentifier("assistant.composer")
                             .padding(.leading, 14)
                             .padding(.vertical, 10)
                         Button(action: isGenerating ? stop : send) {
@@ -213,6 +215,7 @@
                         }
                         .disabled(!isGenerating && !canSend)
                         .accessibilityLabel(isGenerating ? "Stop" : "Send")
+                        .accessibilityIdentifier("assistant.send")
                         .padding(5)
                     }
                     .frame(minHeight: buttonSize)

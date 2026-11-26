@@ -20,4 +20,24 @@ final class ShareHandoffTests: AppTestCase {
         XCTAssertTrue(
             tile(named: "handoff-fixture.mov").waitForExistence(timeout: 30), "the staged video wasn't picked up")
     }
+
+    /// A hand-off lands on Convert's Queue (Browse tab, Convert pushed, Queue on top), whichever tab was showing.
+    func testHandoffRoutesToTheQueue() throws {
+        let fixtures = try XCTUnwrap(fixtureDirectory, "UI_FIXTURES isn't set; run scripts/ios-ui-tests.sh")
+        launch(autoStart: false)
+        selectTab("Search")
+
+        let folder = handoffDirectory + "/" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(
+            atPath: fixtures + "/handoff-fixture.mov", toPath: folder + "/handoff-fixture.mov")
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+
+        XCTAssertTrue(app.navigationBars["Queue"].waitForExistence(timeout: 30), "the hand-off didn't open the Queue")
+        XCTAssertTrue(
+            tabBar.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Browse'")).firstMatch.isSelected,
+            "the Queue didn't open in the Browse tab")
+    }
 }

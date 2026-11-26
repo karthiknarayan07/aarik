@@ -74,11 +74,13 @@
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .padding(.leading, 48)
                     .accessibilityLabel("You said: \(text)")
+                    .accessibilityIdentifier("assistant.message.user")
             case .assistant(let text):
                 Text(Self.rendered(text))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.trailing, 24)
                     .accessibilityLabel("Assistant said: \(text)")
+                    .accessibilityIdentifier("assistant.message.assistant")
                     .accessibilityAddTraits(isStreaming ? .updatesFrequently : [])
             case .toolCall(let call):
                 ToolCallRow(call: call)
@@ -162,14 +164,17 @@
                     HStack(spacing: 10) {
                         Button("Cancel", action: cancel)
                             .buttonStyle(.glass)
+                            .accessibilityIdentifier("assistant.cancel")
                         Button(confirmation.card.confirmLabel, action: confirm)
                             .buttonStyle(.glassProminent)
+                            .accessibilityIdentifier("assistant.confirm")
                     }
                     .controlSize(.large)
                 } else if let status = ConfirmationText.status(confirmation) {
                     Text(status)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(confirmation.state == .confirmed ? Color.green : Color.secondary)
+                        .accessibilityIdentifier("assistant.confirmationStatus")
                 }
             }
             .padding(14)
@@ -179,6 +184,7 @@
             .sensoryFeedback(.success, trigger: confirmation.state) { _, new in new == .confirmed }
             .sensoryFeedback(.impact(weight: .light), trigger: confirmation.state) { _, new in new == .cancelled }
             .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("assistant.confirmation")
         }
     }
 #endif

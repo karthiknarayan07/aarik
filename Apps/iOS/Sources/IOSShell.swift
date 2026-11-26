@@ -31,6 +31,12 @@ final class IOSShell {
         defaults: UserDefaults = .standard,
         photoStore: any PhotoStore = PhotoKitStore()
     ) {
+        #if DEBUG
+            // UI tests of the introduction start from a launch that has never shown it (`-uiTestingFreshOnboarding`).
+            if ProcessInfo.processInfo.arguments.contains("-uiTestingFreshOnboarding") {
+                defaults.set(false, forKey: IOSOnboarding.completedKey)
+            }
+        #endif
         let services = AppServices(
             directory: directory, defaults: defaults, photoStore: photoStore,
             assistantClient: AppServices.assistantClient(arguments: ProcessInfo.processInfo.arguments))
