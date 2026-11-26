@@ -9,7 +9,6 @@ struct MainApp: App {
     var body: some Scene {
         WindowGroup {
             IOSRootView(shell: shell)
-                .accessibilityIdentifier("root")
                 .task { await shell.start() }
                 .onChange(of: scenePhase) { _, phase in
                     shell.handleScenePhase(phase)

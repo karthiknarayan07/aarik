@@ -13,7 +13,8 @@ final class FilesImportTests: AppTestCase {
         add.tap()
 
         // iPhone shows a Recents/Browse tab bar; iPad shows the locations sidebar directly.
-        let browse = app.buttons["Browse"].firstMatch
+        // The picker has its own tab bar; the app's own Browse tab is also in the hierarchy, so scope to the picker's.
+        let browse = app.tabBars["DOC.browsingModeTabBar"].buttons["Browse"].firstMatch
         let onMyDevice = app.cells.matching(NSPredicate(format: "label BEGINSWITH 'On My i'")).firstMatch
         if !(browse.waitForExistence(timeout: 15) || onMyDevice.exists) { dump("document picker") }
         XCTAssertTrue(browse.exists || onMyDevice.exists, "the document picker didn't open")
