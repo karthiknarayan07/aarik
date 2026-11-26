@@ -1,0 +1,16 @@
+{
+  "machines" : {
+    "iPhone18,3/8" : {
+      "iosConversion4K" : {
+        "cpuSeconds" : 128.1391915,
+        "peakMemoryMB" : 254.36988830566406,
+        "seconds" : 23.330965916
+      },
+      "iosLaunch" : {
+        "cpuSeconds" : 6.1381205,
+        "peakMemoryMB" : 44.60394287109375,
+        "seconds" : 7.009326959
+      }
+    }
+  }
+}

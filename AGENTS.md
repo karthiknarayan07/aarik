@@ -21,7 +21,7 @@ Dependencies point one way: Apps -> Tools -> Core. Core never imports a tool, a 
   - `ConvertUI`: its SwiftUI inspector views. `QuickRunService`: Shortcuts, Services, menu bar and Dock entry points
     (only the Mac app links it).
 - `Apps/macOS`: the SwiftUI + AppKit shell (`Apps/macOS/Sources`, `App.xcodeproj`, Sparkle updater `Updater.swift`).
-  `Apps/iOS`: the iOS app (`App.xcodeproj`, scheme `App-iOS`, with the share and widget extensions).
+  `Apps/iOS`: the iOS app (`App.xcodeproj`, scheme `App-iOS`, with the share and widget extensions, `UnitTests` and `UITests`).
   `App.xcworkspace` at the root holds both projects and the packages; the Mac scheme is `App`.
 - `Config/*.xcconfig` (`macOS.xcconfig`, `iOS.xcconfig`, `Brand.xcconfig`): build settings and brand values.
   `.github/workflows`: CI and release.
@@ -46,6 +46,7 @@ xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -derivedD
 xcodebuild -workspace App.xcworkspace -scheme App-iOS -destination 'generic/platform=iOS Simulator' \
   CODE_SIGNING_ALLOWED=NO build
 scripts/run-app.sh                                   # build Debug and open it
+scripts/ios-ui-tests.sh [--udid UDID] [--perf]       # iOS unit tests + XCUITests on one Simulator (generated fixtures)
 ```
 
 Format with `swift format -i <files>`. Do not open or launch the app from an automated run unless asked.
