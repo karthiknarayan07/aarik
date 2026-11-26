@@ -35,7 +35,7 @@ private struct GeneralSettings: View {
                 Text("Start the queue automatically")
                 Text("When off, the queue waits until you press Resume.")
             }
-            Section("Performance") {
+            Section {
                 Picker("Conversion Speed", selection: $speed) {
                     ForEach(SpeedSetting.allCases) { option in
                         Text(option.title).tag(option)
@@ -43,11 +43,12 @@ private struct GeneralSettings: View {
                 }
                 .pickerStyle(.radioGroup)
                 .accessibilityLabel("Conversion Speed")
-                // What the selected option does, like the explanatory text under a control in System Settings.
+                .accessibilityHint(speed.summary)
+            } header: {
+                Text("Performance")
+            } footer: {
+                // What the selected option does, drawn by the grouped form like System Settings' explanatory text.
                 Text(speed.summary)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("\(speed.title): \(speed.summary)")
             }
             Section("Updates") {
                 if updater.isConfigured {
