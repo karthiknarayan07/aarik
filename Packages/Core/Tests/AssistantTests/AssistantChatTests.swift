@@ -245,6 +245,48 @@ struct AssistantChatTests {
         #expect(chat.items.map(\.content) == [.user("How much could I save?"), .assistant("About 38 GB.")])
     }
 
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func next() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            count += 1
+            return count
+        }
+    }
+
+    @Test(arguments: ["search_library{}", "  search_library{library:any}  ", "Sure. search_library{} done"])
+    func aToolCallWrittenAsTextIsNeverShownAndIsRetriedOnceWithANudge(written: String) async {
+        let calls = Calls()
+        let client = ScriptedChatClient { _ in
+            calls.next() == 1 ? [.text(written)] : [.text("You have 3 videos.")]
+        }
+        let chat = makeChat(client: client)
+        chat.send("How many videos do I have?")
+        await chat.waitUntilIdle()
+        #expect(client.requests.count == 2)
+        #expect(client.requests[1].instructions.hasSuffix(AssistantChat.toolNudge))
+        #expect(!client.requests[0].instructions.contains(AssistantChat.toolNudge))
+        #expect(chat.items.map(\.content) == [.user("How many videos do I have?"), .assistant("You have 3 videos.")])
+    }
+
+    @Test func aToolCallWrittenAsTextTwiceShowsNothingRaw() async {
+        let client = ScriptedChatClient { _ in [.text("search_library{}")] }
+        let chat = makeChat(client: client)
+        chat.send("How many videos do I have?")
+        await chat.waitUntilIdle()
+        #expect(client.requests.count == 2)
+        #expect(chat.items.map(\.content) == [.user("How many videos do I have?")])
+    }
+
+    @Test func ordinaryAnswersAreNotTakenForToolCalls() {
+        let names = ["search_library"]
+        #expect(!AssistantChat.looksLikeToolCall("You have 3 videos (1.2 GB).", toolNames: names))
+        #expect(!AssistantChat.looksLikeToolCall("Use search_library to look.", toolNames: names))
+        #expect(AssistantChat.looksLikeToolCall("search_library{}", toolNames: names))
+    }
+
     @Test func aSecondRefusalShowsTheNotice() async {
         let client = ScriptedChatClient { _ in [.text("x")] }
         client.failNext(.guardrail, .guardrail)

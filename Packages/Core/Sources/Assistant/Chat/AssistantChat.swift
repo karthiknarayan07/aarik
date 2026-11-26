@@ -81,6 +81,16 @@ public final class AssistantChat {
     static let cancelledNote =
         "The user cancelled; nothing changed. Acknowledge in one short sentence. Don't repeat the earlier answer."
 
+    /// Added to the instructions for the retry after the model wrote a tool call as text.
+    static let toolNudge =
+        "\nCall the tool itself. Never write a tool's name or braces in your reply; write only the answer."
+
+    /// Whether a reply is a tool call written out as text, such as `search_library{}`, not an answer.
+    static func looksLikeToolCall(_ text: String, toolNames: [String]) -> Bool {
+        if text.range(of: #"^\s*\w+\s*\{.*\}\s*$"#, options: .regularExpression) != nil { return true }
+        return toolNames.contains { text.contains("\($0){") || text.contains("\($0) {") }
+    }
+
     /// The short prompt for the one retry after a refusal: no history, no examples, only the job.
     static let simpleInstructions = """
         You help someone manage the video files in their own library on this device. Use the tools to look things \
@@ -200,20 +210,37 @@ public final class AssistantChat {
         var replyID: UUID?
         var failure: (any Error)?
         // A refusal is often the model misjudging an ordinary question, so it gets one more try with a plainer prompt.
-        for attempt in 0..<2 {
-            let simplified = attempt == 1
+        // A reply that is a tool call written out as text gets one more try with a nudge, and is never shown.
+        var simplified = false
+        var nudged = false
+        var attempt = 0
+        while attempt < 3 {
+            attempt += 1
+            let names = tools().map(\.name)
             let request = ChatRequest(
                 prompt: prompt,
                 instructions: (simplified ? Self.simpleInstructions : Self.instructions(today: now()))
-                    + (context?.instructions ?? ""),
+                    + (context?.instructions ?? "") + (nudged ? Self.toolNudge : ""),
                 history: simplified ? [] : history, tools: tools(),
                 invoke: { [weak self] name, arguments in
                     await self?.handleToolCall(name, arguments, in: id) ?? "The assistant is closed."
                 })
             failure = nil
+            var wroteToolCall = false
             do {
                 for try await text in client.streamChat(request) {
                     if Task.isCancelled { break }
+                    if Self.looksLikeToolCall(text, toolNames: names) {
+                        wroteToolCall = true
+                        // Nothing of it is shown: a partial reply that turned out to be a call is removed.
+                        if let existing = replyID {
+                            items.removeAll { $0.id == existing }
+                            store.remove([existing], in: id)
+                            replyID = nil
+                        }
+                        continue
+                    }
+                    if wroteToolCall { continue }
                     if let existing = replyID {
                         update(existing) { $0.content = .assistant(text) }
                     } else if !text.isEmpty {
@@ -224,7 +251,16 @@ public final class AssistantChat {
             } catch {
                 failure = error
             }
-            guard (failure as? AssistantError) == .guardrail, replyID == nil, !Task.isCancelled else { break }
+            if Task.isCancelled { break }
+            if wroteToolCall, replyID == nil, !nudged {
+                nudged = true
+                continue
+            }
+            if (failure as? AssistantError) == .guardrail, replyID == nil, !simplified {
+                simplified = true
+                continue
+            }
+            break
         }
         if let failure { append(.notice(Self.message(for: failure)), in: id) }
         // Whatever was written stays; a reply that ended up empty leaves no row.
