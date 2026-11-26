@@ -180,7 +180,22 @@
             timeline.observe([begun], now: Date().addingTimeInterval(-20))
             timeline.observe([queued[0]], now: Date())
             let selected = library[0]
+            let menuBar = MenuBarModules(activity: ActivitySummary(jobs: queued), isPaused: false)
             for dark in [false, true] {
+                try Self.write(
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Menu Bar", systemImage: "arrow.down.right.and.arrow.up.left.circle.fill")
+                            .font(.headline)
+                        MenuBarStatusModules(
+                            modules: menuBar, currentName: "Lake House.mov", currentPhase: nil, pauseText: nil,
+                            spokenStatus: "", togglePause: {})
+                        MenuBarDropModule(isTargeted: false, choose: {})
+                        Label("Open Main Window", systemImage: "macwindow")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .controlModule()
+                    }
+                    .padding(14),
+                    name: "menu-bar", size: CGSize(width: 320, height: 420), dark: dark, folder: folder)
                 if let sharp = Self.frame(softened: false), let soft = Self.frame(softened: true) {
                     try Self.write(
                         BeforeAfterSlider(before: sharp, after: soft).padding(16),
