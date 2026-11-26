@@ -6,7 +6,8 @@
 #
 # Groups: mac ios packages lint hygiene brand stale   (default: everything)
 # Env:    SIM_UDID (force a simulator), MAC_SCHEME (default App), IOS_SCHEME (default App-iOS),
-#         VERIFY_DIR (logs and derived data, default .build/verify)
+#         VERIFY_DIR (logs and derived data, default .build/verify),
+#         IOS_SKIP_TESTING (space-separated -skip-testing identifiers for "iOS app test", e.g. "AppUITests")
 # Compatible with the bash 3.2 that ships with macOS.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -14,7 +15,7 @@ VERIFY_DIR=${VERIFY_DIR:-$PWD/.build/verify}
 ONLY=""
 REPEAT=1
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
   case $1 in
     --only) ONLY=${2:?--only needs a group}; shift 2 ;;
@@ -141,8 +142,10 @@ mac_build() { # CONFIG
     -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 }
 ios_xcode() { # ACTION
+  local skip=() t
+  if [[ $1 == test ]]; then for t in ${IOS_SKIP_TESTING:-}; do skip+=("-skip-testing:$t"); done; fi
   xcodebuild "$1" -workspace "$WORKSPACE" -scheme "$IOS_SCHEME" -derivedDataPath "$VERIFY_DIR/derived-ios" \
-    -destination "id=$SIM" CODE_SIGNING_ALLOWED=NO
+    -destination "id=$SIM" CODE_SIGNING_ALLOWED=NO ${skip[@]+"${skip[@]}"}
 }
 
 for ((n = 1; n <= REPEAT; n++)); do

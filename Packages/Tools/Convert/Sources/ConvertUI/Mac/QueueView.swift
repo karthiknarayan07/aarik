@@ -162,7 +162,7 @@
                     Text(timeLeft)
                         .font(.title3.weight(.semibold))
                         .contentTransition(.numericText())
-                        .animation(reduceMotion ? nil : .smooth, value: timeLeft)
+                        .animation(Motion.animation(reduceMotion: reduceMotion), value: timeLeft)
                     Text("\(ActivityText.videos(jobs.count)) in the queue")
                         .font(.callout)
                         .foregroundStyle(.secondary)

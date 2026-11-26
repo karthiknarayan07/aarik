@@ -268,6 +268,7 @@ import Testing
         // Synthetic gradients encode efficiently below nominal target rates; 120 Mbps asks the fixture encoder for
         // plenty of headroom above the 15 Mbps 4K60 floor so Balanced (0.40x) compresses cleanly.
         options.videoBitRate = 120_000_000
+        options.maximumQuality = true
         options.masteringDisplay = Data([
             0x33, 0xC2, 0x86, 0xC4, 0x1D, 0x4C, 0x0B, 0xB8, 0x84, 0xD0, 0x3E, 0x80, 0x3D, 0x13, 0x40, 0x42,
             0x00, 0x98, 0x96, 0x80, 0x00, 0x00, 0x00, 0x32,

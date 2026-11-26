@@ -25,7 +25,7 @@ public struct ProgressRing<Center: View>: View {
                 .trim(from: 0, to: value)
                 .stroke(tint.gradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(reduceMotion ? nil : .smooth, value: value)
+                .animation(Motion.animation(reduceMotion: reduceMotion), value: value)
             center
         }
         .padding(lineWidth / 2)

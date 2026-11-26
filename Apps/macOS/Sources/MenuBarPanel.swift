@@ -67,7 +67,8 @@ struct MenuBarPanel: View {
             }
             // The symbol bounces once each time a video finishes.
             .symbolEffect(
-                .bounce, options: .nonRepeating, value: reduceMotion ? 0 : shell.services.activity.completed)
+                .bounce, options: .nonRepeating,
+                value: Motion.bounceTrigger(shell.services.activity.completed, reduceMotion: reduceMotion))
         }
         .font(.headline)
         .accessibilityElement(children: .ignore)

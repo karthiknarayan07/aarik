@@ -89,7 +89,7 @@ public struct SavingsHeader<Accessory: View>: View {
                     .monospacedDigit()
                     .foregroundStyle(.tint)
                     .contentTransition(.numericText())
-                    .animation(reduceMotion ? nil : .smooth, value: summary.couldFree)
+                    .animation(Motion.animation(reduceMotion: reduceMotion), value: summary.couldFree)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(summary.title)

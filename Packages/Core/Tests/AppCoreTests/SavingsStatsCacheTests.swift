@@ -84,6 +84,58 @@ import Testing
         #expect(await store.load()?.savedBytes == 800)
     }
 
+    // MARK: Nothing saved yet
+
+    /// A new install: no groups, every number zero. The Overview's charts get a zero-length axis from it.
+    nonisolated private static var empty: SavingsSnapshot {
+        SavingsSnapshot(
+            updatedAt: day, libraries: [.init(name: "Local Files", count: 0, bytes: 0, couldFree: 0)], groups: [],
+            days: [.init(day: day, videos: 0, savedBytes: 0)], savedBytes: 0, conversions: 0)
+    }
+
+    @Test func anAllZeroSnapshotIsShownStoredAndReadBack() async throws {
+        let directory = try Self.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = SavingsStatsCache(store: SwiftDataSavingsStatsStore(directory: directory))
+        await cache.refresh { Self.empty }
+        #expect(cache.snapshot == Self.empty)
+        #expect(!cache.isRefreshing)
+
+        let reopened = SavingsStatsCache(store: SwiftDataSavingsStatsStore(directory: directory))
+        await reopened.load()
+        #expect(reopened.snapshot == Self.empty)
+        #expect(reopened.hasLoaded)
+    }
+
+    @Test func aStoredSnapshotWithNoRowsIsNotMistakenForNothingStored() async {
+        var bare = Self.empty
+        bare.libraries = []
+        bare.days = []
+        let cache = SavingsStatsCache(store: InMemorySavingsStatsStore(bare))
+        await cache.load()
+        #expect(cache.snapshot == bare)
+        #expect(cache.snapshot?.days.isEmpty == true)
+    }
+
+    @Test func aZeroRefreshReplacesLargerNumbers() async {
+        let cache = SavingsStatsCache(store: InMemorySavingsStatsStore(Self.snapshot(saved: 700)))
+        await cache.load()
+        await cache.refresh { Self.empty }
+        #expect(cache.snapshot?.savedBytes == 0)
+        #expect(cache.snapshot?.days.map(\.savedBytes) == [0])
+    }
+
+    @Test func aChartAxisNeverHasZeroLength() {
+        let zeros: [Int64] = [0, 0, 0]
+        #expect(ChartCeiling.of(zeros) == 1)
+        #expect(ChartCeiling.of([Int64]()) == 1)
+        #expect(ChartCeiling.of([Int]()) == 1)
+        #expect(ChartCeiling.of(Self.empty.days.map(\.savedBytes)) == 1)
+        #expect(ChartCeiling.of(Self.empty.groups.map(\.bytes)) == 1)
+        #expect(ChartCeiling.of([5, 0, 9] as [Int64]) == 9)
+        #expect(ChartCeiling.of(Self.snapshot(saved: 700).days.map(\.savedBytes)) == 700)
+    }
+
     @Test func aDamagedStoreRecoversAsAnEmptyCache() async throws {
         let directory = try Self.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
