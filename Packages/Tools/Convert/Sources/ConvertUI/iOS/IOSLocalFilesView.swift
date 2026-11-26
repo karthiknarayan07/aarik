@@ -89,14 +89,14 @@
                             item: item, state: state, thumbnails: model.thumbnailSource,
                             presetOverride: model.presetOverrides.shownOverride(
                                 for: item.id, default: model.preset)?.displayName
-                        )
-                        .matchedTransitionSource(id: item.id, in: zoom)
-                        .contextMenu {
-                            IOSTileMenu(model: model, item: item)
-                        } preview: {
-                            LibraryTile(item: item, state: MediaTileState(), thumbnails: model.thumbnailSource)
-                                .frame(width: 280, height: 190)
-                        }
+                        ).equatable()
+                            .matchedTransitionSource(id: item.id, in: zoom)
+                            .contextMenu {
+                                IOSTileMenu(model: model, item: item)
+                            } preview: {
+                                LibraryTile(item: item, state: MediaTileState(), thumbnails: model.thumbnailSource)
+                                    .frame(width: 280, height: 190)
+                            }
                     }
                 }
             }

@@ -110,7 +110,7 @@ public final class PhotosLibrary: MediaCollection {
     /// Reads Photos' index again, for when Full Disk Access was granted after the first try.
     public func reloadIndex() async {
         await readIndex()
-        rebuild()
+        await rebuild()
     }
 
     // MARK: - Following changes
@@ -121,6 +121,9 @@ public final class PhotosLibrary: MediaCollection {
         observer = Task { [weak self] in
             for await _ in changes {
                 self?.refetch()
+                // At most about four refetches a second however often Photos reports a change (a sync can report
+                // dozens); changes during the pause are folded into one.
+                try? await Task.sleep(for: .milliseconds(250))
             }
         }
     }
@@ -160,7 +163,7 @@ public final class PhotosLibrary: MediaCollection {
                 await readIndex()
                 guard !Task.isCancelled else { return }
             }
-            rebuild()
+            await rebuild()
             hasLoaded = true
             loadError = nil
         } catch {
@@ -186,13 +189,26 @@ public final class PhotosLibrary: MediaCollection {
         indexedIDs = Set(assets.map(\.id))
     }
 
-    private func rebuild() {
+    /// Builds the items off the main actor (thousands of them, and again after every change) and compares them there
+    /// too; the main actor only assigns when something differs.
+    private func rebuild() async {
+        let assets = assets
         let entries = indexEntries
+        let current = items
+        let next = await Self.changedItems(assets, entries: entries, current: current)
+        guard !Task.isCancelled, let next else { return }
+        // Equal items keep the revision, so the grid and its caches aren't rebuilt for nothing.
+        items = next
+    }
+
+    @concurrent
+    private static func changedItems(
+        _ assets: [PhotoAsset], entries: [String: PhotoIndexEntry], current: [LibraryItem]
+    ) async -> [LibraryItem]? {
         let next = assets.map { asset in
             PhotoItemBuilder.build(
                 asset, index: entries[PhotoItemBuilder.assetUUID(fromLocalIdentifier: asset.id).uppercased()])
         }
-        // Equal items keep the revision, so the grid and its caches aren't rebuilt for nothing.
-        if next != items { items = next }
+        return next == current ? nil : next
     }
 }

@@ -14,7 +14,7 @@ class AppTestCase: XCTestCase {
 
     var app = XCUIApplication()
     /// Where this test's app launches keep their queue, library and Staging (`-uiTesting`).
-    private(set) var supportDirectory = ""
+    var supportDirectory = ""
     /// Where a test stages a share or intent hand-off (`-uiTestingHandoff`).
     private(set) var handoffDirectory = ""
 

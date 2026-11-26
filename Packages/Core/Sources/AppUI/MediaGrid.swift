@@ -156,7 +156,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                         state.selected = []
                         selection = []
                     }
-                    .simultaneousGesture(sweepGesture)
+                    .simultaneousGesture(sweepGesture, including: opensOnTap ? .subviews : .all)
                 #endif
             }
             .onGeometryChange(for: CGSize.self) {

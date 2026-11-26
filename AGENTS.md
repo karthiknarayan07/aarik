@@ -2,7 +2,7 @@
 
 Guide for coding agents working on this repository: a free, offline macOS app (Aarik) whose first tool shrinks
 iPhone 4K video without losing metadata. Read `STABILITY.md` before touching anything that writes, moves or
-deletes files, and `PERFORMANCE.md` before touching the engine, the queue or the UI update path.
+deletes files, and `PERFORMANCE.md` before touching the engine, the queue or the UI update path. Scrolling, large libraries and anything only a phone shows: `docs/testing/performance-and-device.md`.
 
 ## Layout
 
@@ -47,6 +47,7 @@ xcodebuild -workspace App.xcworkspace -scheme App-iOS -destination 'generic/plat
   CODE_SIGNING_ALLOWED=NO build
 scripts/run-app.sh                                   # build Debug and open it
 scripts/ios-ui-tests.sh [--udid UDID] [--perf]       # iOS unit tests + XCUITests on one Simulator (generated fixtures)
+scripts/device-perf.sh [--udid UDID] [--trace]       # Photos scroll test on a connected iPhone (real library, read only)
 ```
 
 Format with `swift format -i <files>`. Do not open or launch the app from an automated run unless asked.

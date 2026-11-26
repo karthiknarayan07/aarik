@@ -200,6 +200,13 @@ private actor Gate {
         store.beforeVideos = nil
         await gate.open()
         await photos.waitUntilIdle()
+        // Changes are taken at most about four times a second, so the one more fetch they cause starts a moment
+        // after the held one ends.
+        let deadline = ContinuousClock.now + .seconds(3)
+        while store.videosCallCount < 3, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        await photos.waitUntilIdle()
         // The held fetch plus exactly one more, which saw the latest library.
         #expect(store.videosCallCount == 3)
         #expect(photos.items.count == 3)

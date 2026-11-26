@@ -83,6 +83,8 @@ checked here, on the Mac the baselines were recorded on, with nothing else runni
 
 ## Before each release: the iOS app (owner, on a real iPhone)
 
+Scrolling and large-library checks, with `scripts/device-perf.sh`, are in `docs/testing/performance-and-device.md`.
+
 CI covers what a Simulator can show: the iOS build, the package tests on a Simulator, the unit tests and the UI tests on
 one iPhone (`scripts/ios-ui-tests.sh`). The Simulator has no hardware encoder, no thermal or battery state, no Live
 Activity on a lock screen, no widget gallery, no Control Center and no real Photos library, so everything below is run by
