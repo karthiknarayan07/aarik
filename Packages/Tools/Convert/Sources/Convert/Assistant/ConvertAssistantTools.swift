@@ -60,14 +60,20 @@ final class ConvertAssistantContext {
         }
         let total = ByteFormat.string(matches.reduce(0) { $0 + $1.byteSize })
         let count = matches.count == 1 ? "1 video" : "\(matches.count.formatted()) videos"
-        var summary = "No videos match."
+        var summary = "No videos found."
         if !matches.isEmpty {
             // Numbered, one per line: the model reads this as a list and repeats it by name.
             let numbered = lines.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
             let more = matches.count - shown.count
+            let found =
+                matches.count == 1 ? "Found 1 video in total" : "Found \(matches.count.formatted()) videos in total"
+            let listed =
+                more > 0
+                ? "\(shown.count.formatted()) are listed below, largest first."
+                : (shown.count == 1 ? "It is listed below." : "All \(shown.count) are listed below, largest first.")
             summary =
-                "\(count), \(total) in all. Largest first:\n\(numbered)"
-                + (more > 0 ? "\n\(more.formatted()) more not listed." : "")
+                "\(found), \(total) combined. \(listed)\n\(numbered)"
+                + (more > 0 ? "\n\(more.formatted()) other videos aren't listed." : "")
         }
         return AssistantToolOutput(text: summary, title: "Searched Library", count: matches.count, lines: lines)
     }
