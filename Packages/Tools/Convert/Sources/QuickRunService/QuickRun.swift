@@ -110,7 +110,7 @@ public actor QuickRun {
         var notes: [String] = []
         if overrides?.saveLocation == nil {
             switch saved.saveLocation.choice {
-            case .nextToOriginal: break
+            case .nextToOriginal, .documents: break
             case .folder: notes.append("Saved as new videos in Photos: the Save to folder is for files.")
             case .replace:
                 notes.append("Saved as new videos in Photos: replacing originals needs your confirmation in the app.")
@@ -317,6 +317,8 @@ public actor QuickRun {
             return (.nextToOriginal, ["Saved next to the originals: the Save to folder isn't available."])
         case .nextToOriginal:
             return (.nextToOriginal, [])
+        case .documents:
+            return (.documents, [])
         }
     }
 

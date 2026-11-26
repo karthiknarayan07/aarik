@@ -18,7 +18,8 @@ public enum JobFactory {
         now: Date = Date()
     ) -> JobBatch {
         makeJobs(
-            for: sources.map { (url: $0, preset: settings.preset) }, settings: settings, losses: losses, now: now)
+            for: sources.map { (url: $0, preset: settings.preset, bookmark: nil) }, settings: settings,
+            losses: losses, now: now)
     }
 
     /// `makeJobs(for:settings:losses:now:)` with a preset per file (the inspector's per-video choice) in place of
@@ -29,9 +30,21 @@ public enum JobFactory {
         for sources: [(url: URL, preset: Preset)], settings: ConvertJobSettings,
         losses: [URL: PredictedLoss<UUID>]? = nil, now: Date = Date()
     ) -> JobBatch {
+        makeJobs(
+            for: sources.map { (url: $0.url, preset: $0.preset, bookmark: nil) }, settings: settings,
+            losses: losses, now: now)
+    }
+
+    public static func makeJobs(
+        for sources: [(url: URL, preset: Preset, bookmark: Data?)], settings: ConvertJobSettings,
+        losses: [URL: PredictedLoss<UUID>]? = nil, now: Date = Date()
+    ) -> JobBatch {
         var batch = JobBatch(jobs: [], skipped: [])
-        for (url, preset) in sources {
-            guard let bookmark = try? url.bookmarkData(options: []) else {
+        for (url, preset, storedBookmark) in sources {
+            let scoped = url.startAccessingSecurityScopedResource()
+            let freshBookmark = try? url.bookmarkData(options: [])
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            guard let bookmark = freshBookmark ?? storedBookmark else {
                 batch.skipped.append(url)
                 continue
             }

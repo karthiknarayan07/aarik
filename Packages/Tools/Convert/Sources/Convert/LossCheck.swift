@@ -79,6 +79,8 @@ public enum LossCheck {
     {
         var result = Set<ID>()
         for file in files {
+            let scoped = file.url.startAccessingSecurityScopedResource()
+            defer { if scoped { file.url.stopAccessingSecurityScopedResource() } }
             // `decide` answers a QuickTime source from its name alone.
             let fallsBack =
                 (try? await OutputContainer.decide(for: file.url))?.fallsBackToQuickTime
