@@ -189,7 +189,8 @@ import Testing
                         : $0
                 }
                 return inventory
-            })
+            },
+            diskSpace: RunnerFixture.roomy)
 
         let state = try await rig.runner(core: core).run(try rig.job(.replace)) { _ in }
 
@@ -350,7 +351,7 @@ import Testing
             photosDestination: .newAsset)
         let size = try #require(RunnerFixture.size(rig.clip))
 
-        let result = try await DownscaleRunner().convert(
+        let result = try await RunnerFixture.runner().convert(
             source: rig.clip, byteSize: size, inventory: inventory, settings: settings, requireLossShown: true,
             outputFolder: { (rig.directory, {}) }, progress: { _ in })
 
@@ -374,7 +375,7 @@ import Testing
             predictedLost: ["Cinematic depth data"], photosDestination: .newAsset)
         let size = try #require(RunnerFixture.size(rig.clip))
 
-        let result = try await DownscaleRunner().convert(
+        let result = try await RunnerFixture.runner().convert(
             source: rig.clip, byteSize: size, inventory: inventory, settings: settings, requireLossShown: true,
             outputFolder: { (rig.directory, {}) }, progress: { _ in })
 

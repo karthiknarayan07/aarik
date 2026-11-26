@@ -191,7 +191,7 @@ private struct WatchingStore: PhotoStore {
             if !files.isEmpty { cancel.cancel() }
         }
         let runner = PhotosDownscaleRunner(
-            store: store, workFolder: rig.workFolder, pendingDeletions: rig.pending, core: DownscaleRunner(),
+            store: store, workFolder: rig.workFolder, pendingDeletions: rig.pending, core: RunnerFixture.runner(),
             originalsBackup: { OriginalsBackup(folder: folder) })
         let task = Task<JobState, any Error> { try await runner.run(job) { _ in } }
         cancel.set(task)

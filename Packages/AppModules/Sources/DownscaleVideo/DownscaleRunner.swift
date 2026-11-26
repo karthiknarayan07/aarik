@@ -55,7 +55,7 @@ public struct DownscaleRunner: JobRunner {
         self.originalsBackup = originalsBackup
     }
 
-    private static func trashItem(_ url: URL) throws -> URL {
+    static func trashItem(_ url: URL) throws -> URL {
         var result: NSURL?
         try FileManager.default.trashItem(at: url, resultingItemURL: &result)
         return (result as URL?) ?? url
@@ -171,7 +171,13 @@ public struct DownscaleRunner: JobRunner {
         let folder = try outputFolder()
         defer { folder.stop() }
         // Nothing has been written yet: a volume too full for the output fails the job here, and Retry works.
-        try diskSpace.verify([SpaceNeed(url: folder.url, bytes: estimatedBytes)])
+        // A Replace with an originals backup also copies the original to the backup volume: checked now, not after
+        // the encode.
+        var needs = [SpaceNeed(url: folder.url, bytes: estimatedBytes)]
+        if settings.saveTo == .replace, let backup = originalsBackup() {
+            needs.append(SpaceNeed(url: backup.folder, bytes: byteSize))
+        }
+        try diskSpace.verify(needs)
         let label = Self.label(for: spec, settings: settings)
 
         let output: URL

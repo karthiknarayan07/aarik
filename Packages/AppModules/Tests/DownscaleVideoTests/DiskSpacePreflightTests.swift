@@ -37,7 +37,7 @@ import Testing
     // MARK: - Files
 
     @Test(.timeLimit(.minutes(2))) func aFullDiskFailsAFileJobBeforeAnythingIsWritten() async throws {
-        let source = try await RunnerFixture.source(name: "clip.mov")
+        let source = try await RunnerFixture.source(name: "clip.mov", audio: false)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let before = try names(in: directory)
@@ -59,7 +59,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func retryWorksOnceThereIsRoom() async throws {
-        let source = try await RunnerFixture.source(name: "clip.mov")
+        let source = try await RunnerFixture.source(name: "clip.mov", audio: false)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let job = try RunnerFixture.job(source, settings())
@@ -75,7 +75,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func theOutputFolderIsTheVolumeThatIsChecked() async throws {
-        let source = try await RunnerFixture.source(name: "clip.mov")
+        let source = try await RunnerFixture.source(name: "clip.mov", audio: false)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let destination = directory.appending(path: "External", directoryHint: .isDirectory)
@@ -95,36 +95,49 @@ import Testing
         #expect(try names(in: destination).isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aFullBackupVolumeKeepsTheOriginalInPlace() async throws {
-        let source = try await RunnerFixture.source(name: "clip.mov")
+    @Test(.timeLimit(.minutes(2))) func aFullBackupVolumeFailsTheJobBeforeTheEncode() async throws {
+        let source = try await RunnerFixture.source(name: "clip.mov", audio: false)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let backup = directory.appending(path: "Originals", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        let before = try names(in: directory)
         let disk = FakeDiskSpace(available: 100 * Self.gb)
         disk.setVolume(at: backup, name: "Backup Drive", available: 300_000_000)
         let trashed = Mutex(false)
 
-        let state = try await runner(
-            DiskSpaceCheck(provider: disk), backup: backup,
-            trash: { url in
-                trashed.withLock { $0 = true }
-                return url
-            }
-        ).run(try RunnerFixture.job(source, settings(.replace))) { _ in }
-
-        guard case .completed(let outcome) = state else {
-            Issue.record("expected completed, got \(state)")
-            return
+        do {
+            _ = try await runner(
+                DiskSpaceCheck(provider: disk), backup: backup,
+                trash: { url in
+                    trashed.withLock { $0 = true }
+                    return url
+                }
+            ).run(try RunnerFixture.job(source, settings(.replace))) { _ in }
+            Issue.record("expected the run to throw")
+        } catch let error as NotEnoughSpaceError {
+            #expect(error.volumeName == "Backup Drive")
         }
+        // Nothing was encoded, backed up or trashed.
         #expect(!trashed.withLock { $0 })
-        #expect(!outcome.replacedOriginal)
-        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(try names(in: directory) == before)
         #expect(try names(in: backup).isEmpty)
-        #expect(
-            outcome.warnings == [
-                "The original was kept because there isn't enough free space for its copy in the originals folder"
-            ])
+    }
+
+    @Test func theBackupCopyChecksItsVolumeJustBeforeCopying() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let backup = directory.appending(path: "Originals", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = directory.appending(path: "clip.mov")
+        try Data("original".utf8).write(to: original)
+        let disk = FakeDiskSpace(available: 100 * Self.gb)
+        disk.setVolume(at: backup, name: "Backup Drive", available: 300_000_000)
+
+        #expect(throws: OriginalsBackupError.notEnoughSpace) {
+            try runner(DiskSpaceCheck(provider: disk)).backUp(original, byteSize: 8, into: backup)
+        }
+        #expect(try names(in: backup).isEmpty)
     }
 
     // MARK: - Photos
@@ -136,7 +149,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func aFullDiskStopsAPhotosJobBeforeTheDownload() async throws {
-        let rig = try await PhotosRig()
+        let rig = try await PhotosRig(audio: false)
 
         do {
             _ = try await photosRunner(rig, full()).run(try rig.job()) { _ in }
@@ -152,7 +165,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func theDownloadSizeCountsOnTheWorkVolume() async throws {
-        let rig = try await PhotosRig()
+        let rig = try await PhotosRig(audio: false)
         // Room for the margin and the small converted copy, but not for a download as big as this one.
         let big = PhotoAsset(
             id: rig.asset.id, pixelSize: rig.asset.pixelSize, duration: 1.0, originalFileName: "IMG_0001.MOV",
@@ -166,8 +179,41 @@ import Testing
         #expect(rig.store.inputRequests.isEmpty)
     }
 
+    @Test(.timeLimit(.minutes(2))) func thePhotosLibraryVolumeIsCheckedBeforeTheDownload() async throws {
+        let rig = try await PhotosRig(audio: false)
+        let disk = FakeDiskSpace(available: 100 * Self.gb)
+        disk.setVolume(at: PhotosDownscaleRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
+
+        do {
+            _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job()) { _ in }
+            Issue.record("expected the run to throw")
+        } catch let error as NotEnoughSpaceError {
+            #expect(error.volumeName == "Library Disk")
+        }
+        #expect(rig.store.inputRequests.isEmpty)
+        #expect(rig.store.saves.isEmpty)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func theLibraryVolumeIsCheckedAgainWithTheRealSizeBeforeSaving() async throws {
+        let rig = try await PhotosRig(audio: false)
+        // Photos doesn't report the size, so only the check after conversion can catch it.
+        rig.store.assets = [
+            PhotoAsset(
+                id: rig.asset.id, pixelSize: rig.asset.pixelSize, duration: 1.0, originalFileName: "IMG_0001.MOV",
+                isLocallyAvailable: false)
+        ]
+        let disk = FakeDiskSpace(available: 100 * Self.gb)
+        disk.setVolume(at: PhotosDownscaleRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
+
+        await #expect(throws: NotEnoughSpaceError.self) {
+            try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job()) { _ in }
+        }
+        #expect(rig.store.saves.isEmpty)
+        #expect(rig.workContents.isEmpty)
+    }
+
     @Test(.timeLimit(.minutes(2))) func aFolderDestinationIsCheckedOnItsOwnVolume() async throws {
-        let rig = try await PhotosRig()
+        let rig = try await PhotosRig(audio: false)
         let folder = rig.directory.appending(path: "Out", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let disk = FakeDiskSpace(available: 100 * Self.gb)
@@ -185,7 +231,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func anEditedVideoWithABackupCountsTheSecondFetch() async throws {
-        let rig = try await PhotosRig(hasAdjustments: true)
+        let rig = try await PhotosRig(hasAdjustments: true, audio: false)
         let size = try #require(rig.asset.originalByteSize)
         // The Work volume has room for the margin, the video and its smaller converted copy, but not for a second
         // fetch of the original (the backup's source) on top.
@@ -209,7 +255,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func theBackupVolumeIsCheckedBeforeAPhotosDownload() async throws {
-        let rig = try await PhotosRig()
+        let rig = try await PhotosRig(audio: false)
         let disk = FakeDiskSpace(available: 100 * Self.gb)
         disk.setVolume(at: rig.backup, name: "Backup Drive", available: 300_000_000)
 
@@ -225,7 +271,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func theExactEstimateIsCheckedOnceTheVideoIsRead() async throws {
-        let rig = try await PhotosRig()
+        let rig = try await PhotosRig(audio: false)
         // Photos doesn't say how big the video is, so nothing can be checked before the download.
         rig.store.assets = [
             PhotoAsset(
@@ -246,7 +292,7 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(2))) func aPhotosJobRetriesAfterAFullDisk() async throws {
-        let rig = try await PhotosRig()
+        let rig = try await PhotosRig(audio: false)
         let job = try rig.job()
 
         await #expect(throws: NotEnoughSpaceError.self) { try await photosRunner(rig, full()).run(job) { _ in } }

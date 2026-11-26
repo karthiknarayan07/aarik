@@ -33,7 +33,8 @@ import Testing
                 let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
                 try FileManager.default.moveItem(at: url, to: trashed)
                 return trashed
-            }, inspect: inspect)
+            }, inspect: inspect,
+            diskSpace: RunnerFixture.roomy)
     }
 
     @Test(.timeLimit(.minutes(2))) func mp4SourceGivesARealMP4WithAnMP4Name() async throws {
@@ -42,7 +43,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -120,7 +121,7 @@ import Testing
         let custom = DownscaleSpec(targetShortSide: 360, averageBitRate: 500_000, maxFrameRate: 30)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")

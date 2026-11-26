@@ -222,6 +222,8 @@ public struct PhotosDownscaleRunner: JobRunner {
         replace: Bool, jobFolder: URL, fetcher: PhotoInputFetcher, progress: @escaping @Sendable (Double) -> Void,
         phase: @escaping @Sendable (String?) -> Void
     ) async throws -> JobState {
+        // The work copy stays until the job ends, so the library's volume needs the whole converted file as well.
+        try core.diskSpace.verify([SpaceNeed(url: Self.photosLibraryLocation, bytes: converted.outputSize)])
         phase(Self.savingPhase)
         progress(0)
         var warnings = converted.warnings
@@ -398,6 +400,9 @@ public struct PhotosDownscaleRunner: JobRunner {
 
     // MARK: - Free space
 
+    /// Where the system Photos library lives (`~/Pictures`), for the volume that holds the copy saved into it.
+    static let photosLibraryLocation = URL.picturesDirectory
+
     /// Before a download (and before the job's folder exists): the Work volume must hold the video as Photos has it,
     /// plus the converted copy when that is written there; a chosen output folder, the converted copy; an originals
     /// backup, the original (and, for an edited video, the original's own download in the Work volume too). Each
@@ -424,6 +429,8 @@ public struct PhotosDownscaleRunner: JobRunner {
             }
         } else {
             needs.append(SpaceNeed(url: work, bytes: output))
+            // Saving copies the converted file into the Photos library while the work copy still exists.
+            needs.append(SpaceNeed(url: Self.photosLibraryLocation, bytes: output))
         }
         if destination == .replace, let backup = originalsBackup() {
             needs.append(SpaceNeed(url: backup.folder, bytes: size))

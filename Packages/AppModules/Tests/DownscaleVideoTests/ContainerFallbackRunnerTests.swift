@@ -100,7 +100,7 @@ import Testing
         let settings = DownscaleJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: ["Location", "Creation date"])
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -136,7 +136,7 @@ import Testing
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: loss.lost,
             predictedLostKeys: loss.keys)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -158,7 +158,7 @@ import Testing
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: predictedLost)
         let progressReported = Mutex(false)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in
             progressReported.withLock { $0 = true }
         }
 
@@ -177,7 +177,7 @@ import Testing
         let settings = DownscaleJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: [], predictedLostKeys: [])
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         #expect(state == .keptAsIs(reason: "Already small"))
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
@@ -220,7 +220,8 @@ import Testing
                 guard !audioKeys.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
                 inventory.items.removeAll { audioKeys.contains($0.key) }
                 return inventory
-            })
+            },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: destination, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
@@ -235,11 +236,13 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let taken = directory.appending(path: "x.mov")
         try Data("someone else's file".utf8).write(to: taken)
-        let runner = DownscaleRunner(trash: { url in
-            let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
-            try FileManager.default.moveItem(at: url, to: trashed)
-            return trashed
-        })
+        let runner = DownscaleRunner(
+            trash: { url in
+                let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
+                try FileManager.default.moveItem(at: url, to: trashed)
+                return trashed
+            },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
@@ -264,7 +267,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -281,7 +284,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let runner = DownscaleRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
-            inspect: { _ in throw CocoaError(.fileReadCorruptFile) })
+            inspect: { _ in throw CocoaError(.fileReadCorruptFile) },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CocoaError.self) {
@@ -296,7 +300,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let runner = DownscaleRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
-            sizeOf: { _ in throw CocoaError(.fileReadUnknown) })
+            sizeOf: { _ in throw CocoaError(.fileReadUnknown) },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CocoaError.self) {
@@ -311,7 +316,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let runner = DownscaleRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
-            inspect: { _ in throw CancellationError() })
+            inspect: { _ in throw CancellationError() },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CancellationError.self) {
@@ -335,7 +341,7 @@ import Testing
             toolID: DownscaleTool.toolID, source: original, sourceBookmark: bookmark,
             settings: try JSONEncoder().encode(settings))
 
-        let state = try await DownscaleRunner().run(job) { _ in }
+        let state = try await RunnerFixture.runner().run(job) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
