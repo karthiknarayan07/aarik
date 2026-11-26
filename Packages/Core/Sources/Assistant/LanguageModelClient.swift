@@ -28,6 +28,29 @@ public protocol LanguageModelClient: Sendable {
     func respond(to prompt: String, instructions: String) async throws -> String
 
     func generate<T: Generable & Sendable>(_ prompt: String, instructions: String) async throws -> T
+
+    /// Why `isAvailable` is false; nil while it is true.
+    var unavailableReason: AssistantUnavailableReason? { get }
+
+    /// A chat turn: streams the reply as the text so far (each element holds everything written up to then) and
+    /// calls the request's `invoke` whenever the model wants a tool. The default answers in one piece, without tools.
+    func streamChat(_ request: ChatRequest) -> AsyncThrowingStream<String, any Error>
+}
+
+extension LanguageModelClient {
+    public var unavailableReason: AssistantUnavailableReason? { isAvailable ? nil : .unknown }
+
+    public func streamChat(_ request: ChatRequest) -> AsyncThrowingStream<String, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    continuation.yield(try await respond(to: request.prompt, instructions: request.fullInstructions))
+                    continuation.finish()
+                } catch { continuation.finish(throwing: error) }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 /// The system's on-device model.
@@ -38,6 +61,36 @@ public struct SystemLanguageModelClient: LanguageModelClient {
         let model = SystemLanguageModel.default
         guard case .available = model.availability else { return false }
         return model.supportsLocale()
+    }
+
+    public var unavailableReason: AssistantUnavailableReason? {
+        let model = SystemLanguageModel.default
+        switch model.availability {
+        case .available: return model.supportsLocale() ? nil : .unsupportedLanguage
+        case .unavailable(.deviceNotEligible): return .deviceNotEligible
+        case .unavailable(.appleIntelligenceNotEnabled): return .notEnabled
+        case .unavailable(.modelNotReady): return .modelNotReady
+        default: return .unknown
+        }
+    }
+
+    public func streamChat(_ request: ChatRequest) -> AsyncThrowingStream<String, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    guard isAvailable else { throw AssistantError.unavailable }
+                    let tools: [any FoundationModels.Tool] = request.tools.map {
+                        FoundationModelsToolAdapter(tool: $0, invoke: request.invoke)
+                    }
+                    let session = LanguageModelSession(tools: tools, instructions: request.fullInstructions)
+                    for try await snapshot in session.streamResponse(to: request.prompt) {
+                        continuation.yield(snapshot.content)
+                    }
+                    continuation.finish()
+                } catch { continuation.finish(throwing: Self.map(error)) }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     public func respond(to prompt: String, instructions: String) async throws -> String {

@@ -126,6 +126,35 @@ public final class AppServices {
         self.queue = JobQueue(store: JobStore(directory: directory), runners: [:], startPaused: !autoStart)
     }
 
+    // MARK: Assistant
+
+    /// Whether the assistant can be asked: the signal the shell reads to show or hide the Ask tab.
+    @ObservationIgnored public lazy var assistantAvailability: AssistantAvailability = {
+        #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-AssistantDemo") {
+                return AssistantAvailability(client: ScriptedChatClient { _ in [] }, observesActivation: false)
+            }
+        #endif
+        return AssistantAvailability(client: assistantClient)
+    }()
+    /// The Ask tab's chat engine, with the tools every registered tool contributes and its history in `directory`.
+    @ObservationIgnored public lazy var assistantChat: AssistantChat = makeAssistantChat()
+    @ObservationIgnored private var assistantProviders: [any AssistantToolProvider] = []
+
+    /// A tool module offers its assistant tools to the Ask tab.
+    public func registerAssistantTools(_ provider: any AssistantToolProvider) {
+        assistantProviders.append(provider)
+    }
+
+    private func makeAssistantChat() -> AssistantChat {
+        #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-AssistantDemo") { return AssistantDemo.makeChat() }
+        #endif
+        return AssistantChat(
+            client: assistantClient, availability: assistantAvailability, store: ChatStore(directory: directory),
+            tools: { [weak self] in self?.assistantProviders.flatMap { $0.assistantTools() } ?? [] })
+    }
+
     // MARK: Tools
 
     /// Registers the runner of each of the tool's job kinds. Call it before `start()`.

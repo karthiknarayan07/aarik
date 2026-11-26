@@ -1,4 +1,6 @@
 import AppCore
+import AppServices
+import AppUI
 import Convert
 import SwiftUI
 
@@ -34,9 +36,9 @@ struct IOSRootView: View {
                 }
             }
             // Without Apple Intelligence there is no Ask tab at all; it comes back when the model becomes available.
-            if shell.convert.assistant.isAvailable {
+            if shell.services.assistantAvailability.isAvailable {
                 Tab("Ask", systemImage: "sparkles", value: IOSTab.ask) {
-                    AssistantTabRoot()
+                    AssistantTabRoot(services: shell.services)
                 }
             }
             Tab(value: IOSTab.search, role: .search) {
@@ -102,9 +104,15 @@ struct IOSRootView: View {
     private func restore() {
         guard !hasRestored else { return }
         hasRestored = true
-        if let restored = IOSTab(rawValue: storedTab), restored != .ask || shell.convert.assistant.isAvailable {
+        if let restored = IOSTab(rawValue: storedTab),
+            restored != .ask || shell.services.assistantAvailability.isAvailable
+        {
             tab = restored
         }
+        #if DEBUG
+            // The demo launch (a scripted assistant, for screenshots) opens on Ask.
+            if CommandLine.arguments.contains("-AssistantDemo") { tab = .ask }
+        #endif
         if shell.scenes.contains(where: { $0.id == storedTool }) { toolsPath = [ToolRoute(toolID: storedTool)] }
     }
 }
