@@ -14,7 +14,10 @@ import Observation
 @MainActor
 @Observable
 public final class AssistantAvailability {
+    /// The signal the shell reads: false hides the Ask tab and every other assistant control.
     public private(set) var isAvailable: Bool
+    /// Why it isn't, for the in-view explanation when it drops mid-session (the model is still downloading).
+    public private(set) var reason: AssistantUnavailableReason?
 
     @ObservationIgnored private let client: any LanguageModelClient
     @ObservationIgnored private var activationObserver: (any NSObjectProtocol)?
@@ -31,6 +34,7 @@ public final class AssistantAvailability {
     public init(client: any LanguageModelClient = .real, observesActivation: Bool = true) {
         self.client = client
         self.isAvailable = client.isAvailable
+        self.reason = client.unavailableReason
         guard observesActivation else { return }
         activationObserver = NotificationCenter.default.addObserver(
             forName: Self.becameActive, object: nil, queue: .main
@@ -46,6 +50,8 @@ public final class AssistantAvailability {
     /// Reads the model's availability again.
     public func refresh() {
         let current = client.isAvailable
+        let currentReason = client.unavailableReason
+        if currentReason != reason { reason = currentReason }
         if current != isAvailable { isAvailable = current }
     }
 }

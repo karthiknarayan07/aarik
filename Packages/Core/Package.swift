@@ -30,7 +30,7 @@ let package = Package(
         ),
         .target(
             name: "AppUI",
-            dependencies: ["AppCore"],
+            dependencies: ["AppCore", "Assistant", "AppServices"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -74,7 +74,12 @@ let package = Package(
         ),
         .testTarget(
             name: "AppUITests",
-            dependencies: ["AppUI"],
+            dependencies: ["AppUI", "Assistant"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "AssistantTests",
+            dependencies: ["Assistant"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
