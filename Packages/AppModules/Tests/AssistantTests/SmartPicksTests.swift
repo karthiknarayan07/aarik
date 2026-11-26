@@ -139,6 +139,58 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
         #expect(picks[2].why == SmartPicker.factualWhy(for: buckets[2]))
     }
 
+    @Test func aReasonThatEchoesPartOfTheGroupsLineFallsBackToTheFactualSentence() {
+        let bucket = makeBuckets(1)[0]
+        let echoes = [
+            "Quality 4K30, year 2025, source Photos.",
+            "It is source Photos with lots of room.",
+            "There are 400 videos, 120 GB total in this group.",
+            "From year 2025 with plenty of space to win back.",
+            "B1 is the one to start with because it is big.",
+            "About 70 GB could be freed here.",
+        ]
+        for echo in echoes { #expect(!SmartPicker.isGrounded(echo, in: bucket), "\(echo)") }
+        #expect(SmartPicker.isGrounded("Converting these could free about 70 GB from 400 videos.", in: bucket))
+        #expect(SmartPicker.isGrounded("They take a lot of room and shrink well.", in: bucket))
+    }
+
+    @Test func aReasonClaimingSmallestOrLowestFallsBack() {
+        let bucket = makeBuckets(1)[0]
+        for claim in [
+            "These are the smallest files, so shrinking them is easy.",
+            "The lowest quality group has plenty to give back.",
+            "Smallest: they would free about 70 GB.",
+        ] {
+            #expect(!SmartPicker.isGrounded(claim, in: bucket), "\(claim)")
+        }
+        #expect(SmartPicker.isGrounded("They take a lot of room and shrink well.", in: bucket))
+    }
+
+    @Test func aPickKeepsTheFactualSentenceWhenTheModelEchoesTheLine() async {
+        let (picker, _) = picker(
+            returning: SmartPicks(picks: [draft("B1", why: "Quality 4K30, year 2025, source Photos."), draft("B2")]))
+        guard case .picks(let picks) = await picker.picks(from: buckets) else {
+            Issue.record("expected picks")
+            return
+        }
+        #expect(picks[0].why == SmartPicker.factualWhy(for: buckets[0]))
+        #expect(picks[1].why == "They take a lot of room.")
+    }
+
+    @Test func aPhotosGroupAndALocalFilesGroupNeverShareATitle() {
+        let photos = SavingsBucket(
+            id: "B1", quality: .uhd(.fps60), year: 2024, library: .photos, excludesShrunk: false, count: 1, bytes: 1,
+            couldFree: 1, itemIDs: [])
+        let files = SavingsBucket(
+            id: "B2", quality: .uhd(.fps60), year: 2024, library: .localFiles, excludesShrunk: true, count: 1,
+            bytes: 1, couldFree: 1, itemIDs: [])
+        #expect(photos.title == "4K60 from 2024 \u{00B7} Photos")
+        #expect(files.title == "4K60 from 2024 \u{00B7} Local Files")
+        #expect(photos.title != files.title)
+        let picks = [photos, files].map { SmartPick(bucket: $0, why: SmartPicker.factualWhy(for: $0)) }
+        #expect(Set(picks.map(\.title)).count == 2)
+    }
+
     @Test func aGroundedReasonIsKeptAndBucketIdentitiesDoNotDependOnRank() {
         let list = makeBuckets(3)
         #expect(Set(list.map(\.identity)).count == 3)
@@ -218,9 +270,12 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
 
 @MainActor
 @Suite struct SmartPicksStoreTests {
+    private let clock = ManualClock()
+    private static let debounce = Duration.seconds(5)
+
     private func rig(
-        available: Bool = true, debounce: Duration = .milliseconds(1), maximumStaleness: Duration = .seconds(60),
-        retryAfter: Duration = .seconds(300), handler: FakeLanguageModelClient.Handler? = nil
+        available: Bool = true, maximumStaleness: Duration = .seconds(60), retryAfter: Duration = .seconds(300),
+        handler: FakeLanguageModelClient.Handler? = nil
     ) -> (SmartPicksStore, FakeLanguageModelClient) {
         let client = FakeLanguageModelClient(
             isAvailable: available,
@@ -230,9 +285,17 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
         )
         let availability = AssistantAvailability(client: client, observesActivation: false)
         let store = SmartPicksStore(
-            availability: availability, picker: SmartPicker(client: client), debounce: debounce,
-            maximumStaleness: maximumStaleness, retryAfter: retryAfter)
+            availability: availability, picker: SmartPicker(client: client), debounce: Self.debounce,
+            maximumStaleness: maximumStaleness, retryAfter: retryAfter, clock: clock.smartPicksClock)
         return (store, client)
+    }
+
+    /// Asks for a refresh that waits for the groups to be quiet, lets the quiet period pass, and waits for it.
+    private func refresh(_ store: SmartPicksStore) async {
+        let task = Task { await store.generateIfNeeded() }
+        await clock.waitForSleepers()
+        clock.advance(by: Self.debounce)
+        await task.value
     }
 
     @Test func picksAreAskedForOnceAndKeptUntilTheKeyChanges() async {
@@ -254,7 +317,7 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
         store.update(buckets: makeBuckets(4), key: 2)
         // The picks stay on screen; they are refreshed in the background.
         if case .picks = store.state {} else { Issue.record("picks were cleared") }
-        await store.generateIfNeeded()
+        await refresh(store)
         #expect(client.callCount == 2)
         #expect(store.buckets.count == 4)
     }
@@ -314,7 +377,7 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
         }
         store.update(buckets: makeBuckets(3), key: 1)
         let task = Task { await store.generateIfNeeded() }
-        while !probe.started { try? await Task.sleep(for: .milliseconds(5)) }
+        while !probe.started { await Task.yield() }
         #expect(store.state == .loading)
         task.cancel()
         await task.value
@@ -327,15 +390,17 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
     }
 
     @Test func newGroupsWhileTheFirstRequestRunsDiscardTheOldAnswer() async {
-        let gate = Counter()
+        let gate = Gate()
+        let calls = Counter()
         let (store, _) = rig { _, _ in
-            if gate.next() == 1 { try await Task.sleep(for: .milliseconds(150)) }
+            if calls.next() == 1 { await gate.pass() }
             return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
         }
         store.update(buckets: makeBuckets(3), key: 1)
         let slow = Task { await store.generateIfNeeded() }
-        while store.requests == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        await gate.waitUntilEntered()
         store.update(buckets: makeBuckets(5), key: 2)
+        gate.open()
         await slow.value
         // The slow answer was for the old groups: it must not land on the new ones.
         #expect(store.state == .idle)
@@ -343,14 +408,14 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
     }
 
     @Test func shownPicksStayWhileTheGroupsChangeAndAreRefreshedAfterTheyAreQuiet() async {
-        let (store, client) = rig(debounce: .milliseconds(150)) { _, _ in
+        let (store, client) = rig { _, _ in
             SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1"), SmartPickDraft(why: "W", bucketID: "B2")])
         }
         store.update(buckets: makeBuckets(4), key: 1)
         await store.generateIfNeeded()
         #expect(client.callCount == 1)
 
-        // Jobs finish: groups change three times in a row.
+        // Jobs finish: groups change three times in a row, a second apart.
         var refresh: Task<Void, Never>?
         for key in 2...4 {
             refresh?.cancel()
@@ -362,10 +427,12 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
             }
             #expect(shown.count == 2)
             refresh = Task { await store.generateIfNeeded() }
-            try? await Task.sleep(for: .milliseconds(40))
+            await clock.waitForSleepers()
+            clock.advance(by: .seconds(1))
         }
         // Still inside the quiet period: the model was not asked again.
         #expect(client.callCount == 1)
+        clock.advance(by: Self.debounce)
         await refresh?.value
         #expect(client.callCount == 2)
         guard case .picks(let after) = store.state else {
@@ -376,28 +443,30 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
     }
 
     @Test func aRefreshIsNotStarvedWhileTheGroupsKeepChanging() async {
-        let (store, client) = rig(debounce: .milliseconds(200), maximumStaleness: .milliseconds(300)) { _, _ in
+        let (store, client) = rig(maximumStaleness: .seconds(12)) { _, _ in
             SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
         }
         store.update(buckets: makeBuckets(3), key: 0)
         await store.generateIfNeeded()
+        let firstChange = clock.now
         var refresh: Task<Void, Never>?
-        for key in 1...12 {
+        for key in 1...20 {
             refresh?.cancel()
             store.update(buckets: makeBuckets(3), key: key)
             refresh = Task { await store.generateIfNeeded() }
-            try? await Task.sleep(for: .milliseconds(80))
-            if client.callCount > 1 { break }
+            await clock.waitForSleepers()
+            // Changes come every two seconds, faster than the five-second quiet period.
+            clock.advance(by: .seconds(2))
+            if clock.sleeperCount == 0 { break }
         }
-        // Changes came every 80 ms, faster than the 200 ms quiet period, yet the model was asked once the 300 ms
-        // cap passed, and only once.
-        #expect(client.callCount == 2)
         await refresh?.value
+        // The model was asked once the 12 s cap passed, and only once.
         #expect(client.callCount == 2)
+        #expect(clock.now - firstChange == .seconds(12))
     }
 
     @Test func aPickWhoseGroupIsGoneDisappearsAtOnceAndTheOthersTakeTheNewNumbers() async {
-        let (store, _) = rig(debounce: .seconds(30)) { _, _ in
+        let (store, _) = rig { _, _ in
             SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1"), SmartPickDraft(why: "W", bucketID: "B2")])
         }
         let list = makeBuckets(4)
@@ -438,7 +507,7 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
 
     @Test func aFailedFirstAnswerIsTriedAgainAfterAWhileButNotBefore() async {
         let calls = Counter()
-        let (store, client) = rig(retryAfter: .milliseconds(120)) { _, _ in
+        let (store, client) = rig(retryAfter: .seconds(300)) { _, _ in
             if calls.next() == 1 { throw AssistantError.rateLimited }
             return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
         }
@@ -448,28 +517,84 @@ private func draft(_ id: String, why: String = "They take a lot of room.") -> Sm
         await store.generateIfNeeded()
         #expect(client.callCount == 1)
 
-        try? await Task.sleep(for: .milliseconds(150))
+        clock.advance(by: .seconds(299))
+        await store.generateIfNeeded()
+        #expect(client.callCount == 1)
+
+        clock.advance(by: .seconds(1))
         await store.generateIfNeeded()
         #expect(client.callCount == 2)
         #expect(store.isShowingPicks)
         if case .picks = store.state {} else { Issue.record("expected picks") }
     }
 
-    @Test func aFailedRefreshKeepsThePicksShown() async {
+    @Test func afterAFallbackChangedGroupsDoNotAskTheModelBeforeRetryAfter() async {
         let calls = Counter()
-        let (store, client) = rig { _, _ in
+        let (store, client) = rig(retryAfter: .seconds(300)) { _, _ in
+            if calls.next() == 1 { throw AssistantError.guardrail }
+            return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
+        }
+        store.update(buckets: makeBuckets(3), key: 1)
+        await store.generateIfNeeded()
+        #expect(store.state == .fallback)
+
+        // The groups change again and again, as a running queue changes them.
+        for key in 2...5 {
+            clock.advance(by: .seconds(30))
+            store.update(buckets: makeBuckets(3 + key), key: key)
+            await store.generateIfNeeded()
+        }
+        #expect(client.callCount == 1)
+        #expect(store.state == .fallback)
+        #expect(store.buckets.count == 8)
+
+        // Once the retry time has passed the groups as they are now are asked about.
+        // They have been stale for longer than the cap, so there is no quiet period left to wait for.
+        clock.advance(by: .seconds(200))
+        await store.generateIfNeeded()
+        #expect(client.callCount == 2)
+        #expect(store.isShowingPicks)
+    }
+
+    @Test func aFailedRefreshKeepsThePicksShownAndTheModelIsLeftAloneBeforeRetryAfter() async {
+        let calls = Counter()
+        let (store, client) = rig(retryAfter: .seconds(300)) { _, _ in
             if calls.next() > 1 { throw AssistantError.guardrail }
             return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
         }
         store.update(buckets: makeBuckets(3), key: 1)
         await store.generateIfNeeded()
         store.update(buckets: makeBuckets(3), key: 2)
-        await store.generateIfNeeded()
+        await refresh(store)
         #expect(client.callCount == 2)
         if case .picks = store.state {} else { Issue.record("picks were dropped") }
         // Not asked again until the groups change again.
         await store.generateIfNeeded()
         #expect(client.callCount == 2)
+        // They change again, but the model has just failed: still not asked.
+        store.update(buckets: makeBuckets(3), key: 3)
+        await store.generateIfNeeded()
+        #expect(client.callCount == 2)
+        if case .picks = store.state {} else { Issue.record("picks were dropped") }
+    }
+
+    @Test func nothingToShowAfterAFailureIsNotASpinner() async {
+        let calls = Counter()
+        let (store, _) = rig { _, _ in
+            if calls.next() > 1 { throw AssistantError.guardrail }
+            return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
+        }
+        let list = makeBuckets(4)
+        store.update(buckets: list, key: 1)
+        await store.generateIfNeeded()
+        store.update(buckets: list, key: 2)
+        await refresh(store)
+        // The shown pick's group is gone and the model has just failed.
+        store.update(buckets: Array(list.dropFirst()), key: 3)
+        #expect(store.state == .idle)
+        await store.generateIfNeeded()
+        #expect(store.state == .fallback)
+        #expect(!store.isShowingPicks)
     }
 
     @Test func theCountOfUndatedVideosIsKeptWithTheGroups() {

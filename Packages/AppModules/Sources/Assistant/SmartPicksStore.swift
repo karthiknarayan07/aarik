@@ -2,6 +2,25 @@ import DownscaleVideo
 import Foundation
 import Observation
 
+/// Time as the picks store reads it: how long since some fixed moment, and how to wait. The app uses the real
+/// clock; a test hands in one it moves by hand, so debounce and retry timing never depend on real sleeping.
+public struct SmartPicksClock: Sendable {
+    public var now: @Sendable () -> Duration
+    public var sleep: @Sendable (Duration) async throws -> Void
+
+    public init(now: @escaping @Sendable () -> Duration, sleep: @escaping @Sendable (Duration) async throws -> Void) {
+        self.now = now
+        self.sleep = sleep
+    }
+
+    /// The system's continuous clock, counted from the moment this is made.
+    public static var continuous: SmartPicksClock {
+        let clock = ContinuousClock()
+        let origin = clock.now
+        return SmartPicksClock(now: { origin.duration(to: clock.now) }, sleep: { try await clock.sleep(for: $0) })
+    }
+}
+
 /// The Overview's groups of videos and, when the model is available, its picks among them.
 ///
 /// The groups are plain Swift and always there. Picks are asked for when the Overview is showing and kept:
@@ -11,8 +30,9 @@ import Observation
 /// - A new answer is asked for in the background, after the groups have been quiet for `debounce` (or at most
 ///   `maximumStaleness` after the first change while they keep changing, such as while the queue runs), and
 ///   replaces the list in one step. A failed refresh keeps the picks shown.
-/// - A failed first answer is kept, so a refusing model isn't asked over and over, and tried again after
-///   `retryAfter`. A cancelled request changes nothing.
+/// - A failed answer is kept, so a refusing model isn't asked over and over: after any fallback the model is
+///   not asked again before `retryAfter`, however the groups change, and it is tried again once that has
+///   passed. A cancelled request changes nothing.
 @MainActor
 @Observable
 public final class SmartPicksStore {
@@ -39,21 +59,24 @@ public final class SmartPicksStore {
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let maximumStaleness: Duration
     @ObservationIgnored private let retryAfter: Duration
-    @ObservationIgnored private let clock = ContinuousClock()
+    @ObservationIgnored private let clock: SmartPicksClock
     @ObservationIgnored private var key: AnyHashable?
     @ObservationIgnored private var run = 0
     /// The shown picks (or fallback) are for older groups than `buckets`.
     @ObservationIgnored private var isStale = false
-    @ObservationIgnored private var staleSince: ContinuousClock.Instant?
-    @ObservationIgnored private var answeredAt: ContinuousClock.Instant?
+    @ObservationIgnored private var staleSince: Duration?
+    /// When the model last gave no usable answer; nil after a good one.
+    @ObservationIgnored private var failedAt: Duration?
 
     /// Test seam: how many times the model was asked.
     @ObservationIgnored public private(set) var requests = 0
 
     public init(
         availability: AssistantAvailability, picker: SmartPicker, debounce: Duration = .seconds(5),
-        maximumStaleness: Duration = .seconds(60), retryAfter: Duration = .seconds(300)
+        maximumStaleness: Duration = .seconds(60), retryAfter: Duration = .seconds(300),
+        clock: SmartPicksClock = .continuous
     ) {
+        self.clock = clock
         self.availability = availability
         self.picker = picker
         self.debounce = debounce
@@ -104,13 +127,19 @@ public final class SmartPicksStore {
 
     private func markStale() {
         isStale = true
-        if staleSince == nil { staleSince = clock.now }
+        if staleSince == nil { staleSince = clock.now() }
     }
 
     /// Asks the model for picks unless they are already here and current. Cancelling the calling task (the
     /// Overview went away, or the groups changed again) leaves what is shown as it is.
     public func generateIfNeeded() async {
         guard availability.isAvailable, !buckets.isEmpty else { return }
+        // A model that gave no answer is left alone until `retryAfter` has passed, whatever has changed since.
+        if let failedAt, clock.now() - failedAt < retryAfter {
+            // Nothing left to show must not read as "still working".
+            if state == .idle { state = .fallback }
+            return
+        }
         let hasShown: Bool
         switch state {
         case .idle, .loading:
@@ -119,15 +148,15 @@ public final class SmartPicksStore {
             guard isStale else { return }
             hasShown = true
         case .fallback:
-            let due = answeredAt.map { clock.now - $0 >= retryAfter } ?? true
-            guard isStale || due else { return }
             hasShown = true
         }
         if hasShown {
             // Wait for the groups to be quiet; a refresh never starves while they keep changing.
-            let waited = staleSince.map { clock.now - $0 } ?? .zero
-            if waited < maximumStaleness {
-                try? await Task.sleep(for: min(debounce, maximumStaleness - waited))
+            if isStale {
+                let waited = staleSince.map { clock.now() - $0 } ?? .zero
+                if waited < maximumStaleness {
+                    try? await clock.sleep(min(debounce, maximumStaleness - waited))
+                }
             }
             guard !Task.isCancelled else { return }
         } else {
@@ -142,14 +171,15 @@ public final class SmartPicksStore {
         switch outcome {
         case .picks(let picks):
             state = .picks(picks)
+            failedAt = nil
         case .fallback:
             if case .picks = state {} else { state = .fallback }
+            failedAt = clock.now()
         case .cancelled:
             if state == .loading { state = .idle }
             return
         }
         isStale = false
         staleSince = nil
-        answeredAt = clock.now
     }
 }

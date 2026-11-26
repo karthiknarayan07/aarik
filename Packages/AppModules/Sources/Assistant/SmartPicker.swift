@@ -130,11 +130,45 @@ public struct SmartPicker: Sendable {
     static func isGrounded(_ why: String, in bucket: SavingsBucket) -> Bool {
         // A fragment such as "540 videos" or a copied line isn't a sentence about why.
         guard why.split(whereSeparator: \.isWhitespace).count >= minimumWhyWords else { return false }
-        // The model sometimes copies the group's line back; that has no reason in it.
-        let lowered = why.lowercased()
-        guard !(lowered.contains("quality ") && lowered.contains("source ")) else { return false }
+        guard !echoesLine(why, of: bucket), !claimsExtreme(why) else { return false }
         let allowed = Set(numbers(in: line(for: bucket)))
         return numbers(in: why).allSatisfy(allowed.contains)
+    }
+
+    /// The model sometimes copies the group's line back, whole or in part ("quality 4K30, year 2024"); that has
+    /// no reason in it. A sentence repeating a field as the line writes it, or any four words in a row from the
+    /// line, counts.
+    static func echoesLine(_ why: String, of bucket: SavingsBucket) -> Bool {
+        let sentence = words(in: why)
+        let text = sentence.joined(separator: " ")
+        let fields = [
+            "quality \(bucket.quality.title)", "year \(bucket.year)", "source \(bucket.sourceName)",
+            "\(ByteFormat.string(bucket.bytes)) total", "could be freed",
+        ]
+        if sentence.contains(bucket.id.lowercased()) { return true }
+        if fields.contains(where: { text.contains(words(in: $0).joined(separator: " ")) }) { return true }
+        return containsRun(of: 4, from: words(in: line(for: bucket)).dropFirst(), in: sentence)
+    }
+
+    private static func containsRun(of length: Int, from line: ArraySlice<String>, in sentence: [String]) -> Bool {
+        func runs(_ words: [String]) -> Set<[String]> {
+            guard words.count >= length else { return [] }
+            return Set((0...(words.count - length)).map { Array(words[$0..<($0 + length)]) })
+        }
+        return !runs(Array(line)).isDisjoint(with: runs(sentence))
+    }
+
+    /// "smallest" and "lowest" are never what the picks are about (they are the biggest savings), and the line
+    /// has nothing to support them.
+    static func claimsExtreme(_ why: String) -> Bool {
+        words(in: why).contains { $0 == "smallest" || $0 == "lowest" }
+    }
+
+    /// Lowercased words with the punctuation around them removed.
+    private static func words(in text: String) -> [String] {
+        text.lowercased().split(whereSeparator: { $0.isWhitespace }).map {
+            $0.trimmingCharacters(in: .punctuationCharacters)
+        }.filter { !$0.isEmpty }
     }
 
     static func factualWhy(for bucket: SavingsBucket) -> String {
