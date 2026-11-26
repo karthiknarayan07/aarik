@@ -120,7 +120,7 @@
         }
 
         private var stateText: String {
-            if let progress { return "\(job.phase ?? "Converting") · \(Int((progress * 100).rounded()))%" }
+            if let progress { return "\(job.phaseTitle ?? "Converting") · \(Int((progress * 100).rounded()))%" }
             return pauseText ?? "Waiting"
         }
 

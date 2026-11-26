@@ -214,6 +214,14 @@ public struct Job: Codable, Sendable, Identifiable, Equatable {
         return phase.localizedCaseInsensitiveContains("download")
     }
 
+    /// The phase without its trailing ellipsis, for a line that follows it with a percentage ("Downloading from
+    /// iCloud · 42%"); nil when the job has no phase.
+    public var phaseTitle: String? {
+        guard let phase else { return nil }
+        let title = phase.trimmingCharacters(in: CharacterSet(charactersIn: "….").union(.whitespaces))
+        return title.isEmpty ? nil : title
+    }
+
     /// The file the job worked on: the one its finished run read when that is known, else its recorded path.
     public var sourceUsed: URL {
         if case .completed(let outcome) = state, let source = outcome.source { return source }

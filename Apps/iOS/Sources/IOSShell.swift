@@ -29,7 +29,7 @@ final class IOSShell {
     init(
         directory: URL = IOSShell.supportDirectory(),
         defaults: UserDefaults = .standard,
-        photoStore: any PhotoStore = PhotoKitStore()
+        photoStore: any PhotoStore = IOSShell.defaultPhotoStore()
     ) {
         #if DEBUG
             // UI tests of the introduction start from a launch that has never shown it (`-uiTestingFreshOnboarding`).
@@ -184,6 +184,16 @@ final class IOSShell {
     #else
         private func startPerformanceProbe() {}
     #endif
+
+    /// The Photos library: PhotoKit, or in a debug build a stand-in for UI tests that behaves like an iPhone's
+    /// (`-uiTestingPhotos`, `-uiTestingICloud`; see `UITestPhotoStore`).
+    nonisolated static func defaultPhotoStore() -> any PhotoStore {
+        #if DEBUG
+            return UITestPhotoStore.make(arguments: ProcessInfo.processInfo.arguments, base: PhotoKitStore())
+        #else
+            return PhotoKitStore()
+        #endif
+    }
 
     nonisolated static func supportDirectory() -> URL {
         #if DEBUG

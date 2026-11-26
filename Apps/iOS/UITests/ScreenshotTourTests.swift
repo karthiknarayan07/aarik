@@ -1,7 +1,9 @@
 import XCTest
 
-/// Saves a screenshot of every main screen as a PNG, for design review. It runs only with `SHOT_DIR` set (pass it as
-/// `TEST_RUNNER_SHOT_DIR=<folder>`), so a normal run skips it. Fixture media only, like every other test.
+/// A tour of every main screen in light, dark and at AX3. At each stop it runs the layout audit (nothing overlaps or
+/// hangs off the screen), and in light mode at the default size it compares the screen with its reference
+/// screenshot (`References/`). With `SHOT_DIR` set (pass it as `TEST_RUNNER_SHOT_DIR=<folder>`) it also saves a PNG of
+/// each stop, for design review. Fixture media only, like every other test.
 @MainActor
 final class ScreenshotTourTests: AppTestCase {
     private static let defaultSize = "UICTContentSizeCategoryL"
@@ -12,7 +14,6 @@ final class ScreenshotTourTests: AppTestCase {
     override func setUp() async throws {
         try await super.setUp()
         shotDirectory = ProcessInfo.processInfo.environment["SHOT_DIR"]
-        try XCTSkipIf(shotDirectory == nil, "SHOT_DIR isn't set")
     }
 
     override func tearDown() async throws {
@@ -20,7 +21,10 @@ final class ScreenshotTourTests: AppTestCase {
         try await super.tearDown()
     }
 
-    private func shot(_ mode: String, _ name: String) {
+    /// One stop of the tour: audits the layout, compares light mode with its reference, saves a PNG when asked.
+    private func shot(_ mode: String, _ name: String, file: StaticString = #filePath, line: UInt = #line) {
+        LayoutAudit.assertNoOverlaps(in: app, file: file, line: line)
+        if mode == "light" { assertScreenMatchesReference(name, file: file, line: line) }
         guard let shotDirectory else { return }
         let folder = shotDirectory + "/" + mode
         try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
@@ -74,6 +78,11 @@ final class ScreenshotTourTests: AppTestCase {
         shot(mode, "09-completed")
         openSettings()
         shot(mode, "12-settings")
+        app.buttons["Done"].firstMatch.tap()
+        selectTab("Search")
+        _ = app.searchFields.firstMatch.waitForExistence(timeout: 10)
+        sleep(1)
+        shot(mode, "13-search")
 
         // Ask: the empty state, then a scripted conversation that ends on a confirm card.
         launch(contentSize: contentSize, extraArguments: ["-AssistantDemo"], terminateFirst: true)

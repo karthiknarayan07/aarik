@@ -133,6 +133,11 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
+		B20000000000000000000601 /* UITestSupport */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ../Shared/UITestSupport;
+			sourceTree = "<group>";
+		};
 		B20000000000000000000502 /* UnitTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = UnitTests;
@@ -198,6 +203,7 @@
 				B20000000000000000000022 /* ShareExtension */,
 				B20000000000000000000023 /* Widgets */,
 				B20000000000000000000024 /* UITests */,
+				B20000000000000000000601 /* UITestSupport */,
 				B20000000000000000000502 /* UnitTests */,
 				B20000000000000000000010 /* Info.plist */,
 				B20000000000000000000011 /* App.entitlements */,
@@ -334,6 +340,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				B20000000000000000000024 /* UITests */,
+				B20000000000000000000601 /* UITestSupport */,
 			);
 			name = UITests;
 			packageProductDependencies = (

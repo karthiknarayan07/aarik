@@ -47,7 +47,7 @@ private struct IOSJobAccessory: View {
             return count == 1 ? "1 video ready to start" : "\(count) videos ready to start"
         }
         if let pause = model.queuePause.statusText { return pause }
-        if let progress { return "\(running?.phase ?? "Converting") · \(Int((progress * 100).rounded()))%" }
+        if let progress { return "\(running?.phaseTitle ?? "Converting") · \(Int((progress * 100).rounded()))%" }
         let count = model.activity.queue
         return count == 1 ? "1 video waiting" : "\(count) videos waiting"
     }

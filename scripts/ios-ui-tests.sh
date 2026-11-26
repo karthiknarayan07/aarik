@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the iOS UI tests (Apps/iOS/UITests) on one Simulator.
 #
-#   scripts/ios-ui-tests.sh [--udid UDID] [--perf] [--record-perf] [--only Class[/test]]... [--build-only]
+#   scripts/ios-ui-tests.sh [--udid UDID] [--perf] [--record-perf] [--record-snapshots] [--only Class[/test]]... [--build-only]
 #
 # Device: --udid, else $SIM_UDID, else iPhone 17 Pro if present, else the newest available iPhone. Always by UDID.
 # Fixtures are generated, never anyone's own media: two heavy noisy clips (scripts/make-ui-fixture.swift) go into the
@@ -10,6 +10,7 @@
 # Photos access is granted with `simctl privacy`. The Simulator library is not the owner's library.
 #
 # --perf runs the performance tests too (RUN_PERF_TESTS=1); --record-perf also rewrites Apps/iOS/UITests/Baselines.
+# --record-snapshots rewrites the reference screenshots in Apps/iOS/UITests/References (record on the iPhone 17 only).
 # Logs, derived data and result bundles go to .build/ios-ui.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -17,6 +18,7 @@ cd "$(dirname "$0")/.."
 UDID=${SIM_UDID:-}
 PERF=0
 RECORD=0
+SNAPSHOTS=0
 BUILD_ONLY=0
 ONLY=()
 while [[ $# -gt 0 ]]; do
@@ -24,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --udid) UDID=$2; shift 2 ;;
     --perf) PERF=1; shift ;;
     --record-perf) PERF=1; RECORD=1; shift ;;
+    --record-snapshots) SNAPSHOTS=1; shift ;;
     --only) ONLY+=("-only-testing:UITests/$2"); shift 2 ;;
     --build-only) BUILD_ONLY=1; shift ;;
     *) echo "ios-ui-tests: unknown argument $1" >&2; exit 2 ;;
@@ -107,6 +110,7 @@ cp "$FIXTURES/files-fixture.mov" "$DOCUMENTS/files-fixture.mov"
 RESULT=$OUT/results/$UDID.xcresult
 rm -rf "$RESULT"
 export TEST_RUNNER_UI_FIXTURES="$PWD/$FIXTURES"
+if [[ $SNAPSHOTS -eq 1 ]]; then export TEST_RUNNER_RECORD_SNAPSHOTS=1; fi
 if [[ $PERF -eq 1 ]]; then export TEST_RUNNER_RUN_PERF_TESTS=1; fi
 if [[ $RECORD -eq 1 ]]; then
   export TEST_RUNNER_RECORD_PERF_BASELINE=1
