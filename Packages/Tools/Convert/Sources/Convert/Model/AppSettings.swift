@@ -6,6 +6,7 @@ import Foundation
 public enum AppSettings {
     public enum Keys {
         public static let preset = "downscale.preset"
+        public static let compressPreset = "compress.preset"
         public static let autoStartQueue = SettingsStore.Keys.autoStartQueue
         /// `SpeedSetting` raw value: quiet, balanced or fastest.
         public static let speed = SettingsStore.Keys.speed
@@ -45,9 +46,11 @@ public enum AppSettings {
         try? FileManager.default.createDirectory(at: defaultOriginalsFolder, withIntermediateDirectories: true)
     }
 
-    /// The Save to choice new selections start with: next to original, or a folder whose bookmark still resolves.
-    public static func defaultSaveLocation(_ defaults: UserDefaults) -> SaveLocation {
-        var location = SaveLocation()
+    /// The Save to choice new selections start with: next to original (macOS) or Documents (iOS), or a folder whose
+    /// bookmark still resolves.
+    public static func defaultSaveLocation(_ defaults: UserDefaults, platform: ToolPlatforms = .current) -> SaveLocation
+    {
+        var location = SaveLocation(platform: platform)
         guard defaults.string(forKey: Keys.defaultSaveTo) == SaveLocation.Choice.folder.rawValue,
             let bookmark = defaults.data(forKey: Keys.defaultSaveFolder),
             let folder = resolve(bookmark)

@@ -103,6 +103,22 @@ public struct PendingDeletionBarContent: Equatable, Sendable {
         }
     }
 
+    /// The button's title with the count included, for the iOS bar: `"Move 1 Original to Recently Deleted…"`,
+    /// `"Move N Originals to Recently Deleted…"`, or `actionTitle` when retrying held originals.
+    public var countedActionTitle: String? {
+        switch status {
+        case .ready, .declined, .failed:
+            guard count > 0 || heldCanRetry else { return nil }
+            if count == 1 { return "Move 1 Original to Recently Deleted…" }
+            if count > 1 { return "Move \(count) Originals to Recently Deleted…" }
+            return Self.actionTitle
+        case .working:
+            return nil
+        case .moved:
+            return "Done"
+        }
+    }
+
     /// Moving originals is the destructive choice (the bar styles it so); "Done" is not.
     public var isDestructiveAction: Bool {
         switch status {

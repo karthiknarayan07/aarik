@@ -8,6 +8,17 @@ public struct ToolPlatforms: OptionSet, Hashable, Sendable {
     public static let iOS = ToolPlatforms(rawValue: 1 << 1)
 
     public static let all: ToolPlatforms = [.macOS, .iOS]
+
+    /// The platform this build is running on.
+    public static var current: ToolPlatforms {
+        #if os(macOS)
+            .macOS
+        #elseif os(iOS)
+            .iOS
+        #else
+            []
+        #endif
+    }
 }
 
 /// Which tools an app shell offers. There is no loading and no discovery (ADR 0004): the shell passes the tools it

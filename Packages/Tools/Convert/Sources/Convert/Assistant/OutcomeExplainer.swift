@@ -110,13 +110,18 @@ public struct OutcomeExplainer: Sendable {
     }
 
     private static func settingsLines(_ settings: ConvertJobSettings) -> [String] {
-        guard let custom = settings.custom else { return ["Preset: \(settings.preset.displayName)"] }
-        var lines = ["Preset: Custom settings"]
-        lines.append(
-            "Resolution: \(custom.targetShortSide.map { "\($0)p short side" } ?? "kept as in the original")")
-        lines.append("Codec: \(custom.codec == .h264Compatible ? "H.264 (SDR)" : "HEVC (keeps HDR)")")
-        if let rate = custom.maxFrameRate { lines.append("Frame rate: capped at \(Int(rate)) fps") }
-        return lines
+        switch settings.kind {
+        case .compress(let preset):
+            return ["Mode: Compress (keeps resolution)", "Preset: \(preset.displayName)"]
+        case .shrink:
+            guard let custom = settings.custom else { return ["Preset: \(settings.preset.displayName)"] }
+            var lines = ["Preset: Custom settings"]
+            lines.append(
+                "Resolution: \(custom.targetShortSide.map { "\($0)p short side" } ?? "kept as in the original")")
+            lines.append("Codec: \(custom.codec == .h264Compatible ? "H.264 (SDR)" : "HEVC (keeps HDR)")")
+            if let rate = custom.maxFrameRate { lines.append("Frame rate: capped at \(Int(rate)) fps") }
+            return lines
+        }
     }
 
     private static func settings(of job: Job) -> ConvertJobSettings? {

@@ -11,6 +11,8 @@ final class VideoEncoder {
         var width: Int
         var height: Int
         var averageBitRate: Int
+        /// Hard bit-rate cap over a 1-second window (`DataRateLimits`), in bits per second. Nil leaves it uncapped.
+        var maxBitRate: Int? = nil
         var codec: VideoCodec = .hevcKeepHDR
         /// HEVC: Main10 for a 10-bit source, Main for an 8-bit one, so the bit depth is kept. H.264 is always 8-bit.
         var isTenBit: Bool
@@ -80,6 +82,12 @@ final class VideoEncoder {
         // Optional properties: a session that reports one unsupported goes on without it. For static HDR metadata the
         // report then shows the item as lost.
         var optional: Set<String> = []
+        if let maxBitRate = configuration.maxBitRate, maxBitRate > 0 {
+            let bytesPerSecond = max(1, maxBitRate / 8)
+            properties.append(
+                (kVTCompressionPropertyKey_DataRateLimits, [bytesPerSecond as NSNumber, 1.0 as NSNumber] as CFArray))
+            optional.insert(kVTCompressionPropertyKey_DataRateLimits as String)
+        }
         if let value = configuration.masteringDisplay {
             properties.append((kVTCompressionPropertyKey_MasteringDisplayColorVolume, value))
             optional.insert(kVTCompressionPropertyKey_MasteringDisplayColorVolume as String)

@@ -133,8 +133,17 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                 // Empty space below the last row still belongs to the grid: a click there clears the selection.
                 .frame(minHeight: viewport.height, alignment: .top)
                 .coordinateSpace(.named(mediaGridSpace))
-                .simultaneousGesture(marqueeGesture)
-                .overlay(alignment: .topLeading) { MarqueeOverlay(state: marquee) }
+                #if os(macOS)
+                    .simultaneousGesture(marqueeGesture)
+                    .overlay(alignment: .topLeading) { MarqueeOverlay(state: marquee) }
+                #else
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        isFocused = true
+                        state.selected = []
+                        selection = []
+                    }
+                #endif
             }
             .onGeometryChange(for: CGSize.self) {
                 $0.size
@@ -182,7 +191,8 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
             let event = NSApp.currentEvent
             click(id, count: event?.clickCount ?? 1, modifiers: Self.clickModifiers(event?.modifierFlags ?? []))
         #else
-            click(id, count: 1, modifiers: [])
+            // Touch has no modifier keys, so tapping a tile toggles it in the selection.
+            click(id, count: 1, modifiers: .toggle)
         #endif
     }
 

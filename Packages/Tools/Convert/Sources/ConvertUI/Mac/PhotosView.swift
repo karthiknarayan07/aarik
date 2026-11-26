@@ -287,6 +287,7 @@
 
         var body: some View {
             Button("Add to Queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }
+            Button("Compress…", systemImage: "rectangle.compress.vertical") { model.compressPhotosClicked(item) }
             Divider()
             Button("Show in Photos", systemImage: "photo.on.rectangle") { model.showInPhotos(item) }
             // The poster frame: the video stays in Photos, so nothing is downloaded or exported.

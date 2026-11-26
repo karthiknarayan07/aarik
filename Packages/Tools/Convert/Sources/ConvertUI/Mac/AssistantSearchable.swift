@@ -32,8 +32,15 @@ private struct AssistantSearchable: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        let placement: SearchFieldPlacement = {
+            #if os(macOS)
+                .toolbar
+            #else
+                .automatic
+            #endif
+        }()
         content
-            .searchable(text: $browser.search, tokens: tokens, placement: .toolbar, prompt: "Search") { token in
+            .searchable(text: $browser.search, tokens: tokens, placement: placement, prompt: "Search") { token in
                 Label(token.title, systemImage: token.symbolName)
                     .accessibilityLabel("Filter: \(token.title)")
                     .accessibilityHint("Press Delete to remove this filter")
@@ -51,10 +58,11 @@ private struct AssistantSearchable: ViewModifier {
                     ToolbarItem {
                         Button("Ask in Plain Words", systemImage: "sparkles") { ask() }
                             .disabled(browser.search.trimmingCharacters(in: .whitespaces).isEmpty || search.isWorking)
-                            .help("Turn what you typed into filters, on this Mac")
+                            .help("Turn what you typed into filters, on \(DeviceCopy.thisDevice)")
                             .accessibilityLabel("Ask in Plain Words")
                             .accessibilityHint(
-                                "Turns what you typed in the search field into filters. Runs on this Mac.")
+                                "Turns what you typed in the search field into filters. Runs on \(DeviceCopy.thisDevice)."
+                            )
                     }
                 }
             }
