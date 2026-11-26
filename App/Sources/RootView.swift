@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct RootView: View {
     @Bindable var model: AppModel
+    @State private var isDropTargeted = false
 
     private var alertShown: Binding<Bool> {
         Binding {
@@ -49,6 +50,17 @@ struct RootView: View {
                 }
                 .toolbar {
                     if showsLibrary {
+                        // The inspector's main action sits in the toolbar, as Xcode and Photos put theirs. ⌘⏎
+                        // belongs to the Queue menu's item of the same name.
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(model.toolbarAddToQueueTitle, systemImage: "plus") {
+                                model.requestAddSelectionToQueue()
+                            }
+                            .buttonStyle(.glassProminent)
+                            .disabled(!model.canAddSelectionToQueue)
+                            .help("Add the selected videos to the queue (⌘⏎)")
+                        }
+                        ToolbarSpacer(.fixed, placement: .primaryAction)
                         ToolbarItem(placement: .primaryAction) {
                             InspectorToggle(isPresented: $model.isInspectorPresented)
                         }
@@ -58,21 +70,34 @@ struct RootView: View {
         .dropDestination(for: URL.self) { urls, _ in
             model.addFiles(urls)
             return !urls.isEmpty
+        } isTargeted: {
+            isDropTargeted = $0
         }
-        .alert("Replace the original?", isPresented: $model.isConfirmingReplace) {
+        .overlay {
+            // The system's drop feedback: the window's edge in the accent colour.
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.tint, lineWidth: 3)
+                    .padding(3)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .alert("Replace the Original?", isPresented: $model.isConfirmingReplace) {
             Button("Cancel", role: .cancel) {}
-            Button("Replace", role: .destructive) { model.confirmReplace() }
+            // Not destructive: the original goes to the Trash (or Recently Deleted), where it can be restored.
+            Button("Replace") { model.confirmReplace() }
         } message: {
             if model.isPhotosPage {
                 Text(
                     "The smaller copy is saved to Photos and verified first. Then Photos asks you to move the "
                         + "originals to Recently Deleted.")
             } else {
-                Text("The original goes to the Trash after the smaller copy is verified.")
+                Text("The original moves to the Trash after the smaller copy is verified.")
             }
         }
         .alert(model.alert?.title ?? "", isPresented: alertShown, presenting: model.alert) { _ in
-            Button("OK", role: .cancel) {}
+            Button("OK") {}
         } message: { alert in
             Text(alert.message)
         }
@@ -132,7 +157,7 @@ private struct InspectorToggle: View {
         } label: {
             Label("Inspector", systemImage: "sidebar.trailing")
         }
-        .help(isPresented ? "Hide inspector" : "Show inspector")
-        .accessibilityLabel(isPresented ? "Hide inspector" : "Show inspector")
+        .help(isPresented ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
+        .accessibilityLabel(isPresented ? "Hide Inspector" : "Show Inspector")
     }
 }

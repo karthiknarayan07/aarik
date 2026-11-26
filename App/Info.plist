@@ -41,6 +41,8 @@
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>$(PRODUCT_NAME) reads your Photos library to find large videos. It only changes Photos when you choose to convert a video.</string>
+	<key>AppHelpURL</key>
+	<string>$(APP_HELP_URL)</string>
 	<key>SUFeedURL</key>
 	<string>$(APP_UPDATE_FEED_URL)</string>
 	<key>SUPublicEDKey</key>

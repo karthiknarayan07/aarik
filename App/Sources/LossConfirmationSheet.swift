@@ -27,13 +27,14 @@ struct LossConfirmationSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel, action: cancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Convert anyway", action: convert)
+                Button("Convert Anyway", action: convert)
                     .keyboardShortcut(.defaultAction)
                     .help("Add the videos to the queue, except the ones you skip")
             }
         }
-        .padding(20)
-        .frame(width: 460)
+        // The system's form-sized sheet, with its standard padding, instead of a hand-set width.
+        .scenePadding()
+        .presentationSizing(.form)
     }
 }
 
@@ -48,9 +49,8 @@ private struct LossRow: View {
                 Text(entry.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(lostText)
+                StatusLabel(lostText, systemImage: "exclamationmark.triangle", tint: .orange)
                     .font(.caption)
-                    .foregroundStyle(.orange)
             }
             Spacer()
             Toggle("Skip this video", isOn: $entry.skip)
