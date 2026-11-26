@@ -39,7 +39,16 @@ extension ConvertModel {
 
     public var canAddSelectionToQueue: Bool {
         if isPhotosPage { return canAddPhotosToQueue }
-        return !queueableItems.isEmpty && saveLocation.destination != nil
+        return !queueableItems.isEmpty && effectiveFileDestination != nil
+    }
+
+    /// File destination with platform policy enforced (Replace is disabled for Files inputs on iOS).
+    public var effectiveFileDestination: SaveDestination? {
+        guard let destination = saveLocation.destination else { return nil }
+        if !SaveLocation.allowsReplace(), destination == .replace {
+            return SaveLocation(platform: .current).destination
+        }
+        return destination
     }
 
     public var addToQueueTitle: String {
@@ -52,7 +61,8 @@ extension ConvertModel {
     /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
     public func requestAddSelectionToQueue() {
         guard canAddSelectionToQueue else { return }
-        let replaces = isPhotosPage ? photosSaveLocation.choice == .replace : saveLocation.choice == .replace
+        let replaces =
+            isPhotosPage ? photosSaveLocation.choice == .replace : effectiveFileDestination == .replace
         if replaces, replaceConsent.needsAsking {
             isConfirmingReplace = true
         } else if isPhotosPage {
@@ -73,7 +83,7 @@ extension ConvertModel {
     /// MPEG-4 file has to be saved as QuickTime) are listed for the user first (`lossReview`); the rest go
     /// straight in.
     public func addSelectionToQueue() {
-        guard let destination = saveLocation.destination else {
+        guard let destination = effectiveFileDestination else {
             replaceConsent.abandon()
             return
         }
@@ -147,7 +157,9 @@ extension ConvertModel {
         replaceConsent.videosAdded()
         let batch = JobFactory.makeJobs(
             for: items.compactMap { item in
-                item.fileURL.map { (url: $0, preset: presets[item.id] ?? settings.preset) }
+                item.fileURL.map {
+                    (url: $0, preset: presets[item.id] ?? settings.preset, bookmark: library.bookmark(for: item.id))
+                }
             }, settings: settings,
             losses: losses)
         let autoStart = services.settings.autoStartQueue

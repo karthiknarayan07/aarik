@@ -25,6 +25,8 @@ public actor ThumbnailCache {
 
     /// A thumbnail whose longer side is at most `maxPixel`, in display orientation; nil if none can be made.
     public func thumbnail(for url: URL, maxPixel: Int = 320) async -> CGImage? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         let key = Key(path: url.path, modified: modified, maxPixel: maxPixel)
         return await image(for: key) { await Self.generate(url, maxPixel: maxPixel) }
@@ -64,6 +66,8 @@ public actor ThumbnailCache {
     }
 
     private static func generate(_ url: URL, maxPixel: Int) async -> CGImage? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true

@@ -9,6 +9,8 @@ public enum SaveDestination: Codable, Sendable, Equatable {
     case nextToOriginal
     case folder(bookmark: Data)
     case replace
+    /// The app's Documents directory (e.g. On My iPhone › <app> on iOS).
+    case documents
 }
 
 /// Where a Photos video's converted copy goes.

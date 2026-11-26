@@ -19,7 +19,7 @@ public final class LocalLibrary {
     @ObservationIgnored private let scanner: LibraryScanner
     @ObservationIgnored private let batchSize: Int
     @ObservationIgnored private var entries: [UUID: BookmarkStore.Entry] = [:]
-    @ObservationIgnored private var pending: [[URL]] = []
+    @ObservationIgnored private var pending: [(urls: [URL], scoped: [URL])] = []
     @ObservationIgnored private var worker: Task<Void, Never>?
     /// Identifies the current worker, so a cancelled one finishing late cannot reset a newer scan's state.
     @ObservationIgnored private var workerID = UUID()
@@ -84,10 +84,12 @@ public final class LocalLibrary {
     // MARK: - Adding and removing
 
     /// Adds files, or the movies inside folders (recursively). Scanning happens in the background; files already
-    /// in the library are skipped, and calls made while a scan runs are queued behind it.
+    /// in the library are skipped, and calls made while a scan runs are queued behind it. Security-scoped URLs (from
+    /// an iOS document picker) are accessed synchronously before the caller returns and released once scanned.
     public func add(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
-        pending.append(urls)
+        let scoped = urls.filter { $0.startAccessingSecurityScopedResource() }
+        pending.append((urls: urls, scoped: scoped))
         isScanning = true
         if worker == nil {
             let id = UUID()
@@ -96,8 +98,16 @@ public final class LocalLibrary {
         }
     }
 
+    /// The stored bookmark for an item, if one was created when the item was added.
+    public func bookmark(for id: UUID) -> Data? {
+        entries[id]?.bookmark
+    }
+
     /// Stops the scan; items found before it stopped stay.
     public func cancelScan() {
+        for batch in pending {
+            for url in batch.scoped { url.stopAccessingSecurityScopedResource() }
+        }
         pending.removeAll()
         if let worker {
             worker.cancel()
@@ -272,6 +282,8 @@ public final class LocalLibrary {
     nonisolated static func checkAvailability(of files: [(id: UUID, url: URL)]) -> [UUID: Bool] {
         var result: [UUID: Bool] = [:]
         for file in files {
+            let scoped = file.url.startAccessingSecurityScopedResource()
+            defer { if scoped { file.url.stopAccessingSecurityScopedResource() } }
             let exists = FileManager.default.fileExists(atPath: file.url.path)
             result[file.id] = exists && !BookmarkStore.isInTrash(file.url)
         }
@@ -324,12 +336,16 @@ public final class LocalLibrary {
 
     private func drain(_ id: UUID) async {
         while !pending.isEmpty, !Task.isCancelled, workerID == id {
-            let urls = pending.removeFirst()
-            await scanner.scan(urls, excluding: pathKeys, batchSize: batchSize) { [weak self] batch in
-                await self?.receive(batch)
+            let batch = pending.removeFirst()
+            await scanner.scan(batch.urls, excluding: pathKeys, batchSize: batchSize) { [weak self] found in
+                await self?.receive(found)
             }
+            for url in batch.scoped { url.stopAccessingSecurityScopedResource() }
         }
         guard workerID == id else { return }
+        for batch in pending {
+            for url in batch.scoped { url.stopAccessingSecurityScopedResource() }
+        }
         pending.removeAll()
         isScanning = false
         worker = nil
