@@ -625,6 +625,28 @@ private final class PicksCollection: MediaCollection {
     var isScanning = false
 }
 
+@Suite struct AddToQueueResolutionTests {
+    private func item(available: Bool = true) -> LibraryItem {
+        LibraryItem(
+            id: UUID(), source: .photos("x"), name: "x", byteSize: 1, duration: 1,
+            pixelSize: CGSize(width: 3840, height: 2160), frameRate: 30, captureDate: Date(), badges: [],
+            isAvailable: available, inventory: .init())
+    }
+
+    @Test func idsThatAreGoneOrNoLongerAvailableAreSkippedAtClickTime() {
+        let kept = item()
+        let gone = item()
+        let unavailable = item(available: false)
+        let bucket = SavingsBucket(
+            id: "B1", quality: .uhd(.fps30), year: 2024, library: .photos, excludesShrunk: false, count: 3, bytes: 3,
+            couldFree: 3, itemIDs: [kept.id, gone.id, unavailable.id])
+
+        #expect(bucket.availableItemIDs(in: [kept, unavailable]) == [kept.id])
+        #expect(bucket.availableItemIDs(in: []).isEmpty)
+        #expect(bucket.availableItemIDs(in: [kept, gone, unavailable]) == [kept.id, gone.id])
+    }
+}
+
 @MainActor
 @Suite struct ShowBucketTests {
     private func item(_ name: String, height: CGFloat = 2160) -> LibraryItem {

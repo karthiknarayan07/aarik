@@ -32,8 +32,12 @@ extension AppModel {
     /// queues anything itself; this runs only when the user presses the button.
     func addToQueue(_ bucket: SavingsBucket) {
         guard canAddToQueue(bucket), let bucket = assistant.smartPicks.current(bucket) else { return }
+        // The group's ids are as of the last refresh: take only the videos that are still there and available.
+        let page = bucket.library == .photos ? photosBrowser : browser
+        let ids = bucket.availableItemIDs(in: page.collection.items)
+        guard !ids.isEmpty else { return }
         show(bucket)
-        (bucket.library == .photos ? photosBrowser : browser).selection = Set(bucket.itemIDs)
+        page.selection = Set(ids)
         requestAddSelectionToQueue()
     }
 }

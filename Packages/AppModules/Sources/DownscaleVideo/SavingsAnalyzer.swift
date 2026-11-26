@@ -37,6 +37,13 @@ public struct SavingsBucket: Sendable, Equatable, Identifiable {
         self.itemIDs = itemIDs
     }
 
+    /// The group's videos that are still in `items` and available now. `itemIDs` is as of the last refresh, so a
+    /// click acts on this instead: a video that has gone since is left out.
+    public func availableItemIDs(in items: [LibraryItem]) -> [UUID] {
+        let present = Set(items.filter(\.isAvailable).map(\.id))
+        return itemIDs.filter(present.contains)
+    }
+
     /// Names the group itself (quality, year, library), unlike `id`, which is its rank and changes when the
     /// ranking does. Use it to follow a group across refreshes.
     public var identity: String { "\(library == .photos ? "photos" : "files")-\(year)-\(quality.title)" }
