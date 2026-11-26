@@ -12,9 +12,39 @@ extension MovieDropFilter {
         return type.conforms(to: .movie)
     }
 
-    /// Whether any of `urls` looks like a movie (see `looksLikeMovie`).
-    public static func mightContainMovie(_ urls: [URL]) -> Bool {
-        urls.contains(where: looksLikeMovie)
+    /// Whether any of `urls` looks like a movie (see `looksLikeMovie`). A file whose name says nothing (no extension,
+    /// or one the system doesn't know) falls back to `contentType`, which reads the disk; at most `maxLookups`
+    /// files are looked up, so a drag of thousands of unnamed files stays quick. Call this once per drag (see
+    /// `DragVerdictCache`), not for every update of the pointer.
+    public static func mightContainMovie(
+        _ urls: [URL], maxLookups: Int = 20, contentType: (URL) -> UTType? = diskContentType
+    ) -> Bool {
+        var lookups = 0
+        for url in urls {
+            if looksLikeMovie(url) { return true }
+            guard url.isFileURL, !url.hasDirectoryPath, UTType(filenameExtension: url.pathExtension) == nil,
+                lookups < maxLookups
+            else { continue }
+            lookups += 1
+            if contentType(url)?.conforms(to: .movie) == true { return true }
+        }
+        return false
+    }
+
+    /// The type the disk gives a file; nil for a folder, a package or an unreadable file.
+    public static func diskContentType(of url: URL) -> UTType? {
+        guard let values = try? url.resourceValues(forKeys: [.contentTypeKey, .isDirectoryKey, .isPackageKey]),
+            values.isDirectory != true, values.isPackage != true
+        else { return nil }
+        return values.contentType
+    }
+
+    /// Splits `urls` into the movies and everything else (folders, packages, unreadable files, other types). Reads
+    /// the disk, so call it off the main thread.
+    public static func partition(_ urls: [URL]) -> (movies: [URL], others: [URL]) {
+        let movies = movies(in: urls)
+        let kept = Set(movies.map(\.absoluteString))
+        return (movies, urls.filter { !kept.contains($0.absoluteString) })
     }
 
     /// The file URLs on a pasteboard, read without checking the files.
@@ -47,58 +77,11 @@ public struct DragVerdictCache: Sendable, Equatable {
 }
 
 /// Whether opening the popover should activate the app. A pointer click leaves the app and the windows in front
-/// alone, like Apple's menu bar extras; opening it from the keyboard or with VoiceOver activates, because an
-/// inactive app's popover can't take keystrokes.
+/// alone, like Apple's menu bar extras; opening it from the keyboard activates, because an inactive app's popover
+/// can't take keystrokes. With VoiceOver on it always activates: VoiceOver presses the button with a mouse-like
+/// event, and its cursor can only move into the popover once the app is active.
 public enum PopoverActivation {
-    public static func shouldActivate(openedBy eventType: NSEvent.EventType?) -> Bool {
-        !StatusItemHitTest.passesThrough(eventType)
-    }
-}
-
-/// What the popover says about the current or most recent quick run started from the menu bar.
-public struct QuickRunStatus: Sendable, Equatable {
-    public enum Phase: Sendable, Equatable {
-        /// Files are being checked before anything is queued.
-        case checking(files: Int)
-        /// Jobs are queued or converting.
-        case running(videos: Int)
-        case finished(QuickRunTally)
-    }
-
-    public var runID: UUID?
-    public var phase: Phase
-    /// The run's jobs, so a status stuck on "running" can be cleared when they are gone.
-    public var jobIDs: Set<UUID>
-
-    public init(runID: UUID? = nil, phase: Phase, jobIDs: Set<UUID> = []) {
-        self.runID = runID
-        self.phase = phase
-        self.jobIDs = jobIDs
-    }
-
-    public var text: String {
-        switch phase {
-        case .checking(let files): "Checking \(files) \(files == 1 ? "video" : "videos")…"
-        case .running(let videos): "Shrinking \(videos) \(videos == 1 ? "video" : "videos")…"
-        case .finished(let tally): "Done: " + Self.summary(tally)
-        }
-    }
-
-    private static func summary(_ tally: QuickRunTally) -> String {
-        var parts: [String] = []
-        if tally.converted > 0 { parts.append("\(tally.converted) shrunk") }
-        if tally.skipped > 0 { parts.append("\(tally.skipped) skipped") }
-        if tally.failed > 0 { parts.append("\(tally.failed) failed") }
-        return parts.isEmpty ? "nothing to shrink" : parts.joined(separator: ", ")
-    }
-
-    /// Skipped files can be reviewed once the run is done.
-    public var skippedCount: Int {
-        if case .finished(let tally) = phase { tally.skipped } else { 0 }
-    }
-
-    /// Whether it still says the run is going.
-    public var isActive: Bool {
-        if case .finished = phase { false } else { true }
+    public static func shouldActivate(openedBy eventType: NSEvent.EventType?, voiceOverEnabled: Bool) -> Bool {
+        voiceOverEnabled || !StatusItemHitTest.passesThrough(eventType)
     }
 }
