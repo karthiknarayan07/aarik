@@ -10,7 +10,7 @@ private struct MainWindowContent: View {
     @Bindable var shell: MacShell
 
     var body: some View {
-        MacRootView(module: shell.scene, sidebarVisibility: $shell.sidebarVisibility)
+        MacRootView(module: shell.scene, services: shell.services, sidebarVisibility: $shell.sidebarVisibility)
     }
 }
 

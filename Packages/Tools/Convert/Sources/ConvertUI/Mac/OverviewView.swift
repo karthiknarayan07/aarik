@@ -8,7 +8,7 @@
     import PhotosLibrary
     import SwiftUI
 
-    /// Overview: how much space the videos take and what converting them could free, where to start, and what has
+    /// Home on the Mac: the app-level savings summary. How much space the videos take and what converting them could free, where to start, and what has
     /// been saved so far. A vertical stack of titled groups, so another group (suggestions, for instance) can be added
     /// without changing the rest.
     struct OverviewView: View {

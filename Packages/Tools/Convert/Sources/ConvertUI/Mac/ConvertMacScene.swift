@@ -16,9 +16,26 @@
 
         public var tool: any Tool { model.tool }
 
-        public var selection: VideoPage? {
-            get { model.selection }
-            set { model.selection = newValue }
+        public var sidebarTint: SidebarTint { .indigo }
+
+        /// Home and Ask are the shell's pages; the model keeps them beside its own, so they map one to one.
+        public var selection: MacShellPage<VideoPage>? {
+            get {
+                switch model.selection {
+                case .overview: .home
+                case .ask: .ask
+                case .some(let page): .page(page)
+                case nil: nil
+                }
+            }
+            set {
+                switch newValue {
+                case .home: model.selection = .overview
+                case .ask: model.selection = .ask
+                case .page(let page): model.selection = page
+                case nil: model.selection = nil
+                }
+            }
         }
 
         public var isInspectorPresented: Bool {
@@ -31,11 +48,24 @@
                 VideoSidebarState(
                     photosCount: model.photos.hasLoaded ? model.photos.items.count : nil,
                     localCount: model.library.items.count, badgeCounts: model.library.badgeCounts,
-                    activity: model.activity, showsAsk: model.isAskAvailable))
+                    activity: model.activity))
+        }
+
+        /// Today's Overview, the savings summary, is the app's Home.
+        @ViewBuilder public func homeSummary() -> some View {
+            OverviewView(model: model)
         }
 
         @ViewBuilder public func detail(for destination: VideoPage?) -> some View {
             VideoDetail(model: model, destination: destination)
+        }
+
+        @ViewBuilder public func bottomBar() -> some View {
+            if let content = model.pendingDeletionBar {
+                PendingDeletionBar(
+                    content: content, perform: model.performPendingDeletionAction,
+                    removeKept: model.removeKeptOriginalsFromList, openSettings: model.openPhotosAccessSettings)
+            }
         }
 
         /// The same items on every page, disabled where they don't apply: a toolbar that appears or disappears with the
@@ -59,19 +89,6 @@
                 .disabled(!model.canAddSelectionToQueue)
                 .help("Add the selected videos to the queue (⌘⏎)")
             }
-            if model.isAskAvailable {
-                // On every page (disabled away from Ask), so switching pages never changes the toolbar. ⌘N belongs
-                // to File → New Chat.
-                ToolbarItem(placement: .primaryAction) {
-                    Button("New Chat", systemImage: "square.and.pencil") { model.startNewChat() }
-                        .disabled(destination != .ask)
-                        .help("Start a new chat (⌘N)")
-                }
-            }
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-            ToolbarItem(placement: .primaryAction) {
-                InspectorToggle(isPresented: Bindable(model).isInspectorPresented)
-            }
         }
 
         /// Every page has the inspector column, so the detail area keeps its width when the page changes.
@@ -81,15 +98,12 @@
             Group {
                 if destination?.showsLibrary == true || destination == .photosVideos {
                     LibraryInspector(model: model)
-                } else if destination == .ask {
-                    MacChatHistoryView(chat: model.services.assistantChat)
                 } else {
                     EmptyState(
                         "No Selection", systemImage: "sidebar.trailing",
-                        message: "Select videos in Videos or Local Files to see their details here.")
+                        message: "Select videos in Photos or Local Files to see their details here.")
                 }
             }
-            .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
         }
 
         public var dialogs: VideoDialogs { VideoDialogs(model: model) }
@@ -143,8 +157,9 @@
                 case .completed: CompletedView(model: model)
                 case .keptAsIs: KeptAsIsView(model: model)
                 case .failed: FailedView(model: model)
-                case .overview: OverviewView(model: model)
-                case .ask: MacAskView(chat: model.services.assistantChat)
+                case .overview, .ask:
+                    // The shell's pages (Home, Ask); never selected through the tool's rows.
+                    EmptyView()
                 case .some(let page):
                     page.emptyState
                         .navigationTitle(page.title)
@@ -153,14 +168,6 @@
                         "Nothing Selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar."
                     )
                     .navigationTitle(AppInfo.displayName)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaBar(edge: .bottom) {
-                if let content = model.pendingDeletionBar {
-                    PendingDeletionBar(
-                        content: content, perform: model.performPendingDeletionAction,
-                        removeKept: model.removeKeptOriginalsFromList, openSettings: model.openPhotosAccessSettings)
                 }
             }
         }
@@ -246,20 +253,6 @@
                             cancel: model.cancelLossReview, convert: model.confirmLossReview)
                     }
                 }
-        }
-    }
-
-    private struct InspectorToggle: View {
-        @Binding var isPresented: Bool
-
-        var body: some View {
-            Button {
-                isPresented.toggle()
-            } label: {
-                Label("Inspector", systemImage: "sidebar.trailing")
-            }
-            .help(isPresented ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
-            .accessibilityLabel(isPresented ? "Hide Inspector" : "Show Inspector")
         }
     }
 #endif

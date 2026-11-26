@@ -2,25 +2,42 @@
     import AppCore
     import SwiftUI
 
-    /// The sidebar: draws whatever sections the hosted tool module lists, through `ToolSidebarModel`.
+    /// The sidebar, as in Mail and Xcode: the shell's Home and Ask, then a Tools section with the hosted tool's pages
+    /// nested under its own disclosure row. The tool lists only its pages, through `ToolSidebarModel`.
     public struct MacSidebarView<Module: MacToolScene>: View {
         let module: Module
+        /// Whether Ask is listed: only while the on-device model can be asked.
+        let showsAsk: Bool
+        @AppStorage private var isToolExpanded: Bool
 
-        public init(module: Module) { self.module = module }
+        public init(module: Module, showsAsk: Bool) {
+            self.module = module
+            self.showsAsk = showsAsk
+            self._isToolExpanded = AppStorage(wrappedValue: true, "sidebar.tool.\(module.tool.id).expanded")
+        }
 
         public var body: some View {
-            let sidebar = ToolSidebarModel(module.sidebar)
-            let selection = Binding<Module.Destination?> {
+            let sidebar = MacSidebarModel(showsAsk: showsAsk, tool: module.sidebar)
+            let selection = Binding<MacShellPage<Module.Destination>?> {
                 module.selection
             } set: { newValue in
                 if sidebar.accepts(newValue) { module.selection = newValue }
             }
             List(selection: selection) {
-                ForEach(sidebar.sections) { section in
-                    Section(section.title) {
-                        ForEach(section.rows) { row in
+                SidebarRowLabel(title: "Home", systemImage: "house", tint: .blue)
+                    .tag(MacShellPage<Module.Destination>.home)
+                if showsAsk {
+                    SidebarRowLabel(title: "Ask", systemImage: "sparkles", tint: .purple)
+                        .tag(MacShellPage<Module.Destination>.ask)
+                }
+                Section("Tools") {
+                    DisclosureGroup(isExpanded: $isToolExpanded) {
+                        ForEach(sidebar.toolRows) { row in
                             SidebarRow(module: module, row: row)
                         }
+                    } label: {
+                        SidebarRowLabel(
+                            title: module.tool.title, systemImage: module.tool.systemImage, tint: module.sidebarTint)
                     }
                 }
             }
@@ -50,7 +67,7 @@
                 }
             }
             .badge(item.count ?? 0)
-            .tag(destination)
+            .tag(MacShellPage.page(destination))
             // The row reads as its title; the count and the running progress are its value.
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.accessibilityLabel)

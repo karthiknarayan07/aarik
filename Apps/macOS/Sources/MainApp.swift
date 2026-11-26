@@ -50,7 +50,7 @@ private struct ViewCommands: Commands {
                 shell.scene.isInspectorPresented.toggle()
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
-            .disabled(!shell.scene.hasInspector(for: shell.scene.selection))
+            .disabled(!shell.scene.hasInspector(on: shell.scene.selection))
         }
     }
 }

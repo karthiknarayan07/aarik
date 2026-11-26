@@ -64,18 +64,19 @@ private struct GroupSortMenus: View {
     }
 }
 
-/// Go → the sections of the sidebar, ⌘1 to ⌘7 in its order, and Ask as ⌘8 while the assistant is available.
+/// Go → the pages of the sidebar in its order: Home ⌘1, Ask ⌘2 (while the assistant is available), then the tool's
+/// pages. Each keeps its number whether or not Ask is listed.
 private struct GoCommands: Commands {
     let model: ConvertModel
 
     var body: some Commands {
         CommandMenu("Go") {
-            ForEach(Array(model.goDestinations().enumerated()), id: \.offset) { index, destination in
-                Button(destination.title) {
+            ForEach(model.goEntries(), id: \.index) { entry in
+                Button(entry.page.title) {
                     model.host.showMainWindow()
-                    model.selection = destination
+                    model.selection = entry.page
                 }
-                .keyboardShortcut(SectionShortcuts.chord(at: index)?.keyboardShortcut)
+                .keyboardShortcut(SectionShortcuts.chord(at: entry.index)?.keyboardShortcut)
             }
         }
     }

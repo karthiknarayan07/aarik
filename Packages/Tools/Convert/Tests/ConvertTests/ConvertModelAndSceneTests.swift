@@ -44,6 +44,23 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
         #expect(!reloaded.isInspectorPresented)
     }
 
+    @Test func theSelectedPageIsRestoredOnTheNextLaunch() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suiteName = "ConvertModelAndSceneTests-\(UUID().uuidString)"
+        let model = makeModel(directory: directory, defaults: UserDefaults(suiteName: suiteName)!)
+        #expect(model.selection == .localFiles)
+        model.selection = .queue
+        // A filter is not a page to come back to: the last stored page stays.
+        model.selection = .mediaType(.k4)
+
+        let reloaded = makeModel(directory: directory, defaults: UserDefaults(suiteName: suiteName)!)
+        #expect(reloaded.selection == .queue)
+        reloaded.selection = .overview
+        let again = makeModel(directory: directory, defaults: UserDefaults(suiteName: suiteName)!)
+        #expect(again.selection == .overview)
+    }
+
     @Test func showQueueUsesHostAndSelectsQueue() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -104,8 +121,15 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             #expect(scene.tool.id == ConvertTool.toolID)
             #expect(scene.tool.platforms == [.macOS, .iOS])
 
-            scene.selection = .overview
+            scene.selection = .home
             scene.isInspectorPresented = false
+            #expect(model.selection == .overview)
+            #expect(scene.selection == .home)
+            // Home, Ask and the tool's pages round-trip through the shell's page type.
+            for page in [MacShellPage<VideoPage>.ask, .page(.queue), .page(.mediaType(.k4)), .home] {
+                scene.selection = page
+                #expect(scene.selection == page)
+            }
             #expect(model.selection == .overview)
             #expect(!model.isInspectorPresented)
         }
@@ -118,7 +142,8 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             #expect(scene.hasInspector(for: .localFiles))
             #expect(scene.hasInspector(for: .mediaType(.k4)))
             #expect(scene.hasInspector(for: .photosVideos))
-            #expect(scene.hasInspector(for: .overview))
+            #expect(scene.hasInspector(on: .home))
+            #expect(scene.hasInspector(on: .ask))
             #expect(scene.hasInspector(for: .queue))
             #expect(scene.hasInspector(for: .completed))
             #expect(scene.hasInspector(for: .keptAsIs))
@@ -149,7 +174,7 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             defer { try? FileManager.default.removeItem(at: directory) }
             let model = makeModel(directory: directory)
             let scene = ConvertMacScene(model: model)
-            scene.selection = .overview
+            scene.selection = .home
 
             #expect(!scene.dropFiles([], on: .localFiles))
             #expect(scene.dropFiles([URL(filePath: "/tmp/nonexistent.mov")], on: .localFiles))
