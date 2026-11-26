@@ -2,7 +2,7 @@
 
 Releases are built by `.github/workflows/release.yml` when a tag `vX.Y.Z` is pushed. The workflow:
 
-1. Fails before building if the tag doesn't match `MARKETING_VERSION` in `Config/App.xcconfig`, if the secret
+1. Fails before building if the tag doesn't match `MARKETING_VERSION` in `Config/macOS.xcconfig`, if the secret
    `SPARKLE_ED_PRIVATE_KEY` is missing, or if `APP_UPDATE_PUBLIC_KEY` is empty.
 2. Builds the DMG with `scripts/make-dmg.sh` (ad-hoc signed), using the workflow run number as the build number
    (`CFBundleVersion`), so every release counts up.
@@ -39,7 +39,7 @@ Do these once, on your own Mac. The private key never goes into the repository, 
    rm -P sparkle-private-key.txt
    ```
 
-4. **Put the public key in the build.** In `Config/App.xcconfig` set
+4. **Put the public key in the build.** In `Config/macOS.xcconfig` set
 
    ```
    APP_UPDATE_PUBLIC_KEY = <the public key printed by generate_keys>
@@ -48,7 +48,7 @@ Do these once, on your own Mac. The private key never goes into the repository, 
    and commit it. The public key is not a secret. Running `./bin/generate_keys -p` prints it again.
 
 5. **Check the feed address.** `APP_GITHUB_OWNER` and `APP_GITHUB_REPO` in `Config/Brand.xcconfig` must name the
-   repository the workflow runs in; `APP_UPDATE_FEED_URL` in `Config/App.xcconfig` is built from them.
+   repository the workflow runs in; `APP_UPDATE_FEED_URL` in `Config/macOS.xcconfig` is built from them.
 
 6. **Enable GitHub Pages.** After the first release has created the `gh-pages` branch: Settings ▸ Pages ▸ Build and
    deployment ▸ Deploy from a branch ▸ `gh-pages` / `(root)`. Check that
@@ -62,7 +62,7 @@ checked here, on the Mac the baselines were recorded on, with nothing else runni
 1. Engine benchmark, Release build, against the stored baseline (fails on more than 20 % worse time or memory):
 
    ```sh
-   cd Packages/AppModules
+   cd Packages/Core
    RUN_PERF_TESTS=1 swift test -c release -Xswiftc -enable-testing --filter PerformanceTests
    ```
 
@@ -108,7 +108,7 @@ checked here, on the Mac the baselines were recorded on, with nothing else runni
 - **Tag does not match MARKETING_VERSION:** delete the tag (`git push --delete origin vX.Y.Z`, `git tag -d vX.Y.Z`),
   run `scripts/bump-version.sh`, commit, and tag again.
 - **SPARKLE_ED_PRIVATE_KEY is not set / APP_UPDATE_PUBLIC_KEY is empty:** finish the one-time setup above.
-- **No matching signature in appcast.xml:** the public key in `Config/App.xcconfig` is not the one that belongs to the
+- **No matching signature in appcast.xml:** the public key in `Config/macOS.xcconfig` is not the one that belongs to the
   secret. Fix whichever is wrong; never generate new keys once a release is out, because installed copies only trust
   the key they shipped with.
 - Re-running a failed workflow is safe: the DMG upload replaces the asset and the appcast item for the same build is

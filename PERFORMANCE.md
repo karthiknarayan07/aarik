@@ -51,9 +51,9 @@ engine time and memory are caught by the performance tests below.
 
 1. State the symptom with a number ("launch 1.8 s", "RAM 600 MB after 30 videos").
 2. Measure a **Release** build only. Debug is `-Onone` and tells you nothing about speed:
-   `xcodebuild -project App/App.xcodeproj -scheme App -configuration Release -derivedDataPath .build/xcode-p6 build`.
+   `xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -derivedDataPath .build/xcode-p6 build`.
 3. Profile with Instruments (Time Profiler, Allocations, Hangs, Points of Interest) or time the engine without the
-   UI: `cd Packages/AppModules && swift run -c release devtool downscale <in> <out>` (`devtool fixture <path>`
+   UI: `cd Packages/Core && swift run -c release devtool downscale <in> <out>` (`devtool fixture <path>`
    makes a test clip; `devtool inspect <file>` prints metadata).
 4. Change one thing, measure again with the same input, and record both numbers in the commit message.
 5. Keep the fix only if the number improved and the tests still pass. Never trade file safety (STABILITY.md) for
@@ -81,7 +81,7 @@ The names are stable; `PipelineStage` is the list and a test pins it. Adding a s
 
 ## Performance tests
 
-- `Packages/AppModules/Tests/PerformanceTests` (XCTest, because `measure` and the metrics are XCTest's):
+- `Packages/Core/Tests/PerformanceTests` (XCTest, because `measure` and the metrics are XCTest's):
   - `DownscalePerformanceTests` downscales a **generated** 3840x2160 HLG clip (two seconds, with audio; never personal
     media) five times under `measure(metrics: [XCTClockMetric(), XCTMemoryMetric()])`, and compares the fastest time
     and the median rise in physical memory with the stored baseline. More than 20 % worse fails; memory also gets
@@ -100,7 +100,7 @@ The names are stable; `PipelineStage` is the list and a test pins it. Adding a s
   - **Who enforces it.** The 20 % rule is enforced locally, on the release Mac, as a step of the release checklist
     (`docs/RELEASING.md`). The CI job `performance-report` only runs the benchmark in Release, prints the numbers
     and uploads them as a JSON artifact (`PERF_REPORT_PATH`); hosted runners are too varied to hold a baseline.
-- Launch time: `App/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines; set "Max %
+- Launch time: `Apps/macOS/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines; set "Max %
   Regression" to 20, Xcode's default is 10) belongs in the `AppUITests` target of the `ui-tests` branch; the target is
   not on this branch, so it doesn't build yet. Running UI tests needs automation permission.
 

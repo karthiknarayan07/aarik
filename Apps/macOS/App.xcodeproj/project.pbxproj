@@ -1,0 +1,313 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000101 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000201 /* AppCore */; };
+		A10000000000000000000102 /* MediaEngine in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000202 /* MediaEngine */; };
+		A10000000000000000000103 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000203 /* AppUI */; };
+		A10000000000000000000104 /* LocalLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000204 /* LocalLibrary */; };
+		A10000000000000000000105 /* Convert in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000205 /* Convert */; };
+		A10000000000000000000107 /* PhotosLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000207 /* PhotosLibrary */; };
+		A10000000000000000000108 /* Assistant in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000208 /* Assistant */; };
+		A1000000000000000000010B /* ConvertUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000020B /* ConvertUI */; };
+		A10000000000000000000109 /* QuickRunService in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000209 /* QuickRunService */; };
+		A10000000000000000000106 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000206 /* Sparkle */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000301 /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000302 /* macOS.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = macOS.xcconfig; sourceTree = "<group>"; };
+		A10000000000000000000303 /* Brand.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Brand.xcconfig; sourceTree = "<group>"; };
+		A10000000000000000000304 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A10000000000000000000401 /* Sources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000402 /* Resources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000501 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000101 /* AppCore in Frameworks */,
+				A10000000000000000000102 /* MediaEngine in Frameworks */,
+				A10000000000000000000103 /* AppUI in Frameworks */,
+				A10000000000000000000104 /* LocalLibrary in Frameworks */,
+				A10000000000000000000105 /* Convert in Frameworks */,
+				A10000000000000000000107 /* PhotosLibrary in Frameworks */,
+				A10000000000000000000108 /* Assistant in Frameworks */,
+				A10000000000000000000109 /* QuickRunService in Frameworks */,
+				A1000000000000000000010B /* ConvertUI in Frameworks */,
+				A10000000000000000000106 /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000601 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000401 /* Sources */,
+				A10000000000000000000402 /* Resources */,
+				A10000000000000000000304 /* Info.plist */,
+				A10000000000000000000602 /* Config */,
+				A10000000000000000000603 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000602 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000302 /* macOS.xcconfig */,
+				A10000000000000000000303 /* Brand.xcconfig */,
+			);
+			name = Config;
+			path = ../../Config;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000603 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000301 /* App.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000701 /* App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000A02 /* Build configuration list for PBXNativeTarget "App" */;
+			buildPhases = (
+				A10000000000000000000801 /* Sources */,
+				A10000000000000000000501 /* Frameworks */,
+				A10000000000000000000802 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000401 /* Sources */,
+				A10000000000000000000402 /* Resources */,
+			);
+			name = App;
+			packageProductDependencies = (
+				A10000000000000000000201 /* AppCore */,
+				A10000000000000000000202 /* MediaEngine */,
+				A10000000000000000000203 /* AppUI */,
+				A10000000000000000000204 /* LocalLibrary */,
+				A10000000000000000000205 /* Convert */,
+				A10000000000000000000207 /* PhotosLibrary */,
+				A10000000000000000000208 /* Assistant */,
+				A10000000000000000000209 /* QuickRunService */,
+				A1000000000000000000020B /* ConvertUI */,
+				A10000000000000000000206 /* Sparkle */,
+			);
+			productName = App;
+			productReference = A10000000000000000000301 /* App.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2720;
+				LastUpgradeCheck = 2720;
+				TargetAttributes = {
+					A10000000000000000000701 = {
+						CreatedOnToolsVersion = 27.2;
+					};
+				};
+			};
+			buildConfigurationList = A10000000000000000000A01 /* Build configuration list for PBXProject "App" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000000000000000000601;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */,
+				A10000000000000000000B03 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */,
+				A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A10000000000000000000603 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000701 /* App */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000802 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000801 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000901 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		A10000000000000000000902 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		A10000000000000000000903 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000302 /* macOS.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		A10000000000000000000904 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000302 /* macOS.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000A01 /* Build configuration list for PBXProject "App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000901 /* Debug */,
+				A10000000000000000000902 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000A02 /* Build configuration list for PBXNativeTarget "App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000903 /* Debug */,
+				A10000000000000000000904 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/Core;
+		};
+		A10000000000000000000B03 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/Tools/Convert;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A10000000000000000000201 /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppCore;
+		};
+		A10000000000000000000202 /* MediaEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = MediaEngine;
+		};
+		A10000000000000000000203 /* AppUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppUI;
+		};
+		A10000000000000000000204 /* LocalLibrary */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = LocalLibrary;
+		};
+		A10000000000000000000205 /* Convert */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B03 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
+			productName = Convert;
+		};
+		A10000000000000000000207 /* PhotosLibrary */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = PhotosLibrary;
+		};
+		A10000000000000000000208 /* Assistant */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = Assistant;
+		};
+		A10000000000000000000209 /* QuickRunService */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B03 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
+			productName = QuickRunService;
+		};
+		A1000000000000000000020B /* ConvertUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B03 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
+			productName = ConvertUI;
+		};
+		A10000000000000000000206 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A10000000000000000000001 /* Project object */;
+}

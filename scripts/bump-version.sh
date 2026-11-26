@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Sets MARKETING_VERSION in Config/App.xcconfig. Usage: scripts/bump-version.sh X.Y.Z
+# Sets MARKETING_VERSION in Config/macOS.xcconfig. Usage: scripts/bump-version.sh X.Y.Z
 # The release workflow only accepts a tag vX.Y.Z that matches this value. The build number (CFBundleVersion) is not
 # set here: the release workflow uses its run number.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-config="Config/App.xcconfig"
+config="Config/macOS.xcconfig"
 
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 X.Y.Z" >&2
