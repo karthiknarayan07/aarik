@@ -56,9 +56,12 @@ Format with `swift format -i <files>`. Do not open or launch the app from an aut
 `scripts/verify.sh` is the one command for the base gate and what CI calls. It runs, for every `Packages/**/Package.swift`,
 `swift test`, the warnings-as-errors build and the tests on an iOS Simulator (found by UDID, iPhone 17 Pro preferred), then
 `swift format lint --strict`, the Mac Debug and Release builds, the iOS app build and test, a brand-neutral check
-(no product name in source, plists, projects or schemes under `Apps/` and `Packages/`) and a stale-path check. It prints a
+(no product name in source, plists, projects or schemes under `Apps/` and `Packages/`), a stale-path check, and two
+text checks (`scripts/text-lint.py`): no `...` inside a Swift string literal (use the ellipsis character), and no tool name
+("Convert", "Shrink", "compress") in the app-level screens listed in `scripts/app-level-screens.txt`, with the legitimate
+exceptions in `scripts/app-level-text-allowlist.txt`. It prints a
 pass/fail table and exits non-zero on any failure; missing projects or packages are failures, not skips.
-`--only mac|ios|packages|lint|hygiene` runs a subset (CI uses `mac` and `ios`); `--repeat N` runs the whole suite N times
+`--only mac|ios|packages|lint|hygiene|text` runs a subset (CI uses `mac` and `ios`); `--repeat N` runs the whole suite N times
 (the gate uses 2). Logs and derived data go to `.build/verify`.
 
 ## Constraints

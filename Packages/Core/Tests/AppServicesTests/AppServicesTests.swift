@@ -175,6 +175,27 @@ private struct InstantTool: Tool {
         await services.prepareForTermination()
     }
 
+    /// The Live Activity and the run status follow `queuePause` and the jobs: a queue nobody started is paused, so
+    /// nothing shows until Start, and Start flips it.
+    @Test func theRunStatusAppearsOnlyAfterAStart() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let services = makeServices(directory: directory, autoStartDefault: false)
+        services.register(EndlessTool())
+        await services.start()
+        await services.queue.enqueue([job(tool: "endless", name: "a")])
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(services.queuePause.isPausedByUser)
+        #expect(!services.jobs.contains { if case .running = $0.state { true } else { false } })
+
+        services.startQueue()
+        #expect(!services.queuePause.isPausedByUser)
+        while !services.jobs.contains(where: { if case .running = $0.state { true } else { false } }) {
+            await Task.yield()
+        }
+        await services.prepareForTermination()
+    }
+
     @Test func queuedJobsDoNotStartAfterARelaunchWhenNoRunWasStarted() async throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

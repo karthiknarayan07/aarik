@@ -54,7 +54,7 @@ public enum AssistantEmptyContent {
 
     /// The starting questions for a chat about one video.
     public static let contextSuggestions: [String] = [
-        "Why Is This So Big?", "How Much Would I Save?", "Should I Convert This?",
+        "Why Is This So Big?", "How Much Would I Save?", "Should I Make This Smaller?",
     ]
 
     /// Title Case chips; tapping one asks it as written.

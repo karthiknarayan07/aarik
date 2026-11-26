@@ -196,6 +196,7 @@ public final class FakeBackgroundTaskScheduler: BackgroundTaskScheduler {
     public var autoLaunchOnSubmit = true
 
     private var handlers: [String: @Sendable (any ContinuedProcessingTask) -> Void] = [:]
+    private nonisolated let deliveries = DispatchGroup()
 
     public init() {}
 
@@ -222,15 +223,32 @@ public final class FakeBackgroundTaskScheduler: BackgroundTaskScheduler {
         cancelledIdentifiers.append(identifier)
     }
 
-    /// Delivers the registered launch handler for `identifier`, returning the fake task handle.
+    /// Delivers the registered launch handler for `identifier`, returning the fake task handle. Like
+    /// `BGTaskScheduler`, the handler runs on a background queue, never on the main actor: a handler closure that is
+    /// inferred `@MainActor` traps here exactly as it did on a device. Use `settleLaunches()` to wait for delivery.
     @discardableResult
     public func launch(identifier: String) -> FakeContinuedProcessingTask? {
         guard let handler = handlers[identifier] else { return nil }
         let task = FakeContinuedProcessingTask(identifier: identifier)
         tasksByIdentifier[identifier] = task
         launchOrder.append(task)
-        handler(task)
+        let group = deliveries
+        group.enter()
+        DispatchQueue.global().async {
+            handler(task)
+            group.leave()
+        }
         return task
+    }
+
+    /// Waits until every launch handler dispatched so far has returned, then lets the main actor run the work those
+    /// handlers hopped back with.
+    public func settleLaunches() async {
+        let group = deliveries
+        await withCheckedContinuation { continuation in
+            group.notify(queue: .global()) { @Sendable in continuation.resume() }
+        }
+        for _ in 0..<5 { await Task.yield() }
     }
 
     /// Fires expiration on the task with `identifier`.

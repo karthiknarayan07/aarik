@@ -175,6 +175,36 @@ struct BackgroundTaskTests {
         await queue.shutdown()
     }
 
+    /// The real `BGTaskScheduler` calls the launch handler on a background queue. The device crashed once because the
+    /// coordinator's closure was inferred `@MainActor` and trapped on that queue; the fake now delivers the same way, so
+    /// that mistake traps this test process too.
+    @Test func launchHandlerRunsOffTheMainThreadLikeBGTaskScheduler() async throws {
+        let scheduler = FakeBackgroundTaskScheduler()
+        let ranOnMainThread = LockedBox<Bool?>(nil)
+        scheduler.register(identifier: "probe") { _ in ranOnMainThread.set(Thread.isMainThread) }
+        try scheduler.submit(ContinuedProcessingRequest(identifier: "probe", title: "t", subtitle: "s"))
+        await scheduler.settleLaunches()
+        #expect(ranOnMainThread.get() == false)
+    }
+
+    @Test func coordinatorHandlerSurvivesBackgroundQueueDelivery() async throws {
+        let scheduler = FakeBackgroundTaskScheduler()
+        let coordinator = ContinuedProcessingCoordinator(
+            scheduler: scheduler, identifierPrefix: "com.example.app.convert", onExpire: {})
+        coordinator.update(isRunning: true, title: "clip.mov", subtitle: "Item 1 of 1", progress: 0.25)
+        await scheduler.settleLaunches()
+
+        let task = try #require(scheduler.launchOrder.last)
+        #expect(task.hasExpirationHandler)
+        #expect(task.titleUpdates.contains { $0.title == "clip.mov" })
+        #expect(task.progressUpdates.contains { $0.completed == 250 })
+
+        task.expire()
+        while coordinator.expirationTask == nil { await Task.yield() }
+        await coordinator.expirationTask?.value
+        #expect(task.completedResults == [false])
+    }
+
     @Test func submissionFailureContinuesInForegroundWithoutResubmitting() {
         let scheduler = FakeBackgroundTaskScheduler()
         scheduler.submitError = TestError.ineligible
@@ -218,4 +248,12 @@ struct BackgroundTaskTests {
         #expect(loaded.first?.phase == nil)
         _ = queue
     }
+}
+
+private final class LockedBox<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+    init(_ value: Value) { self.value = value }
+    func set(_ new: Value) { lock.withLock { value = new } }
+    func get() -> Value { lock.withLock { value } }
 }

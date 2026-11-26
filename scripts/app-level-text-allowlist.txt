@@ -1,0 +1,3 @@
+# Literals in app-level screens (scripts/app-level-screens.txt) that may contain a tool noun. One per line:
+#   path :: literal text exactly as written in the source (interpolations as \(…))
+# Keep this short: the usual reason is a tool's own card title, which the app shows because the tool says so.
