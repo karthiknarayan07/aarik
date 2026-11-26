@@ -48,6 +48,21 @@ public enum VideoPage: Hashable, Sendable {
         case .failed: "exclamationmark.triangle"
         }
     }
+
+    /// The colour of the page's sidebar symbol.
+    public var tint: SidebarTint {
+        switch self {
+        case .overview: .indigo
+        case .photosVideos: .blue
+        case .localFiles: .teal
+        case .mediaType: .pink
+        case .tool: .purple
+        case .queue: .orange
+        case .completed: .green
+        case .keptAsIs: .gray
+        case .failed: .red
+        }
+    }
 }
 
 /// What the sidebar needs to know to list the video tool's pages.
@@ -116,7 +131,8 @@ public enum VideoSidebar {
         -> ToolSidebarItem<VideoPage>
     {
         ToolSidebarItem(
-            id: "\(page)", destination: page, title: page.title, systemImage: page.systemImage, count: count,
+            id: "\(page)", destination: page, title: page.title, systemImage: page.systemImage, tint: page.tint,
+            count: count,
             progress: progress)
     }
 }

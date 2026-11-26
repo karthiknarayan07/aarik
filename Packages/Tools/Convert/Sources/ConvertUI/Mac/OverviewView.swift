@@ -14,6 +14,7 @@
     struct OverviewView: View {
         @Bindable var model: ConvertModel
         @State private var summary: OverviewSummary?
+        @State private var refreshTick = 0
 
         /// Everything the summary depends on; when it changes the summary is made again.
         private struct Inputs: Hashable {
@@ -54,15 +55,27 @@
                     } else {
                         ProgressView()
                     }
-                } else if let summary {
+                } else if summary != nil || cache.snapshot != nil {
                     ScrollView {
-                        VStack(alignment: .leading) {
-                            LibraryGroup(model: model, summary: summary)
-                            SmartPicksGroup(model: model)
-                            BiggestSavingsGroup(summary: summary, reveal: model.reveal)
-                            SavedGroup(savedBytes: summary.savedBytes, conversions: model.activity.completed)
+                        VStack(alignment: .leading, spacing: 20) {
+                            // The cached numbers draw at once; the live groups below follow when they are read.
+                            if let snapshot = cache.snapshot {
+                                OverviewInsights(
+                                    charts: OverviewCharts(snapshot: snapshot), presetName: model.preset.displayName,
+                                    isRefreshing: cache.isRefreshing)
+                            }
+                            if let summary {
+                                LibraryGroup(model: model, summary: summary)
+                                SmartPicksGroup(model: model)
+                                BiggestSavingsGroup(summary: summary, reveal: model.reveal)
+                            } else {
+                                ProgressView("Reading your videos…")
+                                    .frame(maxWidth: .infinity)
+                            }
                         }
+                        .frame(maxWidth: 900, alignment: .leading)
                         .scenePadding()
+                        .frame(maxWidth: .infinity)
                     }
                 } else {
                     ProgressView()
@@ -71,21 +84,59 @@
             .navigationTitle(VideoPage.overview.title)
             // Reads the list of videos when access is already allowed; never shows the access prompt.
             .task { await model.photos.start() }
-            .task(id: inputs) {
-                let photos = model.photos.items
-                let files = model.library.items
-                let completed = model.completedJobs.map(\.outcome)
-                let shrunk = model.shrunkIDs(in: model.browser)
-                let analysis = await Self.analyze(
-                    photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-                    custom: model.advanced.spec, completed: completed, shrunk: shrunk)
-                guard !Task.isCancelled else { return }
-                summary = analysis.summary
-                // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
-                model.assistant.smartPicks.update(
-                    buckets: analysis.buckets, undatedCount: analysis.undated, key: inputs)
+            .task { await cache.load() }
+            // Every few minutes while the page is showing; leaving the page cancels the loop and any refresh.
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.refreshInterval)
+                    guard !Task.isCancelled else { return }
+                    refreshTick += 1
+                }
             }
+            .task(id: RefreshKey(inputs: inputs, tick: refreshTick)) { await refresh() }
             .task(id: picksTrigger) { await model.assistant.smartPicks.generateIfNeeded() }
+        }
+
+        private var cache: SavingsStatsCache { model.services.savingsStats }
+
+        /// How often the numbers are made again while the page is open, besides when something changes.
+        private static let refreshInterval = Duration.seconds(300)
+        /// A burst of changes (a scan, jobs finishing one after another) makes one refresh.
+        private static let debounce = Duration.seconds(1)
+
+        private struct RefreshKey: Hashable {
+            let inputs: Inputs
+            let tick: Int
+        }
+
+        private func refresh() async {
+            let photos = model.photos.items
+            let files = model.library.items
+            let finished = model.completedJobs.map { (addedOn: $0.job.createdAt, outcome: $0.outcome) }
+            let shrunk = model.shrunkIDs(in: model.browser)
+            let preset = model.preset
+            let overrides = model.presetOverrides
+            let custom = model.advanced.spec
+            let key = inputs
+            let model = model
+            // The first read of the page isn't held back: the live groups wait for it.
+            let delay = summary == nil ? Duration.zero : Self.debounce
+            await cache.refresh(after: delay) { [finished] in
+                let analysis = await Self.analyze(
+                    photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
+                    completed: finished.map(\.outcome), shrunk: shrunk)
+                await MainActor.run {
+                    // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
+                    model.assistant.smartPicks.update(
+                        buckets: analysis.buckets, undatedCount: analysis.undated, key: key)
+                }
+                await self.show(analysis.summary)
+                return OverviewCharts.snapshot(summary: analysis.summary, buckets: analysis.buckets, finished: finished)
+            }
+        }
+
+        private func show(_ summary: OverviewSummary) {
+            self.summary = summary
         }
 
         /// The totals, the groups and the count of undated videos. Estimating a video reads its metadata, so it is
@@ -182,11 +233,6 @@
                     TotalsRows(totals: summary.localFiles)
                 }
             }
-            Text(
-                "Estimated at the \(model.preset.displayName) preset. Nothing changes until you add videos to the queue."
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
         }
     }
 
@@ -404,49 +450,63 @@
         }
     }
 
-    /// What finished conversions have freed so far.
-    private struct SavedGroup: View {
-        let savedBytes: Int64
-        let conversions: Int
-
-        var body: some View {
-            OverviewGroup(title: "Saved So Far") {
-                VStack(alignment: .leading) {
-                    LabeledContent("Space Saved", value: ByteFormat.string(savedBytes))
-                    LabeledContent("Conversions", value: conversions.formatted())
-                }
-                .accessibilityElement(children: .combine)
-            }
-        }
-    }
-
     // MARK: - Empty state
 
-    /// Nothing to total yet: one system empty state with the two ways to start.
+    /// Nothing to total yet: a grouped form in the style of System Settings, with a row for each place to start from
+    /// and what is promised underneath.
     private struct OverviewEmptyState: View {
         let model: ConvertModel
 
+        private var photosRow: (text: String, button: String, action: () -> Void)? {
+            guard model.photos.isAuthorizationKnown else { return nil }
+            switch model.photos.authorization {
+            case .notDetermined:
+                return (
+                    "Include the videos in your Photos library.", "Allow Access to Photos…",
+                    { model.allowPhotos() }
+                )
+            case .denied:
+                return (
+                    "Access to Photos is off, so its videos aren't included.", "Open System Settings…",
+                    { PrivacySettings.open(PrivacySettings.photos) }
+                )
+            default:
+                return nil
+            }
+        }
+
         var body: some View {
-            ContentUnavailableView {
-                Label("Welcome to \(AppInfo.displayName)", systemImage: "film.stack")
-            } description: {
-                Text(
-                    "See how much space your videos take, then keep smaller copies that look the same. "
-                        + "Nothing changes until you add videos to the queue.")
-            } actions: {
-                if model.photos.isAuthorizationKnown, model.photos.authorization == .notDetermined {
-                    Button("Allow Access to Photos…") { model.allowPhotos() }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityHint("Shows the system prompt to allow access to your Photos library")
-                }
-                if model.photos.authorization == .denied {
-                    Button("Open System Settings…") { PrivacySettings.open(PrivacySettings.photos) }
-                }
-                Button("Add Local Files…") {
-                    model.selection = .localFiles
-                    model.isImporterPresented = true
+            Form {
+                Section {
+                    if let photosRow {
+                        LabeledContent {
+                            Button(photosRow.button, action: photosRow.action)
+                        } label: {
+                            Label("Photos", systemImage: "photo.on.rectangle")
+                            Text(photosRow.text)
+                        }
+                    }
+                    LabeledContent {
+                        Button("Add Local Files…") {
+                            model.selection = .localFiles
+                            model.isImporterPresented = true
+                        }
+                    } label: {
+                        Label("Local Files", systemImage: "folder")
+                        Text("Choose videos or folders on this Mac.")
+                    }
+                } header: {
+                    Text("Choose Where to Look")
+                } footer: {
+                    Text(
+                        "\(AppInfo.displayName) shows how much space your videos take and keeps smaller copies that "
+                            + "look the same. Nothing changes until you add videos to the queue, copies keep the date, "
+                            + "location and camera details, and an original is only replaced when you choose it.")
                 }
             }
+            .formStyle(.grouped)
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 #endif

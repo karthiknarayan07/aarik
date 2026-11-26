@@ -1,5 +1,6 @@
 import AppCore
 import AppKit
+import AppUI
 import ConvertUI
 import QuickRunService
 import SwiftUI
@@ -9,7 +10,7 @@ private struct MainWindowContent: View {
     @Bindable var shell: MacShell
 
     var body: some View {
-        RootView(module: shell.scene, sidebarVisibility: $shell.sidebarVisibility)
+        MacRootView(module: shell.scene, sidebarVisibility: $shell.sidebarVisibility)
     }
 }
 
@@ -20,21 +21,14 @@ final class MainWindowController {
     let window: NSWindow
 
     init(shell: MacShell) {
-        let hosting = NSHostingController(
-            rootView: MainWindowContent(shell: shell).frame(minWidth: 900, minHeight: 600))
-        // The window's size is its own (autosaved), not the content's ideal size.
-        hosting.sizingOptions = []
-        // The SwiftUI toolbar, search field, inspector button and navigation title belong to the real window.
-        hosting.sceneBridgingOptions = .all
+        let hosting = MainWindowLayout.makeHostingController(rootView: MainWindowContent(shell: shell))
         let window = NSWindow(contentViewController: hosting)
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.title = AppInfo.displayName
         window.isReleasedWhenClosed = false
         // As in Apple's apps: green button and View > Enter Full Screen work; one window, so no tab bar.
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.tabbingMode = .disallowed
-        window.contentMinSize = NSSize(width: 900, height: 600)
-        window.setContentSize(NSSize(width: 1280, height: 820))
+        MainWindowLayout.configure(window)
         window.center()
         // Overrides the default size and position when a saved frame exists.
         window.setFrameAutosaveName("main")
