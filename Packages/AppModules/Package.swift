@@ -92,7 +92,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AssistantTests",
-            dependencies: ["Assistant", "LocalLibrary", "AppCore", "DownscaleVideo", "MediaEngine"],
+            dependencies: ["Assistant", "LocalLibrary", "AppCore", "DownscaleVideo", "MediaEngine", "PhotosLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

@@ -92,10 +92,12 @@ enum OutcomeReason: String, CaseIterable, Sendable {
         (.unsupportedVideo, ["can't be converted yet"]),
         (.originalChangedDuringConversion, ["original changed during"]),
         (.originalKeptBackupFailed, ["original was kept because", "originals folder"]),
+        (.originalKeptBackupFailed, ["original was kept because", "for the backup"]),
         (.originalKeptCouldNotTrash, ["original was kept because", "trash"]),
         (.originalKeptNotVerified, ["original was kept because", "verified"]),
         (.originalKeptOtherReason, ["original was kept because"]),
         (.originalKeptOtherReason, ["kept the original because"]),
+        (.originalKeptOtherReason, ["limited photos access"]),
         (.notAddedToAlbums, ["albums"]),
         (.photosSaveFailed, ["add the video to photos"]),
         (.photosSaveFailed, ["didn't check out"]),
@@ -119,9 +121,30 @@ enum OutcomeReason: String, CaseIterable, Sendable {
         (.originalGone, ["no longer in photos"]),
     ]
 
-    static func classify(_ text: String) -> OutcomeReason {
-        let lowered = text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
-        return table.first { _, words in words.allSatisfy(lowered.contains) }?.0 ?? .other
+    /// The code of `text`. `names` are the job's own file names (with and without extension): they are taken out
+    /// of the text first, so a file called "Cancelled trip.mov" can't decide the category. When several rows match,
+    /// the most specific one wins (the most matched characters); a tie goes to the earlier row.
+    static func classify(_ text: String, removing names: [String] = []) -> OutcomeReason {
+        var lowered = normalized(text)
+        let cleaned = names.map(normalized).filter { !$0.isEmpty }
+        let stems = cleaned.map { ($0 as NSString).deletingPathExtension }.filter { $0.count >= 2 }
+        for name in cleaned.sorted(by: { $0.count > $1.count }) {
+            lowered = lowered.replacingOccurrences(of: name, with: " ")
+        }
+        for stem in Set(stems).sorted(by: { $0.count > $1.count }) {
+            let pattern = #"(?<![\p{L}\p{N}])"# + NSRegularExpression.escapedPattern(for: stem) + #"(?![\p{L}\p{N}])"#
+            lowered = lowered.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+        }
+        var best: (reason: OutcomeReason, score: Int)?
+        for (reason, words) in table where words.allSatisfy(lowered.contains) {
+            let score = words.reduce(0) { $0 + $1.count }
+            if best == nil || score > best?.score ?? 0 { best = (reason, score) }
+        }
+        return best?.reason ?? .other
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
     }
 }
 

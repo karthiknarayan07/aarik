@@ -34,7 +34,7 @@ First public release.
   groups, on this Mac only, and Add These to the Queue goes through the usual checks. Nothing is added by itself.
 - **Apple Intelligence, on this Mac only:** Ask in Plain Words in the search field, Why? on results that were kept
   as is, have warnings or failed, and Smart Picks on Overview. They use only metadata (formats, sizes, years, reason
-  codes), never video content or file names, work with VoiceOver and the keyboard, and are hidden when Apple
+  codes) and, for Ask in Plain Words, the words you type, never video content or file names from your library; they work with VoiceOver and the keyboard, and are hidden when Apple
   Intelligence is off or unavailable. Turn it off in System Settings ▸ Apple Intelligence & Siri.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).

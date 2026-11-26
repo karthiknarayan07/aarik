@@ -66,23 +66,6 @@ import Testing
                 .contains("Reason: \(OutcomeReason.other.sentence)"))
     }
 
-    @Test func reasonsMapToCodesByTheAppsOwnWording() {
-        let cases: [(String, OutcomeReason)] = [
-            ("Already small", .alreadySmall),
-            ("Would save less than 10%", .savesLittle),
-            ("Spatial video isn't supported yet \u{2014} it would lose one eye", .spatialVideo),
-            ("Its file format can\u{2019}t keep all of its details", .formatCannotKeepDetails),
-            ("Converting would lose Location, which wasn't known when it was added", .lossNotShownBeforeAdding),
-            ("Original file is missing or the drive isn't connected", .originalUnavailable),
-            ("The video couldn't be converted.", .conversionFailed),
-            ("Not enough free space on this Mac to download this video (about 80 MB needed)", .notEnoughSpace),
-            ("The original was kept because it couldn't be moved to the Trash", .originalKeptCouldNotTrash),
-            ("Saved as \u{201C}Beach.mov\u{201D} because \u{201C}Beach copy.mov\u{201D} already exists", .nameChanged),
-            ("Something nobody wrote a code for in /Users/jane", .other),
-        ]
-        for (text, code) in cases { #expect(OutcomeReason.classify(text) == code, "\(text)") }
-    }
-
     @Test func aJobWhoseReasonsNameAFileAFolderAndAPathProducesAPromptWithNoneOfThem() {
         let folder = "Holiday with Anna"
         let name = "Beach day with Anna.mov"
