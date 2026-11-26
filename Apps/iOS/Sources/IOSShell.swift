@@ -18,6 +18,9 @@ final class IOSShell {
     let tools: [any Tool]
     /// One scene per tool offered on iOS; the shell knows only `Tool` and `IOSToolScene`.
     let scenes: [AnyIOSToolScene]
+    /// Where a hand-off should land (Convert's Queue); the root view consumes it once it is showing the tabs, so a
+    /// cold launch or the onboarding never loses or interrupts it.
+    var pendingRoute: ToolRoute?
     private let backgroundRun: BackgroundRunCoordinator
     private let liveActivity: LiveActivityController
     /// Writes the widget snapshot and pause flag to the App Group when they change, and applies the control's toggle.
@@ -131,18 +134,24 @@ final class IOSShell {
 
     /// Picks up videos the share extension or the App Intent staged in the App Group, and hands them to Convert.
     func pickUpStaged() {
-        Task { [services, scenes] in
+        Task { [weak self, services, scenes] in
+            let queue = { (id: String) in
+                self?.pendingRoute = ToolRoute(toolID: id, page: IOSPage.queue.rawValue)
+            }
             // Staged videos are videos: the first tool that accepts a file takes them.
             guard let scene = scenes.first(where: { $0.tool.accepts(.file(URL(filePath: "/staged.mov"))) }) else {
                 return
             }
             #if DEBUG
                 if let store = IOSShell.testHandoffStore() {
-                    await StagedPickup.shared.pickUp(into: { scene.receive($0) }, services: services, store: store)
+                    let picked = await StagedPickup.shared.pickUp(
+                        into: { scene.receive($0) }, services: services, store: store)
+                    if !picked.isEmpty { queue(scene.id) }
                     return
                 }
             #endif
-            await StagedPickup.shared.pickUp(into: { scene.receive($0) }, services: services)
+            let picked = await StagedPickup.shared.pickUp(into: { scene.receive($0) }, services: services)
+            if !picked.isEmpty { queue(scene.id) }
         }
     }
 
