@@ -10,7 +10,8 @@ final class MainWindowController {
 
     init(model: AppModel) {
         let hosting = NSHostingController(
-            rootView: RootView(model: model).frame(minWidth: 900, minHeight: 600))
+            rootView: RootView(model: model, module: VideoShrinkerModule(model: model)).frame(
+                minWidth: 900, minHeight: 600))
         // The window's size is its own (autosaved), not the content's ideal size.
         hosting.sizingOptions = []
         // The SwiftUI toolbar, search field, inspector button and navigation title belong to the real window.

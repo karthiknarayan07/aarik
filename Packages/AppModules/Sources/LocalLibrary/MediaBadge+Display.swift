@@ -1,8 +1,6 @@
-import LocalLibrary
-
 extension MediaBadge {
     /// The name in the sidebar, the inspector and VoiceOver.
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .dolbyVision: "Dolby Vision"
         case .hdr: "HDR"
@@ -16,9 +14,9 @@ extension MediaBadge {
     }
 
     /// The short label on a tile.
-    var tileLabel: String { self == .dolbyVision ? "DV" : displayName }
+    public var tileLabel: String { self == .dolbyVision ? "DV" : displayName }
 
-    var systemImage: String {
+    public var systemImage: String {
         switch self {
         case .dolbyVision: "sun.max.circle"
         case .hdr: "sun.max"
@@ -32,10 +30,7 @@ extension MediaBadge {
     }
 
     /// Badges in display order.
-    static func ordered(_ badges: Set<MediaBadge>) -> [MediaBadge] {
+    public static func ordered(_ badges: Set<MediaBadge>) -> [MediaBadge] {
         allCases.filter(badges.contains)
     }
 }
-
-/// SwiftUI has its own `LibraryItem`; views use this name for the library's.
-typealias VideoItem = LibraryItem

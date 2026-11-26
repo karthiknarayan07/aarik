@@ -110,8 +110,6 @@ final class AppModel {
     @ObservationIgnored let photoStore: any PhotoStore
     let thumbnails = ThumbnailCache()
     let thumbnailSource: ThumbnailSource
-    let tools: [ToolEntry] = ToolRegistry.tools
-    let comingSoonTools: [ToolEntry] = ToolRegistry.comingSoon
 
     @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored var updatesTask: Task<Void, Never>?
