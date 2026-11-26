@@ -171,6 +171,8 @@
 
     /// A titled group: a headline over a grouped box, as in System Settings.
     private struct OverviewGroup<Content: View>: View {
+        /// The accessibility identifier is `home.group.<id>`.
+        let id: String
         let title: String
         var systemImage: String?
         @ViewBuilder let content: Content
@@ -190,6 +192,7 @@
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
             }
+            .accessibilityIdentifier("home.group.\(id)")
         }
     }
 
@@ -200,7 +203,7 @@
         let summary: OverviewSummary
 
         var body: some View {
-            OverviewGroup(title: "Sources", systemImage: "externaldrive") {
+            OverviewGroup(id: "sources", title: "Sources", systemImage: "externaldrive") {
                 VStack(alignment: .leading) {
                     photosRow
                     Divider()
@@ -278,7 +281,7 @@
         var body: some View {
             if !store.buckets.isEmpty {
                 if store.isShowingPicks {
-                    OverviewGroup(title: "Smart Picks", systemImage: "sparkles") {
+                    OverviewGroup(id: "smartPicks", title: "Smart Picks", systemImage: "sparkles") {
                         if case .picks(let picks) = store.state {
                             VStack(alignment: .leading) {
                                 ForEach(Array(picks.enumerated()), id: \.element.id) { index, pick in
@@ -303,7 +306,7 @@
                         }
                     }
                 } else {
-                    OverviewGroup(title: "Biggest Groups") {
+                    OverviewGroup(id: "biggestGroups", title: "Biggest Groups") {
                         VStack(alignment: .leading) {
                             ForEach(Array(store.buckets.prefix(Self.listedGroups).enumerated()), id: \.element.identity)
                             {

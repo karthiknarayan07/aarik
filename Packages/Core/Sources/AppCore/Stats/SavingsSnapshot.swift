@@ -56,7 +56,7 @@ public struct SavingsSnapshot: Codable, Sendable, Equatable {
     public var conversions: Int
 
     public init(
-        updatedAt: Date = Date(), libraries: [Library] = [], groups: [Group] = [], days: [Day] = [],
+        updatedAt: Date = AppClock.now, libraries: [Library] = [], groups: [Group] = [], days: [Day] = [],
         savedBytes: Int64 = 0, conversions: Int = 0
     ) {
         self.version = Self.currentVersion

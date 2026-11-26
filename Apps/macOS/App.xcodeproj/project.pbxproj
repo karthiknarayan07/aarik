@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000111 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000221 /* AppCore */; };
+		A10000000000000000000112 /* MediaEngine in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000222 /* MediaEngine */; };
+		A10000000000000000000113 /* MediaTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000223 /* MediaTestSupport */; };
 		A10000000000000000000101 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000201 /* AppCore */; };
 		A10000000000000000000102 /* MediaEngine in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000202 /* MediaEngine */; };
 		A10000000000000000000103 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000203 /* AppUI */; };
@@ -20,7 +23,18 @@
 		A10000000000000000000106 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000206 /* Sparkle */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000C01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000701;
+			remoteInfo = App;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		A10000000000000000000311 /* UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = UITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000301 /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000302 /* macOS.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = macOS.xcconfig; sourceTree = "<group>"; };
 		A10000000000000000000303 /* Brand.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Brand.xcconfig; sourceTree = "<group>"; };
@@ -28,6 +42,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A10000000000000000000411 /* UITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000412 /* UITestSupport */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ../Shared/UITestSupport;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000401 /* Sources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Sources;
@@ -59,6 +83,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000511 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000111 /* AppCore in Frameworks */,
+				A10000000000000000000112 /* MediaEngine in Frameworks */,
+				A10000000000000000000113 /* MediaTestSupport in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -67,6 +101,8 @@
 			children = (
 				A10000000000000000000401 /* Sources */,
 				A10000000000000000000402 /* Resources */,
+				A10000000000000000000411 /* UITests */,
+				A10000000000000000000412 /* UITestSupport */,
 				A10000000000000000000304 /* Info.plist */,
 				A10000000000000000000602 /* Config */,
 				A10000000000000000000603 /* Products */,
@@ -87,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000301 /* App.app */,
+				A10000000000000000000311 /* UITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -128,6 +165,33 @@
 			productReference = A10000000000000000000301 /* App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A10000000000000000000711 /* UITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000A03 /* Build configuration list for PBXNativeTarget "UITests" */;
+			buildPhases = (
+				A10000000000000000000811 /* Sources */,
+				A10000000000000000000511 /* Frameworks */,
+				A10000000000000000000812 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000D01 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000411 /* UITests */,
+				A10000000000000000000412 /* UITestSupport */,
+			);
+			name = UITests;
+			packageProductDependencies = (
+				A10000000000000000000221 /* AppCore */,
+				A10000000000000000000222 /* MediaEngine */,
+				A10000000000000000000223 /* MediaTestSupport */,
+			);
+			productName = UITests;
+			productReference = A10000000000000000000311 /* UITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -140,6 +204,10 @@
 				TargetAttributes = {
 					A10000000000000000000701 = {
 						CreatedOnToolsVersion = 27.2;
+					};
+					A10000000000000000000711 = {
+						CreatedOnToolsVersion = 27.2;
+						TestTargetID = A10000000000000000000701;
 					};
 				};
 			};
@@ -163,11 +231,19 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000701 /* App */,
+				A10000000000000000000711 /* UITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000812 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000000000000000000802 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -178,6 +254,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000811 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000000000000000000801 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -186,6 +269,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000D01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000701 /* App */;
+			targetProxy = A10000000000000000000C01 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10000000000000000000901 /* Debug */ = {
@@ -214,6 +305,34 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000913 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000302 /* macOS.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID_PREFIX).uitests";
+				PRODUCT_MODULE_NAME = UITests;
+				INFOPLIST_FILE = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				TEST_TARGET_NAME = App;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+			};
+			name = Debug;
+		};
+		A10000000000000000000914 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000000000000000000302 /* macOS.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID_PREFIX).uitests";
+				PRODUCT_MODULE_NAME = UITests;
+				INFOPLIST_FILE = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				TEST_TARGET_NAME = App;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -231,6 +350,15 @@
 			buildConfigurations = (
 				A10000000000000000000903 /* Debug */,
 				A10000000000000000000904 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000A03 /* Build configuration list for PBXNativeTarget "UITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000913 /* Debug */,
+				A10000000000000000000914 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -314,6 +442,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		A10000000000000000000221 /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppCore;
+		};
+		A10000000000000000000222 /* MediaEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = MediaEngine;
+		};
+		A10000000000000000000223 /* MediaTestSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = MediaTestSupport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

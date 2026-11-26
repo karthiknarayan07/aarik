@@ -60,6 +60,7 @@
                 if jobs.isEmpty {
                     VideoPage.queue.emptyState
                         .action("Go to Local Files") { model.selection = .localFiles }
+                        .accessibilityIdentifier("queue.empty")
                 } else {
                     VStack(spacing: 0) {
                         QueueHeader(
@@ -79,6 +80,7 @@
                             }
                         }
                         .jobListActions(model: model, kind: .queue, selection: selection, onDelete: deleteSelection)
+                        .accessibilityIdentifier("queue.list")
                     }
                 }
             }

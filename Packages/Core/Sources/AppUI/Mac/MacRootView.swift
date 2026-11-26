@@ -37,8 +37,12 @@
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .safeAreaBar(edge: .bottom) { module.bottomBar() }
                     .inspector(isPresented: inspectorShown) {
-                        inspector.inspectorColumnWidth(min: 260, ideal: 300, max: 420)
+                        inspector
+                            .accessibilityIdentifier("inspector")
+                            .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
                     }
+                    // Choosing a page puts its content in place: the inspector column coming or going with the page
+                    // (Home has none) must not slide the content while the detail column changes width.
                     .toolbar { toolbar }
             }
             .modifier(module.dialogs)
@@ -99,6 +103,7 @@
             }
             .disabled(!isEnabled)
             .help(isPresented ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
+            .accessibilityIdentifier("toolbar.inspector")
             .accessibilityLabel(isPresented ? "Hide Inspector" : "Show Inspector")
         }
     }

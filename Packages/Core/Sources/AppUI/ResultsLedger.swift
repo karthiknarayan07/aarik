@@ -1,3 +1,4 @@
+import AppCore
 import SwiftUI
 
 /// One day of a results list: its title and what its rows saved.
@@ -15,7 +16,7 @@ extension LedgerDay: Sendable where Row: Sendable {}
 public enum ResultsLedger {
     /// `date` is when a row happened and `saved` what it freed (0 for a row that freed nothing).
     public static func days<Row>(
-        _ rows: [Row], date: (Row) -> Date, saved: (Row) -> Int64, now: Date = Date(),
+        _ rows: [Row], date: (Row) -> Date, saved: (Row) -> Int64, now: Date = AppClock.now,
         calendar: Calendar = .current
     ) -> [LedgerDay<Row>] {
         var order: [Date] = []
@@ -36,7 +37,7 @@ public enum ResultsLedger {
     /// What each of the last `count` days saved, oldest first, with a zero for a day with no rows: the bars of a
     /// week chart.
     public static func lastDays<Row>(
-        _ days: [LedgerDay<Row>], count: Int = 7, now: Date = Date(), calendar: Calendar = .current
+        _ days: [LedgerDay<Row>], count: Int = 7, now: Date = AppClock.now, calendar: Calendar = .current
     ) -> [(day: Date, savedBytes: Int64)] {
         let today = calendar.startOfDay(for: now)
         return (0..<count).reversed().compactMap { offset in
@@ -46,7 +47,7 @@ public enum ResultsLedger {
     }
 
     /// "Today", "Yesterday", or "Monday, 24 Nov".
-    public static func title(for day: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    public static func title(for day: Date, now: Date = AppClock.now, calendar: Calendar = .current) -> String {
         if calendar.isDate(day, inSameDayAs: now) { return "Today" }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
             calendar.isDate(day, inSameDayAs: yesterday)

@@ -83,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             // Quitting during launch: the queue never starts and nothing is routed.
             guard !isTerminating else { return }
             await shell.start()
+            UITestHooks.addFixtureFiles(to: shell)
             routeLaunch()
         }
         // A drive coming or going changes which library files are there.

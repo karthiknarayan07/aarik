@@ -179,6 +179,7 @@
                             .scrollContentBackground(.hidden)
                             .focused(isFocused)
                             .accessibilityLabel("Message")
+                            .accessibilityIdentifier("assistant.composer")
                             .onKeyPress(.return, phases: .down) { press in
                                 let action = ComposerKey.return(
                                     shift: press.modifiers.contains(.shift), option: press.modifiers.contains(.option),
@@ -214,6 +215,7 @@
                 .disabled(!isGenerating && !hasText)
                 .help(isGenerating ? "Stop (Esc)" : "Send (Return)")
                 .accessibilityLabel(isGenerating ? "Stop" : "Send")
+                .accessibilityIdentifier("assistant.send")
             }
             .padding(.leading, 10)
             .padding(.trailing, 8)

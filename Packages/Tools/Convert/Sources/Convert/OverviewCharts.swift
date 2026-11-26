@@ -53,7 +53,7 @@ public struct OverviewCharts: Sendable, Equatable {
     public var hasHistory: Bool { !throughput.isEmpty }
 
     /// What the conversions of the calendar month holding `now` freed.
-    public func savedThisMonth(calendar: Calendar = .current, now: Date = Date()) -> Int64 {
+    public func savedThisMonth(calendar: Calendar = .current, now: Date = AppClock.now) -> Int64 {
         throughput.filter { calendar.isDate($0.day, equalTo: now, toGranularity: .month) }
             .reduce(0) { $0 + $1.savedBytes }
     }
@@ -98,7 +98,7 @@ public struct OverviewCharts: Sendable, Equatable {
 
     public static func snapshot(
         summary: OverviewSummary, buckets: [SavingsBucket], finished: [(addedOn: Date, outcome: JobOutcome)],
-        calendar: Calendar = .current, now: Date = Date()
+        calendar: Calendar = .current, now: Date = AppClock.now
     ) -> SavingsSnapshot {
         var libraries: [SavingsSnapshot.Library] = []
         if summary.videos.count > 0 {

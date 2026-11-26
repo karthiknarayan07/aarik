@@ -29,9 +29,11 @@ final class MainWindowController {
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.tabbingMode = .disallowed
         MainWindowLayout.configure(window)
+        if let size = UITestHooks.windowContentSize { window.setContentSize(size) }
         window.center()
-        // Overrides the default size and position when a saved frame exists.
-        window.setFrameAutosaveName("main")
+        // Overrides the default size and position when a saved frame exists; a UI test launch always starts from the
+        // default (or its own) size and never reads or writes the saved one.
+        if !UITestHooks.isActive { window.setFrameAutosaveName("main") }
         self.window = window
         shell.mainWindow = window
     }

@@ -68,6 +68,7 @@
                     .buttonStyle(.borderedProminent)
                     .accessibilityHint("Asks macOS for permission to read your Photos library")
             }
+            .accessibilityIdentifier("photos.accessPrompt")
         }
     }
 
@@ -88,6 +89,7 @@
                         .accessibilityHint("Opens System Settings, where you can allow access")
                 }
             }
+            .accessibilityIdentifier("photos.accessDenied")
         }
     }
 

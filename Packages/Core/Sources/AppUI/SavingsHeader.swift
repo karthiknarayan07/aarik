@@ -59,6 +59,7 @@ public struct SavingsHeader<Accessory: View>: View {
                         Text("Size after converting")
                     }
                     .gaugeStyle(.linearCapacity)
+                    .labelsHidden()
                     .tint(.accentColor)
                     .frame(maxWidth: 220)
                     .accessibilityHidden(true)

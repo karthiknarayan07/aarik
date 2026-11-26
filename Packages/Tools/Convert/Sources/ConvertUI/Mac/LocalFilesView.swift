@@ -64,6 +64,7 @@
                         .contextMenu { TileMenu(model: model, item: item) }
                     }
                     .onDeleteCommand { model.removeSelectionFromLibrary() }
+                    .accessibilityIdentifier("localFiles.grid")
                 }
             }
             // The header and a problem note sit in the system's bars, so the grid scrolls under them.
@@ -77,6 +78,7 @@
                             $0.displayName
                         }
                     }
+                    .accessibilityIdentifier("localFiles.savingsHeader")
                     StorageBarLoader(
                         items: browser.snapshot.items, preset: model.effectivePreset(for:),
                         presetKey: AnyHashable([AnyHashable(model.preset), AnyHashable(model.presetOverrides)]))
@@ -104,6 +106,7 @@
         var body: some View {
             VStack {
                 welcome
+                    .accessibilityIdentifier("localFiles.welcome")
                 if let error {
                     StatusLabel(error, systemImage: "exclamationmark.triangle", tint: .orange)
                         .padding()

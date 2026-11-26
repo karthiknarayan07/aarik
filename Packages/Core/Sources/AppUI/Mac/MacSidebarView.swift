@@ -26,9 +26,11 @@
             List(selection: selection) {
                 SidebarRowLabel(title: "Home", systemImage: "house", tint: .blue)
                     .tag(MacShellPage<Module.Destination>.home)
+                    .accessibilityIdentifier("sidebar.Home")
                 if showsAsk {
                     SidebarRowLabel(title: "Ask", systemImage: "sparkles", tint: .purple)
                         .tag(MacShellPage<Module.Destination>.ask)
+                        .accessibilityIdentifier("sidebar.Ask")
                 }
                 Section("Tools") {
                     DisclosureGroup(isExpanded: $isToolExpanded) {
@@ -72,6 +74,7 @@
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.accessibilityLabel)
             .accessibilityValue(item.accessibilityValue)
+            .accessibilityIdentifier("sidebar.\(item.title)")
             .modifier(RowContextMenu(module: module, destination: destination))
             .modifier(RowFileDrop(module: module, destination: destination))
         }

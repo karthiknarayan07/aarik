@@ -20,10 +20,11 @@
             let days = ResultsLedger.days(rows, date: \.job.createdAt, saved: \.outcome.savedBytes)
             Group {
                 if rows.isEmpty {
-                    VideoPage.completed.emptyState
+                    VideoPage.completed.emptyState.accessibilityIdentifier("completed.empty")
                 } else {
                     VStack(spacing: 0) {
                         LedgerSummary(days: days, savedBytes: model.activity.savedBytes, count: rows.count)
+                            .accessibilityIdentifier("completed.summary")
                         Divider()
                         List(selection: $selection) {
                             ForEach(days, id: \.day) { day in
@@ -44,6 +45,7 @@
                             }
                         }
                         .jobListActions(model: model, kind: .completed, selection: selection)
+                        .accessibilityIdentifier("completed.list")
                         // Space compares the selected video, as it previews one in Finder.
                         .onKeyPress(.space) {
                             guard selection.count == 1, let row = rows.first(where: { selection.contains($0.job.id) })
@@ -233,7 +235,7 @@
             let days = ResultsLedger.days(rows, date: \.job.createdAt, saved: { _ in 0 })
             Group {
                 if rows.isEmpty {
-                    VideoPage.keptAsIs.emptyState
+                    VideoPage.keptAsIs.emptyState.accessibilityIdentifier("keptAsIs.empty")
                 } else {
                     List(selection: $selection) {
                         ForEach(days, id: \.day) { day in
@@ -249,6 +251,7 @@
                         }
                     }
                     .jobListActions(model: model, kind: .keptAsIs, selection: selection)
+                    .accessibilityIdentifier("keptAsIs.list")
                 }
             }
             .navigationTitle("Kept as Is")
@@ -266,7 +269,7 @@
             let rows = model.failedJobs
             Group {
                 if rows.isEmpty {
-                    VideoPage.failed.emptyState
+                    VideoPage.failed.emptyState.accessibilityIdentifier("failed.empty")
                 } else {
                     List(selection: $selection) {
                         ForEach(rows, id: \.job.id) { row in
@@ -280,6 +283,7 @@
                         }
                     }
                     .jobListActions(model: model, kind: .failed, selection: selection)
+                    .accessibilityIdentifier("failed.list")
                 }
             }
             .navigationTitle("Failed")

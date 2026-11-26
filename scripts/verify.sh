@@ -4,7 +4,7 @@
 #
 #   scripts/verify.sh [--only GROUP[,GROUP...]] [--repeat N]
 #
-# Groups: mac ios packages lint hygiene brand stale   (default: everything)
+# Groups: mac macui ios packages lint hygiene brand stale   (default: everything; macui is the Mac UI tests, also in mac)
 # Env:    SIM_UDID (force a simulator), MAC_SCHEME (default App), IOS_SCHEME (default App-iOS),
 #         VERIFY_DIR (logs and derived data, default .build/verify),
 #         IOS_SKIP_TESTING (space-separated -skip-testing identifiers for "iOS app test", e.g. "AppUITests")
@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ $REPEAT =~ ^[1-9][0-9]*$ ]] || { echo "verify: --repeat needs a positive integer" >&2; exit 2; }
 for g in ${ONLY//,/ }; do
-  case $g in mac|ios|packages|lint|hygiene|brand|stale) ;; *) echo "verify: unknown group '$g'" >&2; exit 2 ;; esac
+  case $g in mac|macui|ios|packages|lint|hygiene|brand|stale) ;; *) echo "verify: unknown group '$g'" >&2; exit 2 ;; esac
 done
 
 mkdir -p "$VERIFY_DIR/logs"
@@ -107,7 +107,7 @@ lint_paths() {
     [[ -d $p/Sources ]] && echo "$p/Sources"
     [[ -d $p/Tests ]] && echo "$p/Tests"
   done
-  for p in Apps/macOS/Sources Apps/iOS; do [[ -d $p ]] && echo "$p"; done
+  for p in Apps/macOS/Sources Apps/macOS/UITests Apps/Shared Apps/iOS; do [[ -d $p ]] && echo "$p"; done
 }
 brand_check() { # no product name in source, plists, project files or schemes
   local hits
@@ -140,6 +140,11 @@ sim_test_package() {
 mac_build() { # CONFIG
   xcodebuild -workspace "$WORKSPACE" -scheme "$MAC_SCHEME" -configuration "$1" -derivedDataPath "$VERIFY_DIR/derived-mac" \
     -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
+}
+mac_ui_tests() { # the real app, driven by XCUITest; needs a signed runner (no CODE_SIGNING_ALLOWED=NO) and a logged-in desktop
+  xcodebuild test -workspace "$WORKSPACE" -scheme "$MAC_SCHEME" -configuration Debug \
+    -derivedDataPath "$VERIFY_DIR/derived-mac-ui" -destination 'platform=macOS,arch=arm64' \
+    -only-testing:UITests -skip-testing:UITests/LaunchPerformanceTests
 }
 ios_xcode() { # ACTION
   local skip=() t
@@ -178,6 +183,7 @@ for ((n = 1; n <= REPEAT; n++)); do
   else
     run $n "Mac Debug build" mac mac_build Debug
     run $n "Mac Release build" mac mac_build Release
+    run $n "Mac UI tests" "mac macui" mac_ui_tests
   fi
 
   if [[ ! -d $WORKSPACE || ! -d $IOS_PROJECT ]]; then

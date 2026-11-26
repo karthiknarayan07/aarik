@@ -1,4 +1,5 @@
 #if os(macOS)
+    import AppCore
     import AppUI
     import Charts
     import Convert
@@ -17,7 +18,7 @@
                 SavingsHero(charts: charts, presetName: presetName, isRefreshing: isRefreshing)
                 AdaptiveGrid(minimumWidth: 190, spacing: 12, isBalanced: true) {
                     SummaryCard(
-                        title: "Could Free", systemImage: "arrow.down.right.circle.fill", tint: .blue,
+                        id: "couldFree", title: "Could Free", systemImage: "arrow.down.right.circle.fill", tint: .blue,
                         value: charts.couldFree > 0 ? ByteFormat.string(charts.couldFree) : "Nothing",
                         detail: "at the \(presetName) preset"
                     ) {
@@ -25,14 +26,14 @@
                             values: charts.sizes.flatMap { [$0.now, $0.after] }.map(Double.init), tint: .blue)
                     }
                     SummaryCard(
-                        title: "Saved So Far", systemImage: "checkmark.circle.fill", tint: .green,
+                        id: "saved", title: "Saved So Far", systemImage: "checkmark.circle.fill", tint: .green,
                         value: ByteFormat.string(charts.savedBytes),
                         detail: charts.hasHistory ? "across all conversions" : "after the first conversion"
                     ) {
                         MiniArea(points: charts.savedOverTime, tint: .green)
                     }
                     SummaryCard(
-                        title: "Converted", systemImage: "film.stack.fill", tint: .orange,
+                        id: "converted", title: "Converted", systemImage: "film.stack.fill", tint: .orange,
                         value: charts.conversions.formatted(),
                         detail: charts.conversions == 1 ? "video" : "videos"
                     ) {
@@ -41,7 +42,7 @@
                             singleCaption: "Not enough history yet")
                     }
                     SummaryCard(
-                        title: "Biggest Group", systemImage: "rectangle.stack.fill", tint: .purple,
+                        id: "biggestGroup", title: "Biggest Group", systemImage: "rectangle.stack.fill", tint: .purple,
                         value: charts.groups.first.map { ByteFormat.string($0.bytes) } ?? "None",
                         detail: charts.groups.first?.title ?? "Nothing to free"
                     ) {
@@ -104,7 +105,6 @@
                 }
                 .padding(8)
             }
-            .accessibilityElement(children: .combine)
         }
 
         private var words: some View {
@@ -128,13 +128,16 @@
                         ProgressView().controlSize(.small)
                         Text("Updating…")
                     } else {
-                        Text("Updated \(charts.updatedAt.formatted(.relative(presentation: .named)))")
+                        Text("Updated \(AppClock.relative(charts.updatedAt))")
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // The ring is its own element (it has a label and a value); the sentences read as one.
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("home.summary")
         }
 
         private var ring: some View {
@@ -156,6 +159,7 @@
                 }
             }
             .frame(width: 132, height: 132)
+            .accessibilityIdentifier("home.ring")
             .accessibilityLabel("Share of your videos that could be freed")
             .accessibilityValue(
                 charts.couldFree > 0 ? "\(percent), about \(ByteFormat.string(charts.couldFree))" : "None")
@@ -166,6 +170,8 @@
 
     /// One pinned figure with a small chart under it.
     private struct SummaryCard<Sparkline: View>: View {
+        /// The accessibility identifier is `home.card.<id>`.
+        let id: String
         let title: String
         let systemImage: String
         let tint: Color
@@ -193,6 +199,7 @@
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("home.card.\(id)")
             .accessibilityLabel(title)
             .accessibilityValue("\(value), \(detail)")
         }
@@ -267,6 +274,8 @@
 
     /// A titled box for one chart, with a note in place of the chart when there is nothing to draw.
     private struct ChartBox<Content: View>: View {
+        /// The accessibility identifier is `home.chart.<id>`.
+        let id: String
         let title: String
         let subtitle: String
         let isEmpty: Bool
@@ -300,7 +309,9 @@
                         .frame(maxWidth: .infinity, minHeight: Self.height)
                         .accessibilityElement(children: .combine)
                     } else {
-                        content.frame(height: Self.height)
+                        content
+                            .frame(height: Self.height)
+                            .accessibilityIdentifier("home.chart.\(id)")
                     }
                 }
             } label: {
@@ -339,7 +350,8 @@
 
         var body: some View {
             ChartBox(
-                title: "Before and After", subtitle: "Size now and after converting", isEmpty: sizes.isEmpty,
+                id: "beforeAfter", title: "Before and After", subtitle: "Size now and after converting",
+                isEmpty: sizes.isEmpty,
                 emptyText: "Add videos or allow access to Photos to compare sizes."
             ) {
                 Chart(bars) { bar in
@@ -378,7 +390,8 @@
 
         var body: some View {
             ChartBox(
-                title: "Savings by Group", subtitle: "What each group could free", isEmpty: groups.isEmpty,
+                id: "groupSavings", title: "Savings by Group", subtitle: "What each group could free",
+                isEmpty: groups.isEmpty,
                 emptyText: "Nothing here would get meaningfully smaller at this preset."
             ) {
                 Chart(groups) { group in
@@ -412,7 +425,7 @@
 
         var body: some View {
             ChartBox(
-                title: "Space Saved Over Time", subtitle: "Total by the day videos were added",
+                id: "savedOverTime", title: "Space Saved Over Time", subtitle: "Total by the day videos were added",
                 isEmpty: points.isEmpty, emptyText: "Appears after the first conversion finishes.",
                 single: points.count == 1
                     ? (
@@ -446,7 +459,7 @@
 
         var body: some View {
             ChartBox(
-                title: "Queue Throughput", subtitle: "Videos converted by day", isEmpty: days.isEmpty,
+                id: "throughput", title: "Queue Throughput", subtitle: "Videos converted by day", isEmpty: days.isEmpty,
                 emptyText: "Appears after the first conversion finishes.",
                 single: days.count == 1
                     ? (

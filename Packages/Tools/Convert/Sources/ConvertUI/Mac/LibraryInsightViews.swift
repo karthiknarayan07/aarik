@@ -19,13 +19,18 @@
         }
 
         var body: some View {
-            StorageBar(breakdown: breakdown)
-                .task(id: Key(count: items.count, bytes: items.reduce(0) { $0 + $1.byteSize }, presets: presetKey)) {
+            // The task sits on a view that is always there: StorageBar draws nothing until it has segments.
+            VStack(spacing: 0) {
+                StorageBar(breakdown: breakdown)
+                Color.clear.frame(height: 0)
+                    .task(id: Key(count: items.count, bytes: items.reduce(0) { $0 + $1.byteSize }, presets: presetKey))
+                {
                     let pairs = items.map { (item: $0, preset: preset($0)) }
                     let result = await StorageBreakdown.make(pairs: pairs)
                     guard !Task.isCancelled else { return }
                     breakdown = result
                 }
+            }
         }
     }
 
@@ -72,6 +77,7 @@
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Space you could save")
                 .accessibilityValue(breakdown.spoken)
+                .accessibilityIdentifier("localFiles.storageBar")
             }
         }
 
