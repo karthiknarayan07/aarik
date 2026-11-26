@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		B20000000000000000000071 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000031 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B20000000000000000000072 /* Widgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000032 /* Widgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B20000000000000000000103 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000101 /* AppCore */; };
+		B20000000000000000000104 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000102 /* AppCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -119,6 +121,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000103 /* AppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,6 +136,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000104 /* AppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -206,6 +210,7 @@
 			);
 			name = App;
 			packageProductDependencies = (
+				B20000000000000000000101 /* AppCore */,
 			);
 			productName = App;
 			productReference = B20000000000000000000030 /* App.app */;
@@ -250,6 +255,7 @@
 			);
 			name = Widgets;
 			packageProductDependencies = (
+				B20000000000000000000102 /* AppCore */,
 			);
 			productName = Widgets;
 			productReference = B20000000000000000000032 /* Widgets.appex */;
@@ -312,6 +318,9 @@
 			);
 			mainGroup = B20000000000000000000002;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B20000000000000000000100 /* XCLocalSwiftPackageReference "../../Packages/Core" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B20000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -583,6 +592,26 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B20000000000000000000100 /* XCLocalSwiftPackageReference "../../Packages/Core" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/Core;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B20000000000000000000101 /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000100 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppCore;
+		};
+		B20000000000000000000102 /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000100 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B20000000000000000000001 /* Project object */;
 }
