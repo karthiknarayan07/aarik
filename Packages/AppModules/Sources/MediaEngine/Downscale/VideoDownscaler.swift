@@ -33,7 +33,7 @@ public struct VideoDownscaler: Sendable {
         // shared pool (`BlockingWorkExecutor`).
         let slots = WorkSlots.downscales
         await slots.acquire()
-        let executor = BlockingWorkExecutor(label: "downscale \(output.lastPathComponent)")
+        let executor = BlockingWorkExecutor(label: "downscale \(output.lastPathComponent)", qos: DownscaleThrottle.qos)
         do {
             try await withTaskExecutorPreference(executor) {
                 try await run(source: source, output: output, spec: spec, progress: progress)

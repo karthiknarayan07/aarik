@@ -23,7 +23,7 @@ struct MenuBarPanel: View {
             Label {
                 Text(AppModel.displayName)
             } icon: {
-                let icon = StatusIconState(model.activity, isPaused: model.isQueuePaused)
+                let icon = StatusIconState(model.activity, isPaused: model.queuePause.isPaused)
                 if let value = icon.variableValue {
                     Image(systemName: icon.symbolName, variableValue: value)
                 } else {
@@ -88,6 +88,11 @@ struct MenuBarPanel: View {
                 Text(runningDetail(running.job, progress: running.progress))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let paused = model.queuePause.statusText {
+                    Text(paused)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         } else {
             Text(idleText)
@@ -105,7 +110,9 @@ struct MenuBarPanel: View {
     private var idleText: String {
         let waiting = model.activity.queue
         if waiting == 0 { return "Nothing in the queue." }
-        return model.isQueuePaused ? "Queue paused, \(waiting) waiting." : "\(waiting) waiting."
+        guard let paused = model.queuePause.statusText else { return "\(waiting) waiting." }
+        // The user's pause keeps its wording; an automatic one says why.
+        return model.isQueuePaused ? "Queue paused, \(waiting) waiting." : "\(paused), \(waiting) waiting."
     }
 
     private var dropZone: some View {

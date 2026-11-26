@@ -1,7 +1,8 @@
 # Stability
 
 How the app keeps long batches and user files safe. Every rule here is enforced in code and most are covered by tests (the
-Time Machine exclusion, for one, is not); "planned" items belong to Plan 6 Phase B and do not exist yet. Change a rule only together with its test.
+Time Machine exclusion and the system inputs themselves are not; "planned" items belong to Plan 6 Phase B and do
+not exist yet. Change a rule only together with its test.
 
 ## File safety (never break these)
 
@@ -48,9 +49,17 @@ Time Machine exclusion, for one, is not); "planned" items belong to Plan 6 Phase
   from the queue; the original is untouched.
 - `JobQueue` runs one job at a time and persists after every state change. A job found `running` at launch
   (crash, quit) is put back to `queued`.
-- `applicationShouldTerminate` replies later: pending library saves finish and the running job is returned to the
-  queue (`AppModel.prepareForTermination` -> `JobQueue.shutdown`) before the app exits. A "Stop converting and
-  quit?" confirmation is planned (B2).
+- `applicationShouldTerminate` first asks "Stop converting and quit?" (a standard `NSAlert`, default button
+  "Stop and Quit", `QuitConfirmation`) when work is under way, using `QuitPolicy.needsConfirmation` (the same
+  definition of busy as `RelaunchGate`: a job running, or waiting jobs about to start). It does not ask when the queue
+  is idle or paused with nothing running, nor while the system is logging out, restarting or shutting down (the quit
+  Apple event's `kAEQuitReason`, or a `NSWorkspace.willPowerOffNotification` in the last 30 seconds, cleared when the app
+  becomes active again; either signal is enough, `QuitPolicy.isSessionEnding`): then it quits without asking.
+- After the answer, it replies later: pending library saves finish and the running job is returned to the queue
+  (`AppModel.prepareForTermination` -> `JobQueue.shutdown`) before the app exits. The encoder removes its partial
+  file when cancelled, and every job, the interrupted one and the rest, is saved as `queued`
+  (`quittingKeepsTheRunningJobAndTheRestOfTheQueueForNextLaunch`); Photos input in `Work/` is cleared by the next
+  launch's sweep. They continue at the next launch (when auto-start is on).
 
 ## Updates (Sparkle)
 
@@ -59,15 +68,38 @@ Time Machine exclusion, for one, is not); "planned" items belong to Plan 6 Phase
   The relaunch after an update is held while a job is running, or jobs are waiting and the queue is not paused,
   and runs once when the queue goes idle. A paused queue counts as idle: the user paused on purpose, and waiting
   jobs are saved after every change (`jobs.json`) and restored as queued at next launch, where they start when the
-  queue is resumed (automatically, unless auto-start is off).
+  queue is resumed (automatically, unless auto-start is off). An automatic pause (heat, low battery) counts as paused
+  in the same way, because the gate is fed the combined pause (`QueuePause.isPaused`): a running job still holds the
+  relaunch, waiting jobs do not. The choice: holding an update for as long as the Mac stays hot or on a low battery
+  could be indefinite, and nothing is lost by relaunching, since the queue is saved and the automatic pause is
+  decided again at launch from the thermal state and the battery.
   Tests: `RelaunchGateTests`.
 
 ## Resources
 
 - Heavy work is bounded: `WorkSlots` (half the cores, at least 2) limits concurrent downscales; blocking reads run
   on a dedicated executor, never the shared pool.
-- Disk space preflight, sleep prevention during a batch and thermal throttling: **planned** (Plan 6 B1, B2). Until
-  then a full disk surfaces as a failed job, with the partial removed.
+- Disk space preflight: **planned** (Plan 6 B1). Until then a full disk surfaces as a failed job, with the partial
+  removed.
+
+## Sleep, heat and battery
+
+The decisions are pure types in `AppCore/Pressure` (`PressureState`, `QueuePause`, `QuitPolicy`); the system inputs
+(thermal state, IOPowerSources, core counts, the power assertion) sit behind protocols with fakes in the tests
+(`PressureCoordinator`).
+
+- **Sleep.** While work is under way (a job running, or waiting jobs and the queue not paused) the app holds
+  `ProcessInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled])`, once, and ends it when the queue is
+  idle or paused with nothing running. The display may sleep; the system may not. A running job finishing after a
+  pause keeps the hold until it is done.
+- **Heat.** `.serious`: one video at a time. `.critical`: the queue pauses after the current video, status line
+  "Paused while your Mac cools down". It resumes at `.fair` or better (`.serious` on the way down stays paused).
+- **Battery.** Conversion continues on battery. At 20 % or less the queue pauses after the current video ("Paused:
+  battery low"); it resumes when the Mac is plugged in or above 25 %. No battery reading means never paused.
+- **Pause reasons stay separate.** `JobQueue` has the user's pause (`pause`/`resume`) and its own automatic hold
+  (`setAutomaticHold`). `resume()` never lifts the hold, and lifting it never overrides the user's pause. The status
+  line shows the user's pause first ("Paused"), otherwise the automatic reason.
+- **Speed** (Settings, Quiet / Balanced / Fastest): see PERFORMANCE.md.
 
 ## Diagnostics and CI
 

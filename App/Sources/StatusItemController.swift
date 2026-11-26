@@ -79,7 +79,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
         isTrackingModel = true
         let state = withObservationTracking {
-            StatusIconState(model.activity, isPaused: model.isQueuePaused)
+            StatusIconState(model.activity, isPaused: model.queuePause.isPaused)
         } onChange: { [weak self] in
             Task { @MainActor in self?.trackModel() }
         }
@@ -88,7 +88,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     private func applyIcon() {
         appliedIcon = nil
-        apply(StatusIconState(model.activity, isPaused: model.isQueuePaused))
+        apply(StatusIconState(model.activity, isPaused: model.queuePause.isPaused))
     }
 
     /// Progress is shown in whole percents, so a fast job doesn't redraw the icon for every tick.

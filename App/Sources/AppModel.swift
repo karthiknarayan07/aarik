@@ -5,6 +5,7 @@ import Assistant
 import DownscaleVideo
 import Foundation
 import LocalLibrary
+import MediaEngine
 import Observation
 import PhotosLibrary
 import QuickRunService
@@ -52,9 +53,24 @@ final class AppModel {
     var jobs: [Job] = []
     /// Counts, saved total and running progress for the Activity rows, updated with `jobs`.
     var activity = ActivitySummary(jobs: [])
+    /// The user's pause (the Pause button, auto-start off). The queue is also held, apart from this, while the Mac is
+    /// hot or the battery is low: see `queuePause`.
     var isQueuePaused = false {
-        didSet { relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused) }
+        didSet { refreshQueuePause() }
     }
+    /// Whether the queue is paused and why, user and automatic together; its `statusText` is the status line.
+    var queuePause = QueuePause(isPausedByUser: false, automatic: nil)
+    /// How hard conversion works (Settings); thermal rules apply on top.
+    var speed: SpeedSetting {
+        didSet {
+            defaults.set(speed.rawValue, forKey: AppSettings.Keys.speed)
+            pressure.setSpeed(speed)
+        }
+    }
+    /// Reads the thermal state and power source, keeps the Mac awake while the queue works, and tells the queue and
+    /// the downscale limit what to do.
+    @ObservationIgnored lazy var pressure = makePressure()
+    @ObservationIgnored var lastThrottle: Task<Void, Never>?
     /// Holds an update's relaunch while a job runs or jobs are waiting; the updater asks it, the queue feeds it.
     @ObservationIgnored let relaunchGate = RelaunchGate()
     var isConfirmingReplace = false
@@ -119,6 +135,7 @@ final class AppModel {
         self.defaults = defaults
         self.preset =
             defaults.string(forKey: AppSettings.Keys.preset).flatMap(Preset.init(rawValue:)) ?? .balanced
+        self.speed = AppSettings.speed(defaults)
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         self.quickRunStore = QuickRunStore(fileURL: directory.appending(path: "quick-runs.json"))

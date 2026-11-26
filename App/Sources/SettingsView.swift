@@ -1,3 +1,4 @@
+import AppCore
 import AppUI
 import DownscaleVideo
 import SwiftUI
@@ -23,15 +24,31 @@ private struct GeneralSettings: View {
     @Bindable var updater: Updater
     @AppStorage(AppSettings.Keys.preset) private var preset = Preset.balanced
     @AppStorage(AppSettings.Keys.autoStartQueue) private var autoStart = true
+    @AppStorage(AppSettings.Keys.speed) private var speed = SpeedSetting.default
 
     var body: some View {
         Form {
-            Picker("Default preset", selection: $preset) {
+            Picker("Default Preset", selection: $preset) {
                 ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
             Toggle(isOn: $autoStart) {
                 Text("Start the queue automatically")
                 Text("When off, the queue waits until you press Resume.")
+            }
+            Section {
+                Picker("Conversion Speed", selection: $speed) {
+                    ForEach(SpeedSetting.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                .accessibilityLabel("Conversion Speed")
+                .accessibilityHint(speed.summary)
+            } header: {
+                Text("Performance")
+            } footer: {
+                // What the selected option does, drawn by the grouped form like System Settings' explanatory text.
+                Text(speed.summary)
             }
             Section("Updates") {
                 if updater.isConfigured {
@@ -51,6 +68,9 @@ private struct GeneralSettings: View {
         // The inspector's preset is this same stored value; keep the open window in step.
         .onChange(of: preset) { _, newValue in
             if model.preset != newValue { model.preset = newValue }
+        }
+        .onChange(of: speed) { _, newValue in
+            if model.speed != newValue { model.speed = newValue }
         }
     }
 }

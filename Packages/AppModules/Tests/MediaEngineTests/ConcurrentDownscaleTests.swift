@@ -65,4 +65,66 @@ import Testing
         #expect(WorkSlots.defaultCount >= 2)
         #expect(WorkSlots.defaultCount < max(ProcessInfo.processInfo.activeProcessorCount, 3))
     }
+
+    // MARK: Adjustable limit
+
+    @Test(.timeLimit(.minutes(1))) func raisingTheLimitAdmitsWaitersAtOnce() async {
+        let slots = WorkSlots(count: 1)
+        await slots.acquire()
+        let (acquired, continuation) = AsyncStream.makeStream(of: Void.self)
+        let second = Task {
+            await slots.acquire()
+            continuation.yield()
+        }
+        while await slots.waiting == 0 { await Task.yield() }
+
+        await slots.setLimit(2)
+        var iterator = acquired.makeAsyncIterator()
+        await iterator.next()
+        await second.value
+        #expect(await slots.waiting == 0)
+        #expect(await slots.free == 0)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func loweringTheLimitNeverStopsRunningWorkAndAppliesAsItFinishes() async {
+        let slots = WorkSlots(count: 3)
+        await slots.acquire()
+        await slots.acquire()
+        await slots.acquire()
+        await slots.setLimit(1)
+        // All three keep their slots; a new caller waits.
+        #expect(await slots.free == 0)
+        let (acquired, continuation) = AsyncStream.makeStream(of: Void.self)
+        let next = Task {
+            await slots.acquire()
+            continuation.yield()
+        }
+        while await slots.waiting == 0 { await Task.yield() }
+
+        // Two finish: still at the new limit, so the waiter keeps waiting.
+        await slots.release()
+        await slots.release()
+        #expect(await slots.waiting == 1)
+        // The last one finishes: now there is room for one.
+        await slots.release()
+        var iterator = acquired.makeAsyncIterator()
+        await iterator.next()
+        await next.value
+        #expect(await slots.waiting == 0)
+        #expect(await slots.free == 0)
+        await slots.release()
+        #expect(await slots.free == 1)
+    }
+
+    @Test func theLimitIsAtLeastOne() async {
+        let slots = WorkSlots(count: 0)
+        #expect(await slots.free == 1)
+        await slots.setLimit(-3)
+        #expect(await slots.free == 1)
+    }
+
+    @Test func quietRunsTheBlockingWorkInTheBackground() {
+        #expect(DownscaleThrottle.qos(background: true) == .background)
+        #expect(DownscaleThrottle.qos(background: false) == .unspecified)
+    }
 }

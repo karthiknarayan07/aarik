@@ -9,6 +9,12 @@ First public release.
 
 ### Added
 
+- **Long batches survive sleep, heat and low battery:** the Mac stays awake while videos convert (the display may
+  still sleep). A hot Mac converts one video at a time, then pauses ("Paused while your Mac cools down") and resumes
+  by itself. On battery, conversion pauses at 20 % ("Paused: battery low") and resumes when you plug in or it is above
+  25 %. A **Conversion speed** setting (Quiet, Balanced, Fastest) trades speed for heat and noise.
+- **Quit asks first while converting:** "Stop converting and quit?" The video in progress and the rest of the queue
+  continue the next time you open the app.
 - **Replace in Photos:** choose Replace Original in Photos and each smaller copy is saved and checked first. When the
   queue finishes, Photos asks you once to move all the originals to Recently Deleted. If you decline, they are kept
   and a bar offers to move them later. iCloud space is freed when Recently Deleted is emptied, or after 30 days.
