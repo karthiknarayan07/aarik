@@ -9,6 +9,12 @@ First public release.
 
 ### Added
 
+- **iPhone and iPad navigation:** the app opens on a Tools list, and each tool owns its pages. Convert shows Overview,
+  Photos, Files, Queue and Completed: a stack on iPhone and a folded Duo, three columns on iPad and an open Duo, with
+  your place kept across size and posture changes and after a relaunch. The Overview leads with a savings ring and a
+  headline, pinned cards with small charts, and trends charts that VoiceOver can read. Tapping a video opens its page
+  with a zoom; Select turns on multi-selection. Previews on long press, swipe actions, haptics and sheets with detents
+  follow the system's own apps.
 - **Photos videos:** a page for the videos in your Photos library, with the same grid, filters, presets and queue as
   Local Files. Browsing never downloads from iCloud; a video is downloaded (with its own progress and a way to cancel)
   only when its turn comes, and the converted copy is saved to Photos as a new video with the original's date,

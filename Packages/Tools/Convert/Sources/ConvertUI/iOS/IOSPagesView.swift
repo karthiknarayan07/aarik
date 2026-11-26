@@ -80,6 +80,7 @@
                         Image(systemName: page.systemImage)
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(page.tint)
+                            .symbolEffect(.bounce, value: page == .completed ? model.activity.completed : 0)
                     }
                     if let progress {
                         Spacer()

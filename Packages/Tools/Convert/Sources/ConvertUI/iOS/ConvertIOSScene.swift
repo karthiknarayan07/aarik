@@ -21,6 +21,8 @@
 
         public init(model: ConvertModel) {
             self.model = model
+            // The model starts on Local Files, which is the Mac's first page; iOS starts on Overview.
+            model.selection = .overview
         }
 
         public var tool: any Tool { model.tool }

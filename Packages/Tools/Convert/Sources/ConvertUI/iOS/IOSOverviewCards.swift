@@ -295,6 +295,12 @@
                         BarMark(x: .value("Could free", group.couldFree), y: .value("Group", group.title))
                             .foregroundStyle(.purple.gradient)
                             .cornerRadius(4)
+                            .annotation(position: .top, alignment: .leading, spacing: 2) {
+                                Text(group.title)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                             .accessibilityLabel(group.title)
                             .accessibilityValue("Could free \(ByteFormat.string(group.couldFree))")
                     }
@@ -306,7 +312,8 @@
                             }
                         }
                     }
-                    .frame(height: CGFloat(min(groups.count, 6)) * 36 + 36)
+                    .chartYAxis(.hidden)
+                    .frame(height: CGFloat(min(groups.count, 6)) * 56 + 36)
                     .accessibilityChartDescriptor(
                         BarChartDescriptor(
                             title: "Savings by Group",
