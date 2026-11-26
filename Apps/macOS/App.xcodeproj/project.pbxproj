@@ -16,6 +16,7 @@
 		A10000000000000000000108 /* Assistant in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000208 /* Assistant */; };
 		A1000000000000000000010B /* ConvertUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000020B /* ConvertUI */; };
 		A10000000000000000000109 /* QuickRunService in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000209 /* QuickRunService */; };
+		A1000000000000000000010C /* AppServices in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000020C /* AppServices */; };
 		A10000000000000000000106 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000206 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -53,6 +54,7 @@
 				A10000000000000000000108 /* Assistant in Frameworks */,
 				A10000000000000000000109 /* QuickRunService in Frameworks */,
 				A1000000000000000000010B /* ConvertUI in Frameworks */,
+				A1000000000000000000010C /* AppServices in Frameworks */,
 				A10000000000000000000106 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -119,6 +121,7 @@
 				A10000000000000000000208 /* Assistant */,
 				A10000000000000000000209 /* QuickRunService */,
 				A1000000000000000000020B /* ConvertUI */,
+				A1000000000000000000020C /* AppServices */,
 				A10000000000000000000206 /* Sparkle */,
 			);
 			productName = App;
@@ -286,6 +289,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = PhotosLibrary;
+		};
+		A1000000000000000000020C /* AppServices */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppServices;
 		};
 		A10000000000000000000208 /* Assistant */ = {
 			isa = XCSwiftPackageProductDependency;

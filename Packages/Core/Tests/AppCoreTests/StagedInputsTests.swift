@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import QuickRunService
+@testable import AppCore
 
 @Suite struct StagedInputsTests {
     private func makeDirectory() throws -> URL {
