@@ -14,9 +14,9 @@
 
     /// Renders the redesigned Mac pages to PNGs for design review with `ImageRenderer`, from made-up numbers and jobs
     /// (never the user's media). Lists and the window frame can't be drawn this way, so the Queue and Completed pages are
-    /// shown as their rows. Skipped unless `AARIK_MAC_SHOTS` names the folder to write to:
+    /// shown as their rows. Skipped unless `APP_MAC_SHOTS` names the folder to write to:
     ///
-    ///     AARIK_MAC_SHOTS=/path/to/folder swift test --filter MacScreenshotTests
+    ///     APP_MAC_SHOTS=/path/to/folder swift test --filter MacScreenshotTests
     @MainActor
     @Suite(.serialized) struct MacScreenshotTests {
         private static let day: TimeInterval = 86_400
@@ -127,7 +127,7 @@
         }
 
         @Test func rendersThePages() throws {
-            guard let path = ProcessInfo.processInfo.environment["AARIK_MAC_SHOTS"] else { return }
+            guard let path = ProcessInfo.processInfo.environment["APP_MAC_SHOTS"] else { return }
             let folder = URL(filePath: path, directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let directory = URL.temporaryDirectory.appending(
