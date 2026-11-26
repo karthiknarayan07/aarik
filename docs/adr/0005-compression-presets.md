@@ -1,6 +1,6 @@
 # ADR 0005: Compression presets
 
-Status: **Proposed**. All numbers below are proposals. None has been validated against fixtures yet.
+Status: **Accepted** (2026-11-26). Implemented in `Convert` (`CompressPreset`, `ConvertJobKind`) and `MediaEngine` (`DownscaleSpec.maxBitRate`, `VideoEncoder` `kVTCompressionPropertyKey_DataRateLimits`).
 
 ## Context
 
@@ -9,7 +9,7 @@ Compression keeps the resolution, the frame rate, HDR and Dolby Vision handling 
 the HEVC bitrate changes. The design says the exact ratios are the builder's call, recorded here, and checked by the
 existing quality checks and fixtures.
 
-## Decision (proposed)
+## Decision
 
 Each preset is a **target video bitrate expressed as a ratio of the source's video bitrate**, applied to the HEVC
 re-encode. Audio is passed through untouched.
@@ -20,19 +20,27 @@ re-encode. Audio is passed through untouched.
 | Balanced (default) | 0.40 | Visually close on a phone and a laptop. Roughly 2.5x smaller. |
 | Best Quality | 0.60 | Hard to tell from the source. About 40 percent saving. |
 
-Rules around the ratio (also proposed):
+Rules around the ratio:
 
-- Set `kVTCompressionPropertyKey_AverageBitRate` to the target. Also set `kVTCompressionPropertyKey_DataRateLimits` at
-  about 2x the target over a 1 second window to stop spikes. Apple's header says AverageBitRate is a soft limit and
-  `DataRateLimits` is a hard cap, and they are meant to be used together.
-- **Never exceed the source bitrate.** If the source is already below a floor (see below), report "already small" and
-  copy it unchanged rather than inflating it.
-- **Floor** per pixel rate so a low-bitrate source is not crushed: not below about 0.04 bits per pixel per frame for
-  Smaller (for example about 10 Mbps at 4K30, about 2.5 Mbps at 1080p30). Proposed, to be tuned on fixtures.
-- Keep resolution and fps exactly. Keep the codec HEVC and the same profile: Main for 8-bit, Main10 for 10-bit
-  and HDR. Dolby Vision profile 8.4 sources keep the ADR 0001 route; the RPU on every frame must survive.
-  A preset must never be allowed to drop HDR or DV.
-- Estimate the saving before running, as `(1 - ratio) x video bytes`, and show it in the Compress picker.
+- Set `kVTCompressionPropertyKey_AverageBitRate` to the target (`CompressPreset.spec(for:)`). Also set
+  `kVTCompressionPropertyKey_DataRateLimits` via `DownscaleSpec.maxBitRate = target * 2` (`[target * 2 / 8, 1.0]`
+  bytes over a 1-second window, marked optional for encoders that reject it) to stop spikes. Apple's header says
+  `AverageBitRate` is a soft limit and `DataRateLimits` is a hard cap, and they are meant to be used together.
+- **Never exceed the source bitrate.** If the source video bit rate is at or below the floor (`ConvertPlanner.decide`),
+  report "Already small" (`.keptAsIs(..., code: .alreadySmall)`) and leave the original untouched rather than
+  inflating it; if an encode saves under 10%, `ConvertRunner` discards the output and keeps the original as
+  `.savesLittle`.
+- **Floor** per pixel rate so a low-bitrate source is not crushed: `0.04` bits per pixel per frame
+  (`CompressPreset.minimumBitsPerPixel`), using `effectiveFPS = fps > 30 ? 30 + (min(fps, 60) - 30) * 0.5 : fps` and
+  a `1_000_000` bps minimum (`2_000_000` bps when dimensions are unknown). Validated numbers:
+  - 4K30 (`3840x2160` @ 30 fps): `9,953,280` bps (~10.0 Mbps)
+  - 4K60 (`3840x2160` @ 60 fps): `14,929,920` bps (~14.9 Mbps)
+  - 1080p30 (`1920x1080` @ 30 fps): `2,488,320` bps (~2.5 Mbps)
+- Keep resolution and fps exactly (`targetShortSide = nil`, `maxFrameRate = nil`). Keep the codec HEVC
+  (`.hevcKeepHDR`) and the same profile: Main for 8-bit, Main10 for 10-bit and HDR. Dolby Vision profile 8.4 sources
+  keep the ADR 0001 route; the RPU survives. A preset must never be allowed to drop HDR or DV.
+- Estimate the saving before running through `Estimator.estimatedBytes` (which yields roughly `(1 - ratio) x video bytes`
+  above the floor, minus the 1% container allowance), and show it in the Compress picker (`CompressSheet`).
 
 ## Rationale
 

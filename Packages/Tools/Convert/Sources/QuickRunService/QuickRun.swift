@@ -54,16 +54,17 @@ public actor QuickRun {
     ) async -> QuickRunReceipt {
         let saved = await settings()
         let preset = overrides?.preset ?? saved.preset
+        let kind = overrides?.kind ?? .shrink
         let (destination, notes) = Self.destination(for: overrides?.saveLocation ?? saved.saveLocation)
 
         let unique = Self.unique(urls)
-        let (accepted, skippedByPlan) = await plan(unique, preset: preset, codec: overrides?.codec)
+        let (accepted, skippedByPlan) = await plan(unique, kind: kind, preset: preset, codec: overrides?.codec)
         var jobs: [Job] = []
         var unreadable: [QuickRunSkip] = []
         for file in accepted {
             let batch = JobFactory.makeJobs(
                 for: [(url: file.url, preset: preset)],
-                settings: ConvertJobSettings(preset: preset, saveTo: destination, custom: file.custom),
+                settings: ConvertJobSettings(kind: kind, preset: preset, saveTo: destination, custom: file.custom),
                 losses: [:], now: now())
             jobs += batch.jobs
             unreadable += batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
@@ -104,13 +105,13 @@ public actor QuickRun {
         }
         let jobs = PhotosJobFactory.makeJobs(
             for: accepted.map { (assetID: $0.assetID, name: $0.name, preset: preset) },
-            settings: ConvertJobSettings(preset: preset, saveTo: .nextToOriginal), destination: destination,
-            lost: [:], now: now())
+            settings: ConvertJobSettings(kind: overrides?.kind ?? .shrink, preset: preset, saveTo: .nextToOriginal),
+            destination: destination, lost: [:], now: now())
         // The saved Save to is for files; say so when it isn't what the copies got.
         var notes: [String] = []
         if overrides?.saveLocation == nil {
             switch saved.saveLocation.choice {
-            case .nextToOriginal: break
+            case .nextToOriginal, .documents: break
             case .folder: notes.append("Saved as new videos in Photos: the Save to folder is for files.")
             case .replace:
                 notes.append("Saved as new videos in Photos: replacing originals needs your confirmation in the app.")
@@ -256,7 +257,9 @@ public actor QuickRun {
 
     /// Splits `urls` into the ones to convert and the ones to skip, with the reason. With H.264 asked for, each
     /// file's spec is its preset's with the codec changed, so an HDR clip is judged by what H.264 drops.
-    private func plan(_ urls: [URL], preset: Preset, codec: VideoCodec?) async -> ([Accepted], [QuickRunSkip]) {
+    private func plan(_ urls: [URL], kind: ConvertJobKind, preset: Preset, codec: VideoCodec?) async -> (
+        [Accepted], [QuickRunSkip]
+    ) {
         var sources: [(id: URL, source: SavingsCalculator.Source)] = []
         var skipped: [QuickRunSkip] = []
         for url in urls {
@@ -269,16 +272,16 @@ public actor QuickRun {
         let fallbacks = await LossCheck.quickTimeFallbacks(among: sources.map { (id: $0.id, url: $0.id) })
         var accepted: [Accepted] = []
         for (url, source) in sources {
-            let custom = Self.customSpec(for: source, preset: preset, codec: codec)
+            let custom = kind == .shrink ? Self.customSpec(for: source, preset: preset, codec: codec) : nil
             let decision = SavingsCalculator.decision(
-                byteSize: source.byteSize, inventory: source.inventory, preset: preset, custom: custom,
+                byteSize: source.byteSize, inventory: source.inventory, kind: kind, preset: preset, custom: custom,
                 fallsBackToQuickTime: fallbacks.contains(url))
             switch decision {
             case .keptAsIs(let reason, _):
                 skipped.append(QuickRunSkip(url: url, reason: reason))
             case .convert:
                 let loss = LossCheck.losses(
-                    for: [(id: url, source: source)], preset: preset, custom: custom,
+                    for: [(id: url, source: source)], preset: preset, kind: kind, custom: custom,
                     quickTimeFallbacks: fallbacks.intersection([url])
                 ).first
                 if let loss {
@@ -317,6 +320,8 @@ public actor QuickRun {
             return (.nextToOriginal, ["Saved next to the originals: the Save to folder isn't available."])
         case .nextToOriginal:
             return (.nextToOriginal, [])
+        case .documents:
+            return (.documents, [])
         }
     }
 

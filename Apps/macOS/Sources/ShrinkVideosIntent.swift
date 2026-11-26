@@ -24,6 +24,12 @@ struct ShrinkVideosIntent: AppIntent {
     var files: [IntentFile]?
 
     @Parameter(
+        title: "Mode",
+        description: "Whether to shrink to 1080p or compress at the original resolution.",
+        default: .shrink)
+    var mode: ShrinkModeOption
+
+    @Parameter(
         title: "Quality", description: "How hard to shrink. Without a choice, the app's default is used.")
     var quality: ShrinkQualityOption?
 
@@ -64,6 +70,7 @@ struct ShrinkVideosIntent: AppIntent {
         Summary(
             "Shrink \(\.$files), or if there are none, \(\.$resolution) videos from \(\.$dateRange) in \(\.$source)"
         ) {
+            \.$mode
             \.$quality
             \.$format
             \.$destination
@@ -72,10 +79,13 @@ struct ShrinkVideosIntent: AppIntent {
         }
     }
 
-    init() {}
+    init() {
+        self.mode = .shrink
+    }
 
     /// For the App Shortcuts that pick videos by a date range or a resolution.
     init(dateRange: ShrinkDateRangeOption? = nil, resolution: ShrinkResolutionOption? = nil) {
+        self.mode = .shrink
         self.dateRange = dateRange
         self.resolution = resolution
     }
@@ -95,7 +105,8 @@ struct ShrinkVideosIntent: AppIntent {
             }
         }
         let request = ShrinkVideosRequest(
-            files: urls, quality: quality?.choice, format: format?.choice, destination: destination?.choice,
+            files: urls, mode: mode.choice, quality: quality?.choice, format: format?.choice,
+            destination: destination?.choice,
             folder: folder?.fileURL, dateRange: dateRange?.choice, resolution: resolution?.choice,
             source: source?.choice, waitForCompletion: waitForCompletion)
         let (outcome, notes) = await MacShell.shared.shrinkVideos(
@@ -129,6 +140,24 @@ struct ShrinkVideosIntentError: Error, CustomLocalizedStringResourceConvertible 
 }
 
 // MARK: - Choices
+
+enum ShrinkModeOption: String, AppEnum {
+    case shrink
+    case compress
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Mode"
+    static let caseDisplayRepresentations: [ShrinkModeOption: DisplayRepresentation] = [
+        .shrink: DisplayRepresentation(title: "Shrink", subtitle: "Downscales 4K to 1080p"),
+        .compress: DisplayRepresentation(title: "Compress", subtitle: "Keeps resolution, lowers bit rate"),
+    ]
+
+    var choice: ShrinkMode {
+        switch self {
+        case .shrink: .shrink
+        case .compress: .compress
+        }
+    }
+}
 
 enum ShrinkQualityOption: String, AppEnum {
     case high, balanced, smaller

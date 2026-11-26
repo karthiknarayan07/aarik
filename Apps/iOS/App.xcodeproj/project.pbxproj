@@ -11,13 +11,12 @@
 		B20000000000000000000072 /* Widgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000032 /* Widgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B20000000000000000000101 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000201 /* AppCore */; };
 		B20000000000000000000102 /* AppServices in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000202 /* AppServices */; };
-		B20000000000000000000103 /* MediaEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000203 /* MediaEngine */; };
+		B20000000000000000000103 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000203 /* AppUI */; };
 		B20000000000000000000104 /* LocalLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000204 /* LocalLibrary */; };
 		B20000000000000000000105 /* PhotosLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000205 /* PhotosLibrary */; };
 		B20000000000000000000106 /* Assistant in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000206 /* Assistant */; };
-		B20000000000000000000107 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000207 /* AppUI */; };
-		B20000000000000000000108 /* Convert in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000208 /* Convert */; };
-		B20000000000000000000109 /* ConvertUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000209 /* ConvertUI */; };
+		B20000000000000000000107 /* Convert in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000207 /* Convert */; };
+		B20000000000000000000108 /* ConvertUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000208 /* ConvertUI */; };
 		B20000000000000000000110 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000210 /* AppCore */; };
 /* End PBXBuildFile section */
 
@@ -131,13 +130,12 @@
 			files = (
 				B20000000000000000000101 /* AppCore in Frameworks */,
 				B20000000000000000000102 /* AppServices in Frameworks */,
-				B20000000000000000000103 /* MediaEngine in Frameworks */,
+				B20000000000000000000103 /* AppUI in Frameworks */,
 				B20000000000000000000104 /* LocalLibrary in Frameworks */,
 				B20000000000000000000105 /* PhotosLibrary in Frameworks */,
 				B20000000000000000000106 /* Assistant in Frameworks */,
-				B20000000000000000000107 /* AppUI in Frameworks */,
-				B20000000000000000000108 /* Convert in Frameworks */,
-				B20000000000000000000109 /* ConvertUI in Frameworks */,
+				B20000000000000000000107 /* Convert in Frameworks */,
+				B20000000000000000000108 /* ConvertUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -228,13 +226,12 @@
 			packageProductDependencies = (
 				B20000000000000000000201 /* AppCore */,
 				B20000000000000000000202 /* AppServices */,
-				B20000000000000000000203 /* MediaEngine */,
+				B20000000000000000000203 /* AppUI */,
 				B20000000000000000000204 /* LocalLibrary */,
 				B20000000000000000000205 /* PhotosLibrary */,
 				B20000000000000000000206 /* Assistant */,
-				B20000000000000000000207 /* AppUI */,
-				B20000000000000000000208 /* Convert */,
-				B20000000000000000000209 /* ConvertUI */,
+				B20000000000000000000207 /* Convert */,
+				B20000000000000000000208 /* ConvertUI */,
 			);
 			productName = App;
 			productReference = B20000000000000000000030 /* App.app */;
@@ -343,8 +340,8 @@
 			mainGroup = B20000000000000000000002;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */,
-				B20000000000000000000B02 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */,
+				B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */,
+				B20000000000000000000302 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B20000000000000000000003 /* Products */;
@@ -619,11 +616,11 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */ = {
+		B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Packages/Core;
 		};
-		B20000000000000000000B02 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */ = {
+		B20000000000000000000302 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Packages/Tools/Convert;
 		};
@@ -632,52 +629,47 @@
 /* Begin XCSwiftPackageProductDependency section */
 		B20000000000000000000201 /* AppCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = AppCore;
 		};
 		B20000000000000000000202 /* AppServices */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = AppServices;
 		};
-		B20000000000000000000203 /* MediaEngine */ = {
+		B20000000000000000000203 /* AppUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
-			productName = MediaEngine;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppUI;
 		};
 		B20000000000000000000204 /* LocalLibrary */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = LocalLibrary;
 		};
 		B20000000000000000000205 /* PhotosLibrary */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = PhotosLibrary;
 		};
 		B20000000000000000000206 /* Assistant */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = Assistant;
 		};
-		B20000000000000000000207 /* AppUI */ = {
+		B20000000000000000000207 /* Convert */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
-			productName = AppUI;
-		};
-		B20000000000000000000208 /* Convert */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B02 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
+			package = B20000000000000000000302 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
 			productName = Convert;
 		};
-		B20000000000000000000209 /* ConvertUI */ = {
+		B20000000000000000000208 /* ConvertUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B02 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
+			package = B20000000000000000000302 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
 			productName = ConvertUI;
 		};
 		B20000000000000000000210 /* AppCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = AppCore;
 		};
 /* End XCSwiftPackageProductDependency section */

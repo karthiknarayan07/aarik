@@ -23,6 +23,27 @@ public struct PresetEstimate: Sendable, Equatable, Identifiable {
     }
 }
 
+/// One compression preset's outcome for one video, as the Compress picker lists it.
+public struct CompressPresetEstimate: Sendable, Equatable, Identifiable {
+    public let preset: CompressPreset
+    public let byteSize: Int64
+    public let decision: PlanDecision
+
+    public var id: CompressPreset { preset }
+
+    /// The estimated output size; nil when the video would be kept as is.
+    public var estimatedBytes: Int64? {
+        if case .convert(_, let estimate, _) = decision { return estimate }
+        return nil
+    }
+
+    /// The share of the original saved, from 0 to 1; nil when kept as is.
+    public var savedFraction: Double? {
+        guard let estimatedBytes, byteSize > 0 else { return nil }
+        return 1 - Double(estimatedBytes) / Double(byteSize)
+    }
+}
+
 /// How much space converting would free. Videos the planner would keep as is count as zero.
 public enum SavingsCalculator {
     public typealias Source = (byteSize: Int64, inventory: MetadataInventory)
@@ -33,10 +54,29 @@ public enum SavingsCalculator {
         byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil,
         fallsBackToQuickTime: Bool = false
     ) -> PlanDecision {
-        let source = SourceProfile(inventory: inventory, byteSize: byteSize)
-        return ConvertPlanner.decide(
-            source: source, inventory: inventory, spec: custom ?? preset.spec(for: source),
+        decision(
+            byteSize: byteSize, inventory: inventory, kind: .shrink, preset: preset, custom: custom,
             fallsBackToQuickTime: fallsBackToQuickTime)
+    }
+
+    public static func decision(
+        byteSize: Int64, inventory: MetadataInventory, kind: ConvertJobKind, preset: Preset = .balanced,
+        custom: DownscaleSpec? = nil, fallsBackToQuickTime: Bool = false
+    ) -> PlanDecision {
+        ConvertPlanner.decide(
+            inventory: inventory, byteSize: byteSize, kind: kind, preset: preset, custom: custom,
+            fallsBackToQuickTime: fallsBackToQuickTime)
+    }
+
+    /// Sum of `byteSize - estimate` over the videos that would be compressed at `compressPreset`.
+    public static func couldFreeBytes(for sources: [Source], compressPreset: CompressPreset) -> Int64 {
+        sources.reduce(into: Int64(0)) { total, source in
+            let decision = decision(
+                byteSize: source.byteSize, inventory: source.inventory, kind: .compress(compressPreset))
+            if case .convert(_, let estimate, _) = decision {
+                total += max(0, source.byteSize - estimate)
+            }
+        }
     }
 
     /// Sum of `byteSize - estimate` over the videos that would be converted.
@@ -64,6 +104,15 @@ public enum SavingsCalculator {
             PresetEstimate(
                 preset: preset, byteSize: byteSize,
                 decision: decision(byteSize: byteSize, inventory: inventory, preset: preset))
+        }
+    }
+
+    /// One row per compression preset, in `CompressPreset.allCases` order.
+    public static func compressEstimates(byteSize: Int64, inventory: MetadataInventory) -> [CompressPresetEstimate] {
+        CompressPreset.allCases.map { preset in
+            CompressPresetEstimate(
+                preset: preset, byteSize: byteSize,
+                decision: decision(byteSize: byteSize, inventory: inventory, kind: .compress(preset)))
         }
     }
 

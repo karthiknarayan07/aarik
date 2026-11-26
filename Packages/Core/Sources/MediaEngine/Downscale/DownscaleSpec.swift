@@ -10,7 +10,8 @@ public enum VideoCodec: String, Codable, Sendable, Hashable, CaseIterable {
     case h264Compatible
 }
 
-/// What a downscale produces: the short side, the average bit rate, an optional frame-rate cap and the codec.
+/// What a downscale produces: the short side, the average bit rate, an optional frame-rate cap, the codec and an
+/// optional 1-second peak bit-rate cap.
 public struct DownscaleSpec: Sendable, Hashable, Codable {
     /// `nil` keeps the source resolution.
     public var targetShortSide: Int? = 1080
@@ -18,24 +19,29 @@ public struct DownscaleSpec: Sendable, Hashable, Codable {
     /// `nil` keeps the source frame rate. A cap never increases the frame rate.
     public var maxFrameRate: Double? = nil
     public var codec: VideoCodec = .hevcKeepHDR
+    /// Optional hard bit-rate cap over a 1-second window (`kVTCompressionPropertyKey_DataRateLimits`); `nil` leaves
+    /// it uncapped.
+    public var maxBitRate: Int? = nil
 
     public init(
         targetShortSide: Int? = 1080, averageBitRate: Int = 20_000_000, maxFrameRate: Double? = nil,
-        codec: VideoCodec = .hevcKeepHDR
+        codec: VideoCodec = .hevcKeepHDR, maxBitRate: Int? = nil
     ) {
         self.targetShortSide = targetShortSide
         self.averageBitRate = averageBitRate
         self.maxFrameRate = maxFrameRate
         self.codec = codec
+        self.maxBitRate = maxBitRate
     }
 
-    /// Job JSON written before `codec` existed has no `codec` key; it decodes as HEVC, which it was.
+    /// Job JSON written before `codec` or `maxBitRate` existed has no key for them; they decode as HEVC and nil.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         targetShortSide = try container.decodeIfPresent(Int.self, forKey: .targetShortSide)
         averageBitRate = try container.decode(Int.self, forKey: .averageBitRate)
         maxFrameRate = try container.decodeIfPresent(Double.self, forKey: .maxFrameRate)
         codec = try container.decodeIfPresent(VideoCodec.self, forKey: .codec) ?? .hevcKeepHDR
+        maxBitRate = try container.decodeIfPresent(Int.self, forKey: .maxBitRate)
     }
 
     /// Encoded (pre-transform) output size: short side = target, aspect kept, both even.
