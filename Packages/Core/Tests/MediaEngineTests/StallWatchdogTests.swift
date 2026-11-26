@@ -63,19 +63,25 @@ private func blockThread(seconds: Double) {
         #expect(FileManager.default.fileExists(atPath: output.path))
     }
 
-    @Test(.timeLimit(.minutes(5))) func aVideoInputThatNeverTakesASampleFailsAsStalled() async throws {
+    // The four forced-stall tests each end in a full software re-encode (the retry): too slow on the Simulator, whose
+    // encoder is not representative. The normal-run test below stays as the smoke encode.
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func aVideoInputThatNeverTakesASampleFailsAsStalled() async throws {
         try await expectStall(at: .videoInput, limits: loopLimits)
     }
 
-    @Test(.timeLimit(.minutes(5))) func aDrainThatNeverFinishesFailsAsStalled() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func aDrainThatNeverFinishesFailsAsStalled() async throws {
         try await expectStall(at: .drain, limits: loopLimits)
     }
 
-    @Test(.timeLimit(.minutes(5))) func aFinishWritingThatNeverReturnsFailsAsStalled() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func aFinishWritingThatNeverReturnsFailsAsStalled() async throws {
         try await expectStall(at: .finish, limits: loopLimits)
     }
 
-    @Test(.timeLimit(.minutes(5))) func aBlockedReadIsAbandonedByTheWatchdogAndFreesTheSlot() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func aBlockedReadIsAbandonedByTheWatchdogAndFreesTheSlot() async throws {
         // The loops can't report from inside a call that doesn't return: only the watchdog outside the job can.
         let limits = StallLimits(
             noProgress: .seconds(30), finish: .seconds(30), blockedCall: .milliseconds(500), poll: .milliseconds(50))

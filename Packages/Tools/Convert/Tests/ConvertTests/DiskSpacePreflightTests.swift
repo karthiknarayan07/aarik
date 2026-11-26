@@ -14,10 +14,12 @@ import Testing
     private static let gb: Int64 = 1_000_000_000
     private static let spec = RunnerFixture.spec
 
-    private func roomy() -> DiskSpaceCheck { DiskSpaceCheck(provider: FakeDiskSpace(available: 100 * Self.gb)) }
+    private func roomy() -> DiskSpaceCheck {
+        DiskSpaceCheck(provider: FakeDiskSpace(available: 100 * Self.gb), ledger: SpaceLedger())
+    }
 
     private func full(_ name: String = "Macintosh HD", available: Int64 = 200_000_000) -> DiskSpaceCheck {
-        DiskSpaceCheck(provider: FakeDiskSpace(available: available, name: name))
+        DiskSpaceCheck(provider: FakeDiskSpace(available: available, name: name), ledger: SpaceLedger())
     }
 
     private func runner(
@@ -87,7 +89,7 @@ import Testing
         let bookmark = try destination.bookmarkData()
 
         do {
-            _ = try await runner(DiskSpaceCheck(provider: disk))
+            _ = try await runner(DiskSpaceCheck(provider: disk, ledger: SpaceLedger()))
                 .run(try RunnerFixture.job(source, settings(.folder(bookmark: bookmark)))) { _ in }
             Issue.record("expected the run to throw")
         } catch let error as NotEnoughSpaceError {
@@ -109,7 +111,7 @@ import Testing
 
         do {
             _ = try await runner(
-                DiskSpaceCheck(provider: disk), backup: backup,
+                DiskSpaceCheck(provider: disk, ledger: SpaceLedger()), backup: backup,
                 trash: { url in
                     trashed.withLock { $0 = true }
                     return url
@@ -136,7 +138,8 @@ import Testing
         disk.setVolume(at: backup, name: "Backup Drive", available: 300_000_000)
 
         #expect(throws: OriginalsBackupError.notEnoughSpace) {
-            try runner(DiskSpaceCheck(provider: disk)).backUp(original, byteSize: 8, into: backup)
+            try runner(DiskSpaceCheck(provider: disk, ledger: SpaceLedger())).backUp(
+                original, byteSize: 8, into: backup)
         }
         #expect(try names(in: backup).isEmpty)
     }
@@ -175,7 +178,8 @@ import Testing
         let disk = FakeDiskSpace(available: 3 * Self.gb)
 
         await #expect(throws: NotEnoughSpaceError.self) {
-            try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job()) { _ in }
+            try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger())).run(try rig.job()) { _ in
+            }
         }
         #expect(rig.store.inputRequests.isEmpty)
     }
@@ -186,7 +190,9 @@ import Testing
         disk.setVolume(at: PhotosConvertRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
 
         do {
-            _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job()) { _ in }
+            _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger())).run(try rig.job()) {
+                _ in
+            }
             Issue.record("expected the run to throw")
         } catch let error as NotEnoughSpaceError {
             #expect(error.volumeName == "Library Disk")
@@ -207,7 +213,8 @@ import Testing
         disk.setVolume(at: PhotosConvertRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
 
         await #expect(throws: NotEnoughSpaceError.self) {
-            try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job()) { _ in }
+            try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger())).run(try rig.job()) { _ in
+            }
         }
         #expect(rig.store.saves.isEmpty)
         #expect(rig.workContents.isEmpty)
@@ -221,7 +228,7 @@ import Testing
         disk.setVolume(at: folder, name: "Travel SSD", available: 300_000_000)
 
         do {
-            _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk))
+            _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger()))
                 .run(try rig.job(.folder(bookmark: try folder.bookmarkData()))) { _ in }
             Issue.record("expected the run to throw")
         } catch let error as NotEnoughSpaceError {
@@ -241,14 +248,18 @@ import Testing
         disk.setVolume(at: work, name: "Macintosh HD", available: Self.gb + size * 2)
 
         // Without a backup it fits.
-        let state = try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job(.replace)) { _ in }
+        let state = try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger())).run(
+            try rig.job(.replace)
+        ) { _ in }
         guard case .completed = state else {
             Issue.record("expected completed, got \(state)")
             return
         }
 
         await #expect(throws: NotEnoughSpaceError.self) {
-            try await photosRunner(rig, DiskSpaceCheck(provider: disk), backup: true).run(try rig.job(.replace)) {
+            try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger()), backup: true).run(
+                try rig.job(.replace)
+            ) {
                 _ in
             }
         }
@@ -276,7 +287,7 @@ import Testing
         let disk = FakeDiskSpace(available: 100 * Self.gb)
         disk.setVolume(at: rig.backup, name: "Backup Drive", available: Self.gb + originalSize + 500)
 
-        let state = try await photosRunner(rig, DiskSpaceCheck(provider: disk), backup: true)
+        let state = try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger()), backup: true)
             .run(try rig.job(.replace)) { _ in }
 
         guard case .completed = state else {
@@ -292,7 +303,7 @@ import Testing
         disk.setVolume(at: rig.backup, name: "Backup Drive", available: 300_000_000)
 
         do {
-            _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk), backup: true)
+            _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk, ledger: SpaceLedger()), backup: true)
                 .run(try rig.job(.replace)) { _ in }
             Issue.record("expected the run to throw")
         } catch let error as NotEnoughSpaceError {

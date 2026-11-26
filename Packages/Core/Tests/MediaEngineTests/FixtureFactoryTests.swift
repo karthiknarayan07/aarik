@@ -89,6 +89,29 @@ import Testing
         #expect(buf == Array("x".utf8))
     }
 
+    @Test func equalOptionsGiveIndependentCopiesWithTheirTagsAndAttributes() async throws {
+        var options = ClipOptions()
+        options.width = 640
+        options.height = 360
+        options.finderTags = ["Blue"]
+        options.extendedAttributes = ["com.example.fixture": Data("y".utf8)]
+        let first = try await FixtureFactory.makeClip(options)
+        let second = try await FixtureFactory.makeClip(options)
+        #expect(first != second)
+        #expect(first.deletingLastPathComponent() != second.deletingLastPathComponent())
+        #expect(try Data(contentsOf: first) == Data(contentsOf: second))
+        #expect(getxattr(second.path, "com.example.fixture", nil, 0, 0, 0) == 1)
+        #if os(macOS)
+            #expect(try second.resourceValues(forKeys: [.tagNamesKey]).tagNames == ["Blue"])
+        #endif
+
+        // A test that damages its copy leaves the next one whole.
+        try Data("damaged".utf8).write(to: first)
+        try FileManager.default.removeItem(at: first)
+        let third = try await FixtureFactory.makeClip(options)
+        #expect(try Data(contentsOf: third) == Data(contentsOf: second))
+    }
+
     @Test func audioTailRunsPastVideoWithTimedMetadataSpanningIt() async throws {
         var options = ClipOptions()
         options.width = 640
