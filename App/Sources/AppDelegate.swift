@@ -1,5 +1,6 @@
 import AppCore
 import AppKit
+import AppUI
 import PhotosLibrary
 import QuickRunService
 import UserNotifications
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var windowController: MainWindowController?
     private let menuFixups = MenuFixups()
     private var statusItemController: StatusItemController?
+    private var dockTile: DockTileController?
     /// Kept for the app's lifetime: `NSApp.servicesProvider` doesn't retain it.
     private var serviceProvider: ServiceProvider?
     /// Movies from the Services menu before launch finished; always a quick run, never the window.
@@ -39,8 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         center.delegate = self
         let review = UNNotificationAction(
             identifier: QuickRunNotice.reviewAction, title: QuickRunNotice.reviewActionTitle, options: [.foreground])
+        let showQueue = UNNotificationAction(
+            identifier: QueueNotice.showQueueAction, title: QueueNotice.showQueueTitle, options: [.foreground])
         center.setNotificationCategories([
-            UNNotificationCategory(identifier: QuickRunNotice.category, actions: [review], intentIdentifiers: [])
+            UNNotificationCategory(identifier: QuickRunNotice.category, actions: [review], intentIdentifiers: []),
+            UNNotificationCategory(identifier: QueueNotice.category, actions: [showQueue], intentIdentifiers: []),
         ])
     }
 
@@ -58,6 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let statusItem = StatusItemController(model: model)
         statusItem.start()
         statusItemController = statusItem
+        let dock = DockTileController(model: model)
+        dock.start()
+        dockTile = dock
         let provider = ServiceProvider { [weak self] urls in self?.receiveServiceFiles(urls) }
         serviceProvider = provider
         NSApp.servicesProvider = provider
@@ -128,15 +136,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if !now.isEmpty { model.runQuickly(now) }
     }
 
-    /// A click on a quick run's notification (or its Review action) shows the skipped files.
+    /// The Dock menu: what is converting, Pause or Resume Queue, Show Queue and Add Videos…. The system adds its own
+    /// items below.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let state = dockTile?.state ?? DockTileState(jobs: model.jobs, name: \.displayName)
+        let menu = NSMenu()
+        for item in DockMenu.items(for: state, isPaused: model.isQueuePaused) {
+            switch item.kind {
+            case .separator:
+                menu.addItem(.separator())
+            case .status:
+                let line = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
+                line.isEnabled = false
+                menu.addItem(line)
+            case .pauseOrResume:
+                menu.addItem(dockItem(item, #selector(dockPauseOrResume)))
+            case .showQueue:
+                menu.addItem(dockItem(item, #selector(dockShowQueue)))
+            case .addVideos:
+                menu.addItem(dockItem(item, #selector(dockAddVideos)))
+            }
+        }
+        return menu
+    }
+
+    private func dockItem(_ item: DockMenuItem, _ action: Selector) -> NSMenuItem {
+        let menuItem = NSMenuItem(title: item.title, action: action, keyEquivalent: "")
+        menuItem.target = self
+        menuItem.isEnabled = item.isEnabled
+        return menuItem
+    }
+
+    @objc private func dockPauseOrResume() { model.perform(.pauseOrResumeQueue) }
+
+    @objc private func dockShowQueue() { model.showQueue() }
+
+    @objc private func dockAddVideos() { model.perform(.addVideos) }
+
+    /// A click on a quick run's notification (or its Review action) shows the skipped files; one on the queue's
+    /// "Queue finished" notification (or its Show Queue action) shows the queue.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
         let content = response.notification.request.content
+        if content.categoryIdentifier == QueueNotice.category {
+            await showQueueFromNotification()
+            return
+        }
         guard content.categoryIdentifier == QuickRunNotice.category,
             let runID = (content.userInfo[QuickRunNotice.runIDKey] as? String).flatMap(UUID.init(uuidString:))
         else { return }
         await receiveReviewRequest(runID)
+    }
+
+    private func showQueueFromNotification() async {
+        // A click that relaunched the app waits for launch to finish, so the window isn't shown half-built.
+        await model.waitUntilStarted()
+        model.showQueue()
     }
 
     private func receiveReviewRequest(_ runID: UUID) async {

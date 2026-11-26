@@ -299,17 +299,18 @@ struct PhotosInspector: View {
                         .font(.headline)
                     }
                 }
-                Section("Quality") {
+                Section {
                     Picker("Quality preset for the selected videos", selection: preset) {
                         if preset.wrappedValue == nil { Text("Mixed").tag(Preset?.none) }
                         ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag(Preset?.some($0)) }
                     }
                     .labelsHidden()
+                } header: {
+                    Text("Quality")
+                } footer: {
                     Text("Details are checked when each video is converted.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-                Section("Save to") {
+                Section {
                     Picker("Save to", selection: choice) {
                         ForEach(PhotosSaveLocation.Choice.allCases) { Text($0.title).tag($0) }
                     }
@@ -326,14 +327,15 @@ struct PhotosInspector: View {
                                 .accessibilityLabel("Change the output folder")
                         }
                     }
+                } header: {
+                    Text("Save to")
+                } footer: {
                     Text(
                         model.photosSaveLocation.choice == .replace
                             ? "Each video is downloaded from iCloud when its turn comes. When the queue finishes, "
                                 + "Photos asks you to move the originals to Recently Deleted."
                             : "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos."
                     )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
@@ -342,19 +344,6 @@ struct PhotosInspector: View {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 try? model.photosSaveLocation.setFolder(url)
-            }
-            .safeAreaInset(edge: .bottom) {
-                Button {
-                    model.requestAddSelectionToQueue()
-                } label: {
-                    Label(model.addPhotosToQueueTitle, systemImage: "plus").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(!model.canAddPhotosToQueue)
-                .help("Add to the queue (⌘⏎)")
-                .padding(12)
-                .background(.bar)
             }
         }
     }

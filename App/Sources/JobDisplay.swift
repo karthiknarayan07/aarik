@@ -1,4 +1,5 @@
 import AppCore
+import AppUI
 import AppKit
 import CoreGraphics
 import DownscaleVideo
@@ -39,8 +40,9 @@ struct PredictedLossBadge: View {
         Button {
             isShowingDetails.toggle()
         } label: {
-            Label(title, systemImage: lost.isEmpty ? "checkmark.circle" : "exclamationmark.triangle")
-                .foregroundStyle(lost.isEmpty ? Color.secondary : Color.orange)
+            StatusLabel(
+                title, systemImage: lost.isEmpty ? "checkmark.circle" : "exclamationmark.triangle",
+                tint: lost.isEmpty ? .secondary : .orange)
         }
         .buttonStyle(.borderless)
         .disabled(lost.isEmpty)
@@ -49,8 +51,7 @@ struct PredictedLossBadge: View {
         .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(lost, id: \.self) { name in
-                    Label("\(name) is lost", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                    StatusLabel("\(name) is lost", systemImage: "exclamationmark.triangle", tint: .orange)
                 }
             }
             .font(.callout)
@@ -85,24 +86,7 @@ struct JobThumbnail: View {
     }
 }
 
-/// Reveals a file in Finder.
-struct ShowInFinderButton: View {
-    let url: URL
-
-    var body: some View {
-        Button {
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        } label: {
-            Label("Show in Finder", systemImage: "folder")
-        }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .help("Show in Finder")
-        .accessibilityLabel("Show \(url.lastPathComponent) in Finder")
-    }
-}
-
-/// Pause or resume the queue (⌘. lives on the Queue menu item).
+/// Pause or resume the queue (⌥⌘P lives on the Queue menu item).
 struct PauseResumeButton: View {
     let model: AppModel
 
@@ -116,6 +100,6 @@ struct PauseResumeButton: View {
                 Label("Pause", systemImage: "pause.fill")
             }
         }
-        .help(model.isQueuePaused ? "Resume the queue (⌘.)" : "Pause after the current video (⌘.)")
+        .help(model.isQueuePaused ? "Resume the queue (⌥⌘P)" : "Pause after the current video (⌥⌘P)")
     }
 }

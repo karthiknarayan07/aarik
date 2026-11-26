@@ -32,38 +32,16 @@ struct LibraryInspector: View {
                     sources: items.map(model.inspectorSource(for:)), preset: $model.selectionPreset,
                     advanced: $model.advanced,
                     saveLocation: $model.saveLocation)
+                // Add to Queue is in the toolbar; what it would skip is said here.
+                if !model.queueableItems.isEmpty, model.queueableItems.count < model.selectedItems.count {
+                    Section {
+                    } footer: {
+                        Text("Missing files are skipped.")
+                    }
+                }
             }
             .formStyle(.grouped)
-            .safeAreaInset(edge: .bottom) {
-                QueueButton(model: model)
-            }
         }
-    }
-}
-
-private struct QueueButton: View {
-    let model: AppModel
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Button {
-                model.requestAddSelectionToQueue()
-            } label: {
-                Label(model.addToQueueTitle, systemImage: "plus")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(!model.canAddSelectionToQueue)
-            .help("Add to the queue (⌘⏎)")
-            if !model.queueableItems.isEmpty, model.queueableItems.count < model.selectedItems.count {
-                Text("Missing files are skipped.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .background(.bar)
     }
 }
 
@@ -96,8 +74,9 @@ struct ItemSummaryHeader: View {
                 .accessibilityElement(children: .combine)
             }
             if !item.isAvailable {
-                Label("The file is missing or its drive isn't connected.", systemImage: "exclamationmark.circle")
-                    .foregroundStyle(.orange)
+                StatusLabel(
+                    "The file is missing or its drive isn't connected.", systemImage: "exclamationmark.circle",
+                    tint: .orange)
             }
         }
         // Keyed on the whole item: a re-read in place (same path, new file) or a move loads the new poster.

@@ -13,6 +13,14 @@ struct SidebarView: View {
                 DestinationRow(
                     destination: .photosVideos, count: model.photos.hasLoaded ? model.photos.items.count : nil)
                 DestinationRow(destination: .localFiles, count: model.library.items.count)
+                    .contextMenu {
+                        Button("Add Videos…") { model.perform(.addVideos) }
+                    }
+                    // Dropping videos on the row adds them, with the row as the target.
+                    .dropDestination(for: URL.self) { urls, _ in
+                        model.addFiles(urls)
+                        return !urls.isEmpty
+                    }
             }
             if !badgeCounts.isEmpty {
                 Section("Media types") {
@@ -31,9 +39,18 @@ struct SidebarView: View {
             }
             Section("Activity") {
                 DestinationRow(destination: .queue, count: activity.queue, progress: activity.runningProgress)
+                    .contextMenu {
+                        Button(model.isQueuePaused ? "Resume Queue" : "Pause Queue") {
+                            model.perform(.pauseOrResumeQueue)
+                        }
+                    }
                 DestinationRow(destination: .completed, count: activity.completed)
                 DestinationRow(destination: .keptAsIs, count: activity.keptAsIs)
                 DestinationRow(destination: .failed, count: activity.failed)
+                    .contextMenu {
+                        Button("Retry All Failed") { model.perform(.retryAllFailed) }
+                            .disabled(activity.failed == 0)
+                    }
             }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 220)
@@ -58,14 +75,17 @@ private struct DestinationRow: View {
         }
         .badge(count ?? 0)
         .tag(destination)
+        // The row reads as its title; the count and the running progress are its value.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
+        .accessibilityLabel(destination.title)
+        .accessibilityValue(accessibilityValue)
     }
 
-    private var accessibilityText: String {
-        var text = count.map { "\(destination.title), \($0)" } ?? destination.title
-        if let progress { text += ", converting \(Int((progress * 100).rounded()))%" }
-        return text
+    private var accessibilityValue: String {
+        var parts: [String] = []
+        if let count { parts.append("\(count)") }
+        if let progress { parts.append("converting \(Int((progress * 100).rounded()))%") }
+        return parts.joined(separator: ", ")
     }
 }
 

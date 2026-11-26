@@ -25,6 +25,9 @@ APP_UPDATE_FEED_URL[config=Release] = https:/$()/$(APP_GITHUB_OWNER).github.io/$
 // EdDSA public key for update signatures: set by the owner, see docs/RELEASING.md. Never put the private key here.
 APP_UPDATE_PUBLIC_KEY =
 
+// Help menu: the project's page, whose README is the help. App/Info.plist turns this into AppHelpURL.
+APP_HELP_URL = https:/$()/github.com/$(APP_GITHUB_OWNER)/$(APP_GITHUB_REPO)
+
 // Platform: macOS 26+, Apple silicon only
 SDKROOT = macosx
 SUPPORTED_PLATFORMS = macosx

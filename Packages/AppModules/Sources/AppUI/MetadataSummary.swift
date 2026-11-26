@@ -18,8 +18,7 @@ public struct MetadataSummary: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             } label: {
-                Label(keptTitle, systemImage: "checkmark.circle")
-                    .foregroundStyle(.green)
+                StatusLabel(keptTitle, systemImage: "checkmark.circle", tint: .green)
             }
             .accessibilityLabel(keptTitle)
             ForEach(report.changed, id: \.key) { change in
@@ -28,8 +27,7 @@ public struct MetadataSummary: View {
                     .accessibilityLabel(MetadataNames.changeSentence(change, auxiliaryTracks: line.auxiliary))
             }
             ForEach(MetadataSummaryLines.lost(in: report), id: \.self) { name in
-                Label("\(name) is lost", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+                StatusLabel("\(name) is lost", systemImage: "exclamationmark.triangle", tint: .orange)
             }
         }
         .font(.callout)

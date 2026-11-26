@@ -22,12 +22,18 @@ struct AdvancedSettingsView: View {
                 Picker("Resolution", selection: $options.resolution) {
                     ForEach(AdvancedOptions.Resolution.allCases) { Text($0.title).tag($0) }
                 }
-                TextField(
-                    "Bit rate (Mbps)", value: $options.bitRateMbps, format: .number.precision(.fractionLength(0...1))
-                )
-                .multilineTextAlignment(.trailing)
-                .accessibilityLabel("Bit rate in megabits per second")
-                .help("Average video bit rate in Mbps, at least 1")
+                LabeledContent("Bit Rate") {
+                    HStack(spacing: 4) {
+                        TextField(
+                            "Bit Rate", value: $options.bitRateMbps, format: .number.precision(.fractionLength(0...1))
+                        )
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .accessibilityLabel("Bit rate in megabits per second")
+                        .help("Average video bit rate in Mbps, at least 1")
+                        Text("Mbps").foregroundStyle(.secondary)
+                    }
+                }
                 Picker("Frame rate", selection: $options.frameRate) {
                     ForEach(AdvancedOptions.FrameRate.allCases) { Text($0.title).tag($0) }
                 }
@@ -57,8 +63,8 @@ struct AdvancedSettingsView: View {
         switch decision {
         case .convert(_, let estimate, _):
             let saved = ByteFormat.savedPercent(before: byteSize, after: estimate) ?? ""
-            Label("About \(ByteFormat.string(estimate)) (\(saved))", systemImage: "arrow.down.circle")
-                .foregroundStyle(.green)
+            StatusLabel(
+                "About \(ByteFormat.string(estimate)) (\(saved))", systemImage: "arrow.down.circle", tint: .green)
         case .keptAsIs(let reason):
             Label("Kept as is: \(reason)", systemImage: "equal.circle")
                 .foregroundStyle(.secondary)

@@ -9,6 +9,14 @@ First public release.
 
 ### Added
 
+- **More at home on the Mac:** a working Help menu (README, privacy, release notes, issues); the Dock icon shows a
+  progress bar while a video converts and a badge for the videos waiting, and its menu pauses or resumes the queue,
+  shows the Queue and adds videos; Edit ▸ Undo Remove from Library; View ▸ Group By and Sort By; a Go menu with
+  ⌘1 to ⌘7 for the sections; Pause Queue moved to ⌥⌘P (⌘. is the system's Cancel). Quality presets are a real radio
+  group; Add to Queue is a toolbar button instead of a strip in the inspector. Queue, Completed, Kept as Is and Failed
+  are selectable lists with a context menu, double-click and Delete; Show in Finder is in the menu, not on every
+  row. Status colour is on the symbol only, so text keeps its contrast. The "Queue finished" notification has a Show
+  Queue action.
 - **Stall protection:** a conversion whose encoder stops responding for a minute now fails with "The encoder stopped
   responding" instead of staying at the same percentage for ever. The partial file is removed and Retry works.
 - **Free-space check:** before a conversion writes anything, the app checks that the disk has room for the converted
