@@ -9,6 +9,8 @@ First public release.
 
 ### Added
 
+- **Stall protection:** a conversion whose encoder stops responding for a minute now fails with "The encoder stopped
+  responding" instead of staying at the same percentage for ever. The partial file is removed and Retry works.
 - **Free-space check:** before a conversion writes anything, the app checks that the disk has room for the converted
   video (and, for a Photos video, its download) plus 1 GB to spare. If not, the video fails with "Not enough free space
   on <disk> (needs about X, has Y)", nothing is written, and Retry works once there is room.

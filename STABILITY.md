@@ -46,6 +46,14 @@ Time Machine exclusion, for one, is not); "planned" items (sleep and thermal han
 
 - Jobs run in a `Task`; encoding checks cancellation and stops, removing its partial. Cancelling a job removes it
   from the queue; the original is untouched.
+- **A stalled encoder fails instead of hanging** (`MediaEngine/Downscale/StallWatchdog.swift`, `DownscaleJob`). The two
+  wait loops (feeding the writer, draining the tail) fail with `DownscaleError.stalled`, "The encoder stopped
+  responding", when nothing has been read or accepted for 60 s; `finishWriting` gets 60 s, then the writer is
+  cancelled. `copyNextSampleBuffer` and `completeFrames` block and cannot be interrupted or given a timeout, so a
+  watchdog outside the job (`StallWatchdog.race`, reading the job's heartbeat) fails the call after 90 s without
+  progress: it cancels the reader and writer, removes the partial and releases the `WorkSlots` slot, and the stuck task
+  is abandoned until its call returns (it then commits nothing). Retry works. Tests force each stall with tiny limits
+  (`StallWatchdogTests`). This must stay in place before queue concurrency (B2b) so one stuck job cannot hold a slot.
 - `JobQueue` runs one job at a time and persists after every state change. A job found `running` at launch
   (crash, quit) is put back to `queued`.
 - `applicationShouldTerminate` replies later: pending library saves finish and the running job is returned to the

@@ -17,7 +17,16 @@ public struct VideoDownscaler: Sendable {
     /// to make the reader stop early (as a read failure would).
     var beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?
 
-    public init() {}
+    /// Test seam: where to force a stall (see `StallPoint`).
+    var forceStall: StallPoint?
+    /// Test seam: the slots to take, instead of the process-wide ones.
+    var slots: WorkSlots?
+    /// How long a run may go without progress before it fails as stalled.
+    let stallLimits: StallLimits
+
+    public init(stallLimits: StallLimits = .standard) {
+        self.stallLimits = stallLimits
+    }
 
     /// Writes a new file at `output`, in the container its extension names (`OutputContainer.fileType(for:)`:
     /// MPEG-4 for `.mp4` / `.m4v`, QuickTime otherwise). Throws `outputExists` if `output` exists, `sourceAlreadySmall` if the source
@@ -31,12 +40,19 @@ public struct VideoDownscaler: Sendable {
     ) async throws {
         // A few at a time (`WorkSlots`), each with its blocking reads on a queue of its own, never on the
         // shared pool (`BlockingWorkExecutor`).
-        let slots = WorkSlots.downscales
+        let slots = self.slots ?? WorkSlots.downscales
         await slots.acquire()
         let executor = BlockingWorkExecutor(label: "downscale \(output.lastPathComponent)")
+        // The job runs as its own task, raced against a watchdog that reads its heartbeat. If the job is stuck in a
+        // call that can't be interrupted (`copyNextSampleBuffer`, `completeFrames`), the watchdog fails this call
+        // anyway, so the slot below is released; the stuck task is abandoned and ends when its call returns.
+        let heartbeat = Heartbeat()
         do {
-            try await withTaskExecutorPreference(executor) {
-                try await run(source: source, output: output, spec: spec, progress: progress)
+            try await StallWatchdog.race(heartbeat: heartbeat, limits: stallLimits) {
+                try await withTaskExecutorPreference(executor) {
+                    try await run(
+                        source: source, output: output, spec: spec, heartbeat: heartbeat, progress: progress)
+                }
             }
         } catch {
             await slots.release()
@@ -46,7 +62,8 @@ public struct VideoDownscaler: Sendable {
     }
 
     private func run(
-        source: URL, output: URL, spec: DownscaleSpec, progress: @escaping @Sendable (Double) -> Void
+        source: URL, output: URL, spec: DownscaleSpec, heartbeat: Heartbeat,
+        progress: @escaping @Sendable (Double) -> Void
     ) async throws {
         if FileManager.default.fileExists(atPath: output.path) { throw DownscaleError.outputExists }
 
@@ -68,9 +85,13 @@ public struct VideoDownscaler: Sendable {
             spec: spec,
             isTenBit: Self.encodesTenBit(bitDepth: inventory["video.bitDepth"]?.value),
             preservesDolbyVision: inventory["hdr.dolbyVision"] != nil, beforeStartWriting: beforeStartWriting,
-            beforePassthroughDrain: beforePassthroughDrain, progress: progress)
+            beforePassthroughDrain: beforePassthroughDrain, progress: progress, limits: stallLimits,
+            forceStall: forceStall, heartbeat: heartbeat)
+        heartbeat.register(partial: partial, abort: job.abortHandle())
         do {
             try await job.run()
+            // The watchdog gave up on this run while it was stuck: it has already failed the caller, so commit nothing.
+            if heartbeat.hasStalled { throw DownscaleError.stalled }
             try FileAttributes.copy(from: source, to: partial)
             try AtomicOutput.commit(partial: partial, to: output)
         } catch {

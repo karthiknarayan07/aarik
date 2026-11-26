@@ -3,6 +3,7 @@ import AppCore
 import CoreMedia
 import CoreVideo
 import Foundation
+import Synchronization
 
 /// One downscale run: reader → scaler → encoder → writer, with passthrough tracks interleaved by time.
 /// Used from a single task only.
@@ -34,7 +35,11 @@ final class DownscaleJob {
     /// Decode format: 10-bit for a 10-bit source, 8-bit for an 8-bit one. HEVC scales in it too; H.264 scales and
     /// tone-maps into 8-bit BT.709.
     private let pixelFormat: OSType
+    private let limits: StallLimits
+    private let forceStall: StallPoint?
+    private let heartbeat: Heartbeat
 
+    private var lastProgress = ContinuousClock.now
     private var limiter: FrameRateLimiter
     private var videoInput: AVAssetWriterInput?
     private var pending: (frame: CVPixelBuffer, time: CMTime)?
@@ -45,8 +50,12 @@ final class DownscaleJob {
         asset: AVURLAsset, videoTrack: AVAssetTrack, output: URL, fileType: AVFileType, spec: DownscaleSpec,
         isTenBit: Bool,
         preservesDolbyVision: Bool, beforeStartWriting: (@Sendable (URL) -> Void)?,
-        beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?, progress: @escaping @Sendable (Double) -> Void
+        beforePassthroughDrain: (@Sendable (AVAssetReader) -> Void)?, progress: @escaping @Sendable (Double) -> Void,
+        limits: StallLimits = .standard, forceStall: StallPoint? = nil, heartbeat: Heartbeat = Heartbeat()
     ) async throws {
+        self.limits = limits
+        self.forceStall = forceStall
+        self.heartbeat = heartbeat
         self.output = output
         self.beforeStartWriting = beforeStartWriting
         self.beforePassthroughDrain = beforePassthroughDrain
@@ -155,9 +164,18 @@ final class DownscaleJob {
     }
 
     func run() async throws {
+        markProgress()
         guard reader.startReading() else { throw readerError() }
-        while let sample = Signposts.interval(.read, { videoOutput.copyNextSampleBuffer() }) {
+        while let sample = Signposts.interval(
+            .read,
+            {
+                if forceStall == .blockingCall { blockUntilGivenUp() }
+                return videoOutput.copyNextSampleBuffer()
+            })
+        {
             try Task.checkCancellation()
+            try checkStall()
+            markProgress()
             let time = sample.presentationTimeStamp
             let sampleDuration = sample.duration
             lastSourceEnd = sampleDuration.isValid ? time + sampleDuration : time
@@ -174,7 +192,8 @@ final class DownscaleJob {
             try pumpPassthrough(until: time + Self.passthroughLead)
         }
         // nil from `copyNextSampleBuffer()` means the end of the track or that the reader stopped; only the status
-        // tells them apart.
+        // tells them apart. (A watchdog that cancelled the reader is the stall, not a read error.)
+        if heartbeat.hasStalled { throw DownscaleError.stalled }
         guard reader.status == .reading || reader.status == .completed else { throw readerError() }
         try Task.checkCancellation()
 
@@ -186,15 +205,19 @@ final class DownscaleJob {
         beforePassthroughDrain?(reader)
         // Feed every unfinished track on each pass: the writer interleaves its inputs, so one track can stay not
         // ready until another catches up. Draining one track at a time can hang.
-        while passthrough.contains(where: { !$0.isFinished }) {
+        // (The forced stall keeps the loop going even with no passthrough track, so the test needs no audio fixture.)
+        while forceStall == .drain || passthrough.contains(where: { !$0.isFinished }) {
             try Task.checkCancellation()
             try checkWriter()
-            if try !pumpPassthrough(until: nil) { try await Task.sleep(for: .milliseconds(1)) }
+            try checkStall()
+            if try !pumpPassthrough(until: nil, forceNotReady: forceStall == .drain) {
+                try await Task.sleep(for: .milliseconds(1))
+            }
         }
         try Task.checkCancellation()
         // Every output has returned nil; anything but `.completed` means some track was cut short.
         guard reader.status == .completed else { throw readerError() }
-        await Signposts.interval(.write) { await writer.finishWriting() }
+        try await Signposts.interval(.write) { try await finishWriting() }
         guard writer.status == .completed else { throw writerError() }
     }
 
@@ -202,6 +225,86 @@ final class DownscaleJob {
     func abort() {
         reader.cancelReading()
         if writer.status == .writing { writer.cancelWriting() }
+    }
+
+    /// The same, callable from the watchdog outside the job when the job itself is stuck in a call.
+    func abortHandle() -> @Sendable () -> Void {
+        let handle = Aborter(reader: reader, writer: writer)
+        return { handle.abort() }
+    }
+
+    private struct Aborter: @unchecked Sendable {
+        let reader: AVAssetReader
+        let writer: AVAssetWriter
+
+        func abort() {
+            reader.cancelReading()
+            if writer.status == .writing { writer.cancelWriting() }
+        }
+    }
+
+    // MARK: - Stalls
+
+    private func markProgress() {
+        lastProgress = .now
+        heartbeat.beat()
+    }
+
+    /// Throws `stalled` when nothing has moved for `limits.noProgress`, or the watchdog outside has given up.
+    private func checkStall() throws {
+        if heartbeat.hasStalled || ContinuousClock.now - lastProgress > limits.noProgress {
+            throw DownscaleError.stalled
+        }
+    }
+
+    /// Test seam for a call that never returns: blocks this thread until the watchdog gives up (or ten seconds pass,
+    /// so a broken test can't hang for ever).
+    private func blockUntilGivenUp() {
+        let end = ContinuousClock.now + .seconds(10)
+        while !heartbeat.hasStalled, ContinuousClock.now < end { Thread.sleep(forTimeInterval: 0.01) }
+    }
+
+    /// `finishWriting` with a deadline: it has no cancellation and no timeout of its own. If it doesn't call back in
+    /// `limits.finish`, the writer is cancelled and the job fails as stalled.
+    private func finishWriting() async throws {
+        let limit = limits.finish
+        let neverReturns = forceStall == .finish
+        let writer = self.writer
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                let once = OnceResume(continuation)
+                let timer = Task {
+                    try? await Task.sleep(for: limit)
+                    once.resume(.failure(DownscaleError.stalled))
+                }
+                if !neverReturns {
+                    writer.finishWriting {
+                        once.resume(.success(()))
+                        timer.cancel()
+                    }
+                }
+            }
+        } catch {
+            writer.cancelWriting()
+            throw error
+        }
+    }
+
+    /// Resumes its continuation once, from whichever of the writer's callback and the timer comes first.
+    private final class OnceResume: Sendable {
+        private let continuation: Mutex<CheckedContinuation<Void, any Error>?>
+
+        init(_ continuation: CheckedContinuation<Void, any Error>) {
+            self.continuation = Mutex(continuation)
+        }
+
+        func resume(_ result: Result<Void, any Error>) {
+            let taken = continuation.withLock { value -> CheckedContinuation<Void, any Error>? in
+                defer { value = nil }
+                return value
+            }
+            taken?.resume(with: result)
+        }
     }
 
     // MARK: - Video
@@ -225,12 +328,14 @@ final class DownscaleJob {
     private func appendEncoded() async throws {
         for sample in try encoder.takeEncoded() {
             let input = try videoInput ?? startWriting(hint: sample.formatDescription)
-            while !input.isReadyForMoreMediaData {
+            while !input.isReadyForMoreMediaData || forceStall == .videoInput {
                 try Task.checkCancellation()
                 try checkWriter()
+                try checkStall()
                 if try !pumpPassthrough(until: nil) { try await Task.sleep(for: .milliseconds(1)) }
             }
             guard Signposts.interval(.write, { input.append(sample) }) else { throw writerError() }
+            markProgress()
             let fraction = duration > 0 ? min(sample.presentationTimeStamp.seconds / duration, 1) : 0
             if fraction > reported {
                 reported = fraction
@@ -292,10 +397,11 @@ final class DownscaleJob {
 
     /// Appends ready passthrough samples up to `limit` (nil: no limit). Returns whether anything was appended.
     @discardableResult
-    private func pumpPassthrough(until limit: CMTime?) throws -> Bool {
+    private func pumpPassthrough(until limit: CMTime?, forceNotReady: Bool = false) throws -> Bool {
         guard videoInput != nil else { return false }
         var appended = false
-        for track in passthrough where try track.pump(until: limit) { appended = true }
+        for track in passthrough where try track.pump(until: limit, forceNotReady: forceNotReady) { appended = true }
+        if appended { markProgress() }
         return appended
     }
 
