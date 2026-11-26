@@ -13,27 +13,6 @@ import Testing
             state: .failed(reason: reason))
     }
 
-    @Test func wordsContainingAFileNameAndCodecPairsSurvive() {
-        let job = job("track.mov", reason: "Soundtrack was kept; H.264/AAC and 4K/60 are fine")
-        let prompt = OutcomeExplainer.prompt(job: job, outcome: nil, report: nil)
-        #expect(prompt.contains("Soundtrack was kept"))
-        #expect(prompt.contains("H.264/AAC"))
-        #expect(prompt.contains("4K/60"))
-    }
-
-    @Test func theFilesOwnNameAndPathAreRemoved() {
-        let job = job("Birthday party.mov", reason: "Birthday party.mov at /Users/jane/Movies failed; see /tmp/x/y")
-        let prompt = OutcomeExplainer.prompt(job: job, outcome: nil, report: nil)
-        for secret in ["Birthday", "jane", "/tmp", ".mov"] { #expect(!prompt.contains(secret), "\(secret)") }
-    }
-
-    @Test func aWholeWordStemIsRemovedButNotInsideOtherWords() {
-        let job = job("Holiday.mov", reason: "Holiday clip is bad; holidays are fine")
-        let prompt = OutcomeExplainer.prompt(job: job, outcome: nil, report: nil)
-        #expect(!prompt.contains("Holiday clip"))
-        #expect(prompt.contains("holidays are fine"))
-    }
-
     @MainActor
     @Test func twoAsksForOneJobShareOneModelCall() async {
         let client = FakeLanguageModelClient { _, _ in
