@@ -44,6 +44,25 @@ import Testing
         #expect(outcome.noteCodes == [.savedToPhotos])
     }
 
+    @Test(.timeLimit(.minutes(5))) func theCopyKeepsEveryAttributeOfTheOriginal() async throws {
+        let rig = try await PhotosRig(albums: ["album-1", "album-2"], isHidden: true)
+
+        let state = try await RunLog().run(rig.runner(), try rig.job(.replace))
+
+        let outcome = try #require(completed(state))
+        let newID = try #require(PhotoAssetURL.identifier(from: outcome.output))
+        let copy = try await rig.store.asset(id: newID)
+        #expect(copy.creationDate == rig.asset.creationDate)
+        #expect(copy.location == rig.asset.location)
+        #expect(copy.isFavorite)
+        #expect(copy.isHidden)
+        #expect(copy.caption == "Trip to Paris")
+        #expect(try await rig.store.albums(containing: newID) == ["album-1", "album-2"])
+        // The original is only recorded for deletion, after the copy checked out and is in its albums.
+        #expect(rig.store.deletedIDs.isEmpty)
+        #expect(rig.pending.all.map(\.assetID) == [rig.asset.id])
+    }
+
     @Test(.timeLimit(.minutes(5))) func theDownloadIsItsOwnPhaseWithItsOwnProgress() async throws {
         let rig = try await PhotosRig()
         let log = RunLog()

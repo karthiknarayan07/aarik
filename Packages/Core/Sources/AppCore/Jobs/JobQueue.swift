@@ -16,7 +16,7 @@ public actor JobQueue {
     private let runners: Mutex<[String: any JobRunner]>
     private var items: [Job]
     private var paused = false
-    /// The queue stopped itself (hot Mac, low battery). Separate from `paused`: `resume()` never clears it, and
+    /// The queue stopped itself (hot Mac). Separate from `paused`: `resume()` never clears it, and
     /// lifting it never clears the user's pause.
     private var heldAutomatically = false
     private var stopped = false
@@ -135,7 +135,7 @@ public actor JobQueue {
         startWorkerIfNeeded()
     }
 
-    /// Holds the queue for the system (the Mac is too hot, the battery is low), like `pause` but on its own flag: the
+    /// Holds the queue for the system (the device is too hot), like `pause` but on its own flag: the
     /// running job finishes, then nothing new starts. Lifting the hold restarts the queue unless the user paused it.
     public func setAutomaticHold(_ held: Bool) {
         heldAutomatically = held

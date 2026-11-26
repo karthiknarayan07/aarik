@@ -21,7 +21,7 @@ final class PhotosRig: Sendable {
 
     init(
         subtypes: PhotoSubtypes = [], hasAdjustments: Bool = false, savedDuration: Double? = nil,
-        albums: [String] = [], audio: Bool = true
+        albums: [String] = [], audio: Bool = true, isHidden: Bool = false, caption: String? = "Trip to Paris"
     ) async throws {
         let clip = try await RunnerFixture.source(name: "IMG_0001.MOV", audio: audio)
         directory = clip.deletingLastPathComponent()
@@ -35,8 +35,8 @@ final class PhotosRig: Sendable {
             creationDate: Date(timeIntervalSince1970: 1_750_000_000),
             location: PhotoLocation(latitude: 48.85, longitude: 2.35, altitude: 35),
             pixelSize: CGSize(width: 2560, height: 1440), duration: 1.0, isFavorite: true,
-            hasAdjustments: hasAdjustments, subtypes: subtypes, originalFileName: "IMG_0001.MOV",
-            originalByteSize: RunnerFixture.size(clip), isLocallyAvailable: false)
+            isHidden: isHidden, hasAdjustments: hasAdjustments, subtypes: subtypes, originalFileName: "IMG_0001.MOV",
+            originalByteSize: RunnerFixture.size(clip), isLocallyAvailable: false, caption: caption)
         store = FakePhotoStore(assets: [asset])
         store.originalFiles[asset.id] = clip
         store.currentVersionFiles[asset.id] = clip

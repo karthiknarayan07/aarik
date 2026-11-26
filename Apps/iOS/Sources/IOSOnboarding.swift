@@ -63,8 +63,8 @@ struct IOSOnboardingView: View {
                 title: "Easy on Your Battery", systemImage: "battery.100percent.bolt", tint: .green,
                 points: [
                     Point(
-                        symbol: "battery.25percent", heading: "Pauses When Battery Is Low",
-                        text: "Work waits when the battery is low and carries on once it charges."),
+                        symbol: "battery.25percent", heading: "Warns When Battery Is Low",
+                        text: "If the battery runs low, you will see a warning. Work keeps going, and you decide when to pause."),
                     Point(
                         symbol: "thermometer.high", heading: "Cools Down First",
                         text: "When \(device) gets hot, work pauses until it cools."),

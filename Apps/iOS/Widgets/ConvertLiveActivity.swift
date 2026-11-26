@@ -58,7 +58,7 @@ struct ConvertLiveActivity: Widget {
         switch state.status {
         case .finished:
             Text("Done")
-        case .running, .downloading, .waitingThermal, .waitingBattery:
+        case .running, .downloading, .waitingThermal:
             Text("\(state.itemsRemaining) left")
         }
     }
@@ -68,7 +68,7 @@ struct ConvertLiveActivity: Widget {
         switch state.status {
         case .finished:
             Image(systemName: "checkmark")
-        case .waitingThermal, .waitingBattery:
+        case .waitingThermal:
             Image(systemName: "pause.fill")
         case .running, .downloading:
             Text(state.progress, format: .percent.precision(.fractionLength(0)))
@@ -85,7 +85,6 @@ struct ConvertLiveActivity: Widget {
         case .running: "film.stack"
         case .downloading: "icloud.and.arrow.down"
         case .waitingThermal: "thermometer.high"
-        case .waitingBattery: "battery.25"
         case .finished: "checkmark.circle.fill"
         }
     }
@@ -93,7 +92,7 @@ struct ConvertLiveActivity: Widget {
     private func statusTint(for status: ConvertActivityAttributes.ContentState.Status) -> Color {
         switch status {
         case .running, .downloading: .accentColor
-        case .waitingThermal, .waitingBattery: .orange
+        case .waitingThermal: .orange
         case .finished: .green
         }
     }
@@ -146,7 +145,7 @@ private struct LockScreenView: View {
         switch state.status {
         case .finished:
             state.totalItems == 1 ? "1 video" : "\(state.totalItems) videos"
-        case .running, .downloading, .waitingThermal, .waitingBattery:
+        case .running, .downloading, .waitingThermal:
             "\(state.itemsRemaining) left"
         }
     }
@@ -156,7 +155,6 @@ private struct LockScreenView: View {
         case .running: "film.stack"
         case .downloading: "icloud.and.arrow.down"
         case .waitingThermal: "thermometer.high"
-        case .waitingBattery: "battery.25"
         case .finished: "checkmark.circle.fill"
         }
     }
@@ -164,7 +162,7 @@ private struct LockScreenView: View {
     private var progressTint: Color {
         switch state.status {
         case .running, .downloading: .accentColor
-        case .waitingThermal, .waitingBattery: .orange
+        case .waitingThermal: .orange
         case .finished: .green
         }
     }

@@ -82,14 +82,20 @@ struct RunStatusTests {
         #expect(LiveActivityText.title(for: state) == "Converting 1 Video")
     }
 
-    @Test func heatAndBatteryPausesStillShowTheirOwnState() {
+    @Test func heatPausesStillShowTheirOwnState() {
         let jobs = [job("a", state: .running(progress: 0.5), phase: "Downloading from iCloud…")]
         let hot = QueuePause(isPausedByUser: false, automatic: .thermal)
         #expect(
             LiveActivityController.makeState(jobs: jobs, pause: hot, runBaselineFinished: 0).status == .waitingThermal)
-        let low = QueuePause(isPausedByUser: false, automatic: .batteryLow)
-        #expect(
-            LiveActivityController.makeState(jobs: jobs, pause: low, runBaselineFinished: 0).status == .waitingBattery)
+    }
+
+    @Test func aLowBatteryWarnsAndKeepsRunning() {
+        let jobs = [job("a", state: .running(progress: 0.5), phase: "Converting…")]
+        let low = QueuePause(isPausedByUser: false, automatic: nil, lowBattery: true)
+        let state = LiveActivityController.makeState(jobs: jobs, pause: low, runBaselineFinished: 0)
+        #expect(state.status == .running)
+        #expect(state.lowBattery)
+        #expect(LiveActivityText.subtitle(for: state) == "Battery is low. Converting uses more power.")
     }
 
     @Test func theSystemTaskSaysTheStageInItsTitleAndSubtitle() {

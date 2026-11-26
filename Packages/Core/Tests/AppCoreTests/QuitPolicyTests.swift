@@ -91,8 +91,6 @@ struct QuitPolicyTests {
         #expect(!off.contains("continue the next time"))
         let hot = QuitPolicy.explanation(appName: "App", queueStartsAutomatically: true, automaticPause: .thermal)
         #expect(hot.contains("cooled down"))
-        let low = QuitPolicy.explanation(appName: "App", queueStartsAutomatically: true, automaticPause: .batteryLow)
-        #expect(low.contains("plugged in"))
         // Auto-start off wins: nothing starts by itself, whatever the Mac's state.
         let both = QuitPolicy.explanation(appName: "App", queueStartsAutomatically: false, automaticPause: .thermal)
         #expect(both == off)

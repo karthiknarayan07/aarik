@@ -46,7 +46,7 @@ public final class AppServices {
     /// Counts, saved total and running progress for the Activity rows, updated with `jobs`.
     public private(set) var activity = ActivitySummary(jobs: [])
     /// The user's pause (the Pause button, auto-start off). The queue is also held, apart from this, while the device
-    /// is hot or the battery is low: see `queuePause`.
+    /// is hot: see `queuePause`. A low battery only warns.
     public var isQueuePaused: Bool {
         didSet { refreshQueuePause() }
     }
@@ -322,7 +322,7 @@ public final class AppServices {
     }
 
     /// Starts listening to the thermal state and the power source. Called before the queue starts, so a device that is
-    /// already hot or low on battery never begins a job.
+    /// already hot never begins a job.
     private func startPressure() async {
         pressure.start()
         // The hold is sent like any queue command; wait for it before the queue may start.

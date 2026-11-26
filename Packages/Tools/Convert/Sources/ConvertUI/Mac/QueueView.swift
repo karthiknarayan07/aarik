@@ -62,6 +62,7 @@
                         .action("Go to Local Files") { model.selection = .localFiles }
                 } else {
                     VStack(spacing: 0) {
+                        LowBatteryBanner(pause: model.queuePause)
                         QueueHeader(
                             jobs: jobs, timeline: timeline, pauseText: model.queuePause.statusText,
                             speed: Bindable(model.services).speed)

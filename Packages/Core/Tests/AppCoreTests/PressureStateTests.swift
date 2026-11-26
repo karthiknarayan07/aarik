@@ -70,57 +70,59 @@ struct ThermalPressureTests {
 
 @Suite("Battery pressure")
 struct BatteryPressureTests {
-    @Test func keepsConvertingOnBatteryAboveTwentyPercent() {
-        for percent in [100, 50, 26, 21] {
+    @Test func noChargeLevelEverPausesTheQueue() {
+        for percent in [100, 50, 26, 21, 20, 7, 1] {
             #expect(state(power: [battery(percent)]).automaticPause == nil)
         }
+        #expect(state(power: [battery(3), battery(2)]).effect(cores: eightCores).automaticPause == nil)
     }
 
-    @Test func pausesAtTwentyPercentOrLess() {
-        #expect(state(power: [battery(20)]).automaticPause == .batteryLow)
-        #expect(state(power: [battery(7)]).automaticPause == .batteryLow)
+    @Test func lowPowerModeNeverPausesTheQueue() {
+        let lowPower = PowerSnapshot(onBattery: true, percent: 5, isLowPowerMode: true)
+        #expect(state(power: [lowPower]).automaticPause == nil)
     }
 
-    @Test func staysPausedBetweenTwentyAndTwentyFivePercent() {
+    @Test func warnsAtTwentyPercentOrLess() {
+        #expect(state(power: [battery(21)]).isBatteryLow == false)
+        #expect(state(power: [battery(20)]).isBatteryLow)
+        #expect(state(power: [battery(7)]).isBatteryLow)
+    }
+
+    @Test func keepsWarningBetweenTwentyAndTwentyFivePercent() {
         for percent in [21, 24, 25] {
-            #expect(state(power: [battery(19), battery(percent)]).automaticPause == .batteryLow)
+            #expect(state(power: [battery(19), battery(percent)]).isBatteryLow)
         }
     }
 
-    @Test func resumesAboveTwentyFivePercent() {
-        #expect(state(power: [battery(20), battery(26)]).automaticPause == nil)
+    @Test func warningClearsAboveTwentyFivePercent() {
+        #expect(state(power: [battery(20), battery(26)]).isBatteryLow == false)
     }
 
-    @Test func resumesWhenPluggedInAtAnyCharge() {
+    @Test func warningClearsWhenPluggedInAtAnyCharge() {
         let plugged = PowerSnapshot(onBattery: false, percent: 5)
-        #expect(state(power: [battery(15), plugged]).automaticPause == nil)
+        #expect(state(power: [battery(15), plugged]).isBatteryLow == false)
     }
 
-    @Test func pluggedInNeverPauses() {
-        #expect(state(power: [PowerSnapshot(onBattery: false, percent: 3)]).automaticPause == nil)
-    }
-
-    @Test func aMacWithoutBatteryNeverPauses() {
-        #expect(state(power: [battery(nil)]).automaticPause == nil)
-        #expect(state(power: [.pluggedIn]).automaticPause == nil)
-    }
-
-    @Test func unplugAfterResumeInTheDeadBandDoesNotPause() {
-        let state = state(power: [battery(19), PowerSnapshot(onBattery: false, percent: 22), battery(22)])
-        #expect(state.automaticPause == nil)
+    @Test func pluggedInOrNoBatteryNeverWarns() {
+        #expect(state(power: [PowerSnapshot(onBattery: false, percent: 3)]).isBatteryLow == false)
+        #expect(state(power: [battery(nil)]).isBatteryLow == false)
+        #expect(state(power: [.pluggedIn]).isBatteryLow == false)
     }
 }
 
 @Suite("Pressure combined")
 struct CombinedPressureTests {
-    @Test func heatIsReportedBeforeBattery() {
-        #expect(state(thermal: [.critical], power: [battery(10)]).automaticPause == .thermal)
+    @Test func heatPausesEvenWithALowBattery() {
+        let state = state(thermal: [.critical], power: [battery(10)])
+        #expect(state.automaticPause == .thermal)
+        #expect(state.isBatteryLow)
     }
 
-    @Test func batteryRemainsWhenHeatClears() {
+    @Test func aLowBatteryDoesNotKeepTheQueuePausedWhenHeatClears() {
         var state = state(thermal: [.critical], power: [battery(10)])
         state.update(thermal: .nominal)
-        #expect(state.automaticPause == .batteryLow)
+        #expect(state.automaticPause == nil)
+        #expect(state.isBatteryLow)
     }
 
     @Test func effectCarriesPauseLimitAndPriority() {
@@ -225,7 +227,15 @@ struct QueuePauseTests {
             let cooling = "Paused while your Mac cools down"
         #endif
         #expect(QueuePause(isPausedByUser: false, automatic: .thermal).statusText == cooling)
-        #expect(QueuePause(isPausedByUser: false, automatic: .batteryLow).statusText == "Paused: battery low")
+    }
+
+    @Test func aLowBatteryWarnsAndDoesNotPause() {
+        let low = QueuePause(isPausedByUser: false, automatic: nil, lowBattery: true)
+        #expect(!low.isPaused)
+        #expect(low.reason == nil)
+        #expect(low.statusText == nil)
+        #expect(low.warningText == "Battery is low. Converting uses more power.")
+        #expect(QueuePause(isPausedByUser: false, automatic: nil).warningText == nil)
     }
 
     @Test func aUserPauseOutranksAnAutomaticOne() {

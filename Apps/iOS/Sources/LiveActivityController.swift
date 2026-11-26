@@ -76,7 +76,7 @@ final class LiveActivityController {
     }
 
     /// The Live Activity's state for a run: the real stage (downloading from iCloud, or converting) with the run's
-    /// progress, or a pause for heat or a low battery. A pure function of the jobs, so it is tested without
+    /// progress, a pause for heat, or the low-battery warning. A pure function of the jobs, so it is tested without
     /// ActivityKit.
     static func makeState(
         jobs: [Job], pause: QueuePause, runBaselineFinished: Int
@@ -85,7 +85,6 @@ final class LiveActivityController {
         let status: ConvertActivityAttributes.ContentState.Status =
             switch pause.automatic {
             case .thermal: .waitingThermal
-            case .batteryLow: .waitingBattery
             case nil: run.isDownloading ? .downloading : .running
             }
         return ConvertActivityAttributes.ContentState(
@@ -94,7 +93,8 @@ final class LiveActivityController {
             progress: run.progress,
             savedBytes: ActivitySummary(jobs: jobs).savedBytes,
             status: status,
-            detail: run.detail
+            detail: run.detail,
+            lowBattery: pause.lowBattery
         )
     }
 
@@ -136,7 +136,7 @@ final class LiveActivityController {
             return
         }
 
-        // Active run (or waiting on thermal/battery while items remain).
+        // Active run (or waiting on heat while items remain).
         if !runInProgress {
             runInProgress = true
             runBaselineFinished = totalFinished

@@ -6,7 +6,7 @@
     import LocalLibrary
     import SwiftUI
 
-    /// iOS Queue screen: shows waiting and converting jobs, pause/thermal/battery status, per-row cancel and Cancel All.
+    /// iOS Queue screen: shows waiting and converting jobs, pause/heat status, the low-battery warning, per-row cancel and Cancel All.
     struct IOSQueueView: View {
         let model: ConvertModel
         @State private var isConfirmingCancelAll = false
@@ -45,6 +45,9 @@
                     }
                     .listStyle(.insetGrouped)
                 }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                LowBatteryBanner(pause: model.queuePause)
             }
             .safeAreaInset(edge: .bottom) {
                 if !jobs.isEmpty && model.isQueuePaused {
