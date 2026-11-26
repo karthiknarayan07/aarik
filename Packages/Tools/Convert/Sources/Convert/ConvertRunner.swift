@@ -37,6 +37,7 @@ public struct ConvertRunner: JobRunner {
     private let inspect: Inspector
     let sizeOf: Sizer
     private let originalsBackup: BackupProvider
+    private let documentsDirectory: @Sendable () -> URL
     /// The free-space rule, checked before anything is written (see `STABILITY.md`).
     let diskSpace: DiskSpaceCheck
 
@@ -48,12 +49,14 @@ public struct ConvertRunner: JobRunner {
 
     /// Seams for tests: `trash` reports the Trash location of the fixture a test created, `inspect` reads the
     /// output's metadata (a test can make the output look unfaithful), `sizeOf` measures the output and the backup
-    /// copy, `diskSpace` answers how much room each volume has.
+    /// copy, `documentsDirectory` overrides `URL.documentsDirectory` for `.documents` outputs, `diskSpace` answers
+    /// how much room each volume has.
     init(
         trash: @escaping Trasher,
         inspect: @escaping Inspector = { try await MediaInspector().inventory(of: $0) },
         sizeOf: @escaping Sizer = { try ConvertRunner.fileSize($0) },
         originalsBackup: @escaping BackupProvider = { nil },
+        documentsDirectory: @escaping @Sendable () -> URL = { URL.documentsDirectory },
         diskSpace: DiskSpaceCheck = DiskSpaceCheck()
     ) {
         self.diskSpace = diskSpace
@@ -61,6 +64,7 @@ public struct ConvertRunner: JobRunner {
         self.trash = trash
         self.inspect = inspect
         self.originalsBackup = originalsBackup
+        self.documentsDirectory = documentsDirectory
     }
 
     static func trashItem(_ url: URL) throws -> URL {
@@ -72,15 +76,19 @@ public struct ConvertRunner: JobRunner {
     public func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
         let settings = try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
         defer { diskSpace.release(owner: job.id) }
-        let source = try Self.resolveSource(job)
+        let resolved = try Self.resolveSource(job)
+        defer { resolved.stop() }
+        let source = resolved.url
         // What the original is now; a Replace goes ahead only if it is still the same file at the end.
         let identity = try FileIdentity(of: source)
         let byteSize = identity.size
         let inventory = try await MediaInspector().inventory(of: source)
 
+        let docs = documentsDirectory
         let result = try await convert(
             source: source, byteSize: byteSize, inventory: inventory, settings: settings, reservingFor: job.id,
-            outputFolder: { try Self.outputFolder(for: settings.saveTo, source: source) }, progress: progress)
+            outputFolder: { try Self.outputFolder(for: settings.saveTo, source: source, documentsDirectory: docs) },
+            progress: progress)
         let converted: Conversion
         switch result {
         case .keptAsIs(let reason, let code): return .keptAsIs(reason: reason, code: code)
@@ -154,7 +162,7 @@ public struct ConvertRunner: JobRunner {
 
         // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
         // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
-        let requested = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
+        let requested = settings.spec(for: inventory, byteSize: byteSize)
         let spec: DownscaleSpec
         let predicted: MetadataReport
         let estimatedBytes: Int64
@@ -376,8 +384,13 @@ public struct ConvertRunner: JobRunner {
 
     /// "<N>p" for a real downscale; for keep-resolution, the preset's name, or "Compressed" for a custom spec.
     static func label(for spec: DownscaleSpec, settings: ConvertJobSettings) -> String {
-        if let target = spec.targetShortSide { return "\(target)p" }
-        return settings.custom == nil ? settings.preset.displayName : "Compressed"
+        switch settings.kind {
+        case .compress(let compressPreset):
+            return compressPreset.displayName
+        case .shrink:
+            if let target = spec.targetShortSide { return "\(target)p" }
+            return settings.custom == nil ? settings.preset.displayName : "Compressed"
+        }
     }
 
     /// Verified: nothing lost beyond what was predicted, and no change beyond the expected ones.
@@ -431,22 +444,28 @@ public struct ConvertRunner: JobRunner {
     // MARK: - Files
 
     /// The bookmark's file if it still resolves (a moved file), else the recorded path. Must exist and not be in a
-    /// Trash.
-    static func resolveSource(_ job: Job) throws -> URL {
+    /// Trash. Starts security-scoped access when the URL carries one; callers invoke `stop()` when finished.
+    static func resolveSource(_ job: Job) throws -> (url: URL, stop: () -> Void) {
         var candidate = job.source
         if !job.sourceBookmark.isEmpty {
             var stale = false
-            if let resolved = try? URL(
-                resolvingBookmarkData: job.sourceBookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
-                bookmarkDataIsStale: &stale)
+            if let resolved =
+                (try? URL(
+                    resolvingBookmarkData: job.sourceBookmark, options: PlatformBookmark.resolution, relativeTo: nil,
+                    bookmarkDataIsStale: &stale))
+                ?? (try? URL(
+                    resolvingBookmarkData: job.sourceBookmark, options: PlatformBookmark.fallbackResolution,
+                    relativeTo: nil, bookmarkDataIsStale: &stale))
             {
                 candidate = resolved
             }
         }
+        let scoped = candidate.startAccessingSecurityScopedResource()
         guard FileManager.default.fileExists(atPath: candidate.path), !isInTrash(candidate) else {
+            if scoped { candidate.stopAccessingSecurityScopedResource() }
             throw ConvertRunnerError.sourceUnavailable
         }
-        return candidate
+        return (candidate, { if scoped { candidate.stopAccessingSecurityScopedResource() } })
     }
 
     static func isInTrash(_ url: URL) -> Bool {
@@ -461,28 +480,35 @@ public struct ConvertRunner: JobRunner {
         return (attributes[.size] as? NSNumber)?.int64Value ?? 0
     }
 
-    static func outputFolder(for destination: SaveDestination, source: URL) throws
-        -> (url: URL, stop: () -> Void)
-    {
-        guard case .folder(let bookmark) = destination else {
+    static func outputFolder(
+        for destination: SaveDestination, source: URL,
+        documentsDirectory: @Sendable () -> URL = { URL.documentsDirectory }
+    ) throws -> (url: URL, stop: () -> Void) {
+        switch destination {
+        case .nextToOriginal, .replace:
             return (source.deletingLastPathComponent(), {})
+        case .documents:
+            let folder = documentsDirectory()
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            return (folder, {})
+        case .folder(let bookmark):
+            var stale = false
+            let url =
+                (try? URL(
+                    resolvingBookmarkData: bookmark, options: PlatformBookmark.resolution,
+                    relativeTo: nil, bookmarkDataIsStale: &stale))
+                ?? (try? URL(
+                    resolvingBookmarkData: bookmark, options: PlatformBookmark.fallbackResolution, relativeTo: nil,
+                    bookmarkDataIsStale: &stale))
+            guard let url else { throw ConvertRunnerError.outputFolderUnavailable }
+            let scoped = url.startAccessingSecurityScopedResource()
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue
+            else {
+                if scoped { url.stopAccessingSecurityScopedResource() }
+                throw ConvertRunnerError.outputFolderUnavailable
+            }
+            return (url, { if scoped { url.stopAccessingSecurityScopedResource() } })
         }
-        var stale = false
-        let url =
-            (try? URL(
-                resolvingBookmarkData: bookmark, options: PlatformBookmark.resolution,
-                relativeTo: nil, bookmarkDataIsStale: &stale))
-            ?? (try? URL(
-                resolvingBookmarkData: bookmark, options: PlatformBookmark.fallbackResolution, relativeTo: nil,
-                bookmarkDataIsStale: &stale))
-        guard let url else { throw ConvertRunnerError.outputFolderUnavailable }
-        let scoped = url.startAccessingSecurityScopedResource()
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue
-        else {
-            if scoped { url.stopAccessingSecurityScopedResource() }
-            throw ConvertRunnerError.outputFolderUnavailable
-        }
-        return (url, { if scoped { url.stopAccessingSecurityScopedResource() } })
     }
 }

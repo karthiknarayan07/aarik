@@ -18,6 +18,8 @@ struct FileStamp: Sendable, Equatable {
     /// Never from URL resource values: those can stay cached for a path after a Replace swapped the file there,
     /// which made the library keep showing the original's size.
     static func read(_ url: URL) -> FileStamp? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
             let size = (attributes[.size] as? NSNumber)?.int64Value
         else { return nil }
@@ -82,6 +84,8 @@ public actor LibraryScanner {
     nonisolated static func inspectFile(_ url: URL, inspector: MediaInspector = MediaInspector()) async
         -> ScannedFile?
     {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let inventory = try? await inspector.inventory(of: url),
             let stamp = FileStamp.read(url),
             let item = LibraryItemBuilder.build(url: url, inventory: inventory, byteSize: stamp.size)
@@ -94,6 +98,8 @@ public actor LibraryScanner {
         var result: [URL] = []
         let keys: [URLResourceKey] = [.contentTypeKey, .isDirectoryKey, .isPackageKey, .isHiddenKey]
         for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
             if values.isDirectory == true, values.isPackage != true {
                 let options: FileManager.DirectoryEnumerationOptions = [.skipsHiddenFiles, .skipsPackageDescendants]

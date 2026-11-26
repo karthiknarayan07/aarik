@@ -15,9 +15,9 @@ struct WhyButton: View {
         if assistant.isAvailable {
             Button("Why?", systemImage: "sparkles") { isShowing.toggle() }
                 .buttonStyle(.borderless)
-                .help("Explain this result in plain words, on this Mac")
+                .help("Explain this result in plain words, on \(DeviceCopy.thisDevice)")
                 .accessibilityLabel("Why? Explain this result")
-                .accessibilityHint("Opens a short explanation written on this Mac")
+                .accessibilityHint("Opens a short explanation written on \(DeviceCopy.thisDevice)")
                 .popover(isPresented: $isShowing, arrowEdge: .bottom) {
                     WhyText(assistant: assistant, job: job, outcome: outcome)
                         .padding()
@@ -43,7 +43,7 @@ struct WhyInline: View {
                 Button("Why?", systemImage: "sparkles") { isRevealed = true }
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Why? Explain this result")
-                    .accessibilityHint("Shows a short explanation written on this Mac")
+                    .accessibilityHint("Shows a short explanation written on \(DeviceCopy.thisDevice)")
             }
         }
     }
@@ -65,7 +65,7 @@ private struct WhyText: View {
             } else {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Working it out on this Mac…").foregroundStyle(.secondary)
+                    Text("Working it out on \(DeviceCopy.thisDevice)…").foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
             }

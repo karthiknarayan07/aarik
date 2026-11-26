@@ -13,8 +13,9 @@ public enum OriginalsNotice: Equatable {
 }
 
 extension ConvertModel {
-    /// What the pending-deletion bar shows; nil when there is nothing to say.
+    /// What the pending-deletion bar shows; nil when there is nothing to say or the app is not in the foreground.
     public var pendingDeletionBar: PendingDeletionBarContent? {
+        guard isForeground else { return nil }
         let ready = pendingOriginals.filter { $0.blocked == nil }
         let held = pendingOriginals.compactMap(\.blocked)
         if isMovingOriginals { return PendingDeletionBarContent(count: ready.count, status: .working) }
@@ -37,6 +38,7 @@ extension ConvertModel {
 
     /// The bar's button: moves the originals (Photos asks the user to confirm), or dismisses the result.
     public func performPendingDeletionAction() {
+        guard isForeground else { return }
         if case .moved = originalsNotice {
             originalsNotice = nil
         } else {
@@ -55,9 +57,10 @@ extension ConvertModel {
         host.openPhotosAccessSettings()
     }
 
-    /// After a queue run: moves the originals, unless the user already declined for all of them (then it waits for
-    /// the user, or for originals from a later run).
+    /// After a queue run: moves the originals while in the foreground, unless the user already declined for all of
+    /// them (then it waits for the user, or for originals from a later run). Never runs in the background.
     public func moveOriginalsAfterRun() {
+        guard isForeground else { return }
         guard pendingOriginals.contains(where: { $0.blocked == nil && !declinedOriginals.contains($0.assetID) })
         else { return }
         moveOriginalsToRecentlyDeleted()
@@ -65,41 +68,50 @@ extension ConvertModel {
 
     /// Asks Photos, once, to move every pending original that passes the checks to Recently Deleted. Photos shows
     /// its own confirmation; declining keeps the list (the bar says so) and nothing is deleted later without asking
-    /// again.
+    /// again. Foreground-only: does nothing when the app is not in the foreground.
     public func moveOriginalsToRecentlyDeleted() {
-        guard !isMovingOriginals, !pendingOriginals.isEmpty else { return }
+        guard isForeground, !isMovingOriginals, !pendingOriginals.isEmpty else { return }
         isMovingOriginals = true
         originalsNotice = nil
+        Task { await runMoveOriginals() }
+    }
+
+    func moveOriginalsNow() async {
+        guard isForeground, !isMovingOriginals, !pendingOriginals.isEmpty else { return }
+        isMovingOriginals = true
+        originalsNotice = nil
+        await runMoveOriginals()
+    }
+
+    private func runMoveOriginals() async {
         let store = photoStore
         let pending = pendingDeletions
-        Task {
-            do {
-                let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
-                // The jobs say it, and the grid follows by itself: Photos reports the library change.
-                update(result.moved.map(\.jobID)) { PhotosConvertRunner.markOriginalMoved(&$0) }
-                update(result.alreadyGone.map(\.jobID)) { PhotosConvertRunner.markOriginalGone(&$0) }
-                for (entry, reason) in result.blocked {
-                    let message = reason.message
-                    update([entry.jobID]) { PhotosConvertRunner.markOriginalKept(&$0, because: message) }
-                }
-                let moved = result.moved.count
-                if !result.kept.isEmpty {
-                    let first = moved > 0 ? "Moved \(moved). " : ""
-                    originalsNotice = .failed(
-                        "\(first)Photos still lists \(result.kept.count) of them. Try again later.")
-                } else if moved > 0 {
-                    originalsNotice = .moved(count: moved)
-                }
-                declinedOriginals.removeAll()
-            } catch is CancellationError {
-                declinedOriginals = Set(pending.all.map(\.assetID))
-                originalsNotice = .declined
-            } catch {
-                originalsNotice = .failed(error.localizedDescription)
+        do {
+            let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
+            // The jobs say it, and the grid follows by itself: Photos reports the library change.
+            update(result.moved.map(\.jobID)) { PhotosConvertRunner.markOriginalMoved(&$0) }
+            update(result.alreadyGone.map(\.jobID)) { PhotosConvertRunner.markOriginalGone(&$0) }
+            for (entry, reason) in result.blocked {
+                let message = reason.message
+                update([entry.jobID]) { PhotosConvertRunner.markOriginalKept(&$0, because: message) }
             }
-            pendingOriginals = pending.all
-            isMovingOriginals = false
+            let moved = result.moved.count
+            if !result.kept.isEmpty {
+                let first = moved > 0 ? "Moved \(moved). " : ""
+                originalsNotice = .failed(
+                    "\(first)Photos still lists \(result.kept.count) of them. Try again later.")
+            } else if moved > 0 {
+                originalsNotice = .moved(count: moved)
+            }
+            declinedOriginals.removeAll()
+        } catch is CancellationError {
+            declinedOriginals = Set(pending.all.map(\.assetID))
+            originalsNotice = .declined
+        } catch {
+            originalsNotice = .failed(error.localizedDescription)
         }
+        pendingOriginals = pending.all
+        isMovingOriginals = false
     }
 
     private func update(_ jobIDs: [UUID], _ change: @escaping @Sendable (inout JobOutcome) -> Void) {

@@ -100,7 +100,7 @@ extension VideoCodec {
 /// The Save to choice in the inspector.
 public struct SaveLocation: Sendable, Equatable {
     public enum Choice: String, CaseIterable, Sendable, Identifiable {
-        case nextToOriginal, folder, replace
+        case nextToOriginal, folder, replace, documents
 
         public var id: Self { self }
         public var title: String {
@@ -108,21 +108,45 @@ public struct SaveLocation: Sendable, Equatable {
             case .nextToOriginal: "Next to original"
             case .folder: "Folder…"
             case .replace: "Replace original"
+            case .documents: "Documents"
             }
         }
     }
 
-    public var choice = Choice.nextToOriginal
+    /// Whether Replace is offered for Files inputs on `platform` (disabled on iOS: no safe system Trash for
+    /// arbitrary file providers).
+    public static func allowsReplace(for platform: ToolPlatforms = .current) -> Bool {
+        !platform.contains(.iOS)
+    }
+
+    public static func defaultChoice(for platform: ToolPlatforms = .current) -> Choice {
+        platform.contains(.iOS) && !platform.contains(.macOS) ? .documents : .nextToOriginal
+    }
+
+    public static func availableChoices(for platform: ToolPlatforms = .current) -> [Choice] {
+        platform.contains(.iOS) && !platform.contains(.macOS)
+            ? [.documents, .folder]
+            : [.nextToOriginal, .folder, .replace]
+    }
+
+    public var choice: Choice
     public var folder: URL?
     public var folderBookmark: Data?
 
-    public init() {}
+    public init(choice: Choice = SaveLocation.defaultChoice()) {
+        self.choice = choice
+    }
+
+    public init(platform: ToolPlatforms) {
+        self.init(choice: Self.defaultChoice(for: platform))
+    }
 
     /// What a job records; nil while Folder is chosen but no folder has been picked.
     public var destination: SaveDestination? {
         switch choice {
         case .nextToOriginal: .nextToOriginal
         case .replace: .replace
+        case .documents: .documents
         case .folder: folderBookmark.map { .folder(bookmark: $0) }
         }
     }
@@ -130,7 +154,7 @@ public struct SaveLocation: Sendable, Equatable {
     /// Remembers a picked folder as a bookmark (security-scoped when the system allows it).
     public mutating func setFolder(_ url: URL) throws {
         let bookmark: Data
-        if let scoped = try? url.bookmarkData(options: PlatformBookmark.creation) {
+        if !PlatformBookmark.creation.isEmpty, let scoped = try? url.bookmarkData(options: PlatformBookmark.creation) {
             bookmark = scoped
         } else {
             bookmark = try url.bookmarkData(options: [])
