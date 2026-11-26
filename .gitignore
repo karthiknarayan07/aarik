@@ -20,3 +20,6 @@ docs/references/KeepFeather/
 # Release artifacts (scripts/make-dmg.sh)
 build/
 .claude/worktrees/
+
+# Local signing (team and identity): never commit
+Config/Signing.local.xcconfig

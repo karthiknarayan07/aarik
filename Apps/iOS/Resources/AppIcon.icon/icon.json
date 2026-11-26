@@ -1,0 +1,16 @@
+{
+  "fill-specializations" : [
+    { "value" : { "linear-gradient" : [ "display-p3:0.93000,0.93500,0.99000,1.00000", "display-p3:0.83500,0.85500,0.97000,1.00000" ] } },
+    { "appearance" : "dark", "value" : { "linear-gradient" : [ "display-p3:0.11000,0.11500,0.21000,1.00000", "display-p3:0.05000,0.05500,0.12000,1.00000" ] } }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        { "image-name" : "sail.png", "name" : "sail" }
+      ],
+      "shadow" : { "kind" : "neutral", "opacity" : 0.35 },
+      "translucency" : { "enabled" : false, "value" : 0.5 }
+    }
+  ],
+  "supported-platforms" : { "squares" : "shared" }
+}
