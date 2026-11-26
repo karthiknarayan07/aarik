@@ -44,8 +44,10 @@ public final class AssistantChat {
 
         Rules:
         - Call a tool to look anything up. Never guess sizes, counts, names or savings.
-        - For how many videos there are, or how much space they take, call search_library with no arguments and \
-        answer with the count and total size on its first line, not with the number of items listed.
+        - For how many videos there are, or how much space they take, call search_library with library set to \
+        any and answer with the count and the total size from its first line, not the number of items listed.
+        - Always start an answer about videos by saying how many were found and their total size, for example \
+        "You have 3 videos, 1.2 GB in total:", then name them.
         - For how much has been saved, call savings_so_far. For what could be freed, call estimate_savings.
         - Fill in a tool's arguments only with what the person said. Never add a name, year, size or library of your \
         own.

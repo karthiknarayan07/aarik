@@ -174,10 +174,14 @@ final class ConvertAssistantContext {
         let top = analysis.buckets.prefix(Self.listLimit)
         let lines = top.map { "\($0.id): \($0.title) · \($0.detail)" }
         let videos = analysis.buckets.reduce(0) { $0 + $1.count }
+        let librarySize =
+            try model().photos.items.reduce(Int64(0)) { $0 + $1.byteSize }
+            + model().library.items.reduce(Int64(0)) { $0 + $1.byteSize }
         let text =
             analysis.buckets.isEmpty
             ? "Nothing in the library would free space."
-            : "Converting everything could free about \(ByteFormat.string(total)) across \(videos.formatted()) videos. "
+            : "The library takes \(ByteFormat.string(librarySize)) in total. "
+                + "Converting everything could free about \(ByteFormat.string(total)) across \(videos.formatted()) videos. "
                 + "Biggest groups, most savings first:\n" + lines.joined(separator: "\n")
         return AssistantToolOutput(text: text, title: "Estimated Savings", count: analysis.buckets.count, lines: lines)
     }
@@ -382,7 +386,7 @@ private struct SearchLibraryTool: AssistantTool {
     var name: String { "search_library" }
     var summary: String {
         "Looks up videos, and answers how many there are and how much space they take. The first line is the "
-            + "count and total size of what matched: use it for any count or size question. With no arguments it "
+            + "count and total size of what matched: use it for any count or size question. With library any it "
             + "covers the whole library. Then it lists the biggest by name and size. Every argument is optional: "
             + "leave out any the person didn't say."
     }
@@ -401,7 +405,7 @@ private struct SearchLibraryTool: AssistantTool {
                 "Only if the person gave a size such as over 100 MB. Leave empty for biggest or large.",
                 kind: .integer),
             AssistantParameter(
-                "library", "Only if the person said Photos or Local Files. Otherwise leave empty for both.",
+                "library", "photos, files, or any (both). Use any unless the person said Photos or Local Files.",
                 allowed: ["photos", "files", "any"]),
         ]
     }
