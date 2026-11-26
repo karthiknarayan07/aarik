@@ -26,6 +26,8 @@ public actor JobQueue {
     private var running: [UUID: Task<Void, Never>] = [:]
     /// Running jobs the user cancelled: when their run throws they leave the queue instead of failing.
     private var cancelledByUser: Set<UUID> = []
+    /// Running jobs interrupted by background expiration: when their run throws they return to `.queued`.
+    private var requeuedByInterruption: Set<UUID> = []
     private var subscribers: [UUID: AsyncStream<[Job]>.Continuation] = [:]
     /// Set when the saved queue couldn't be read (it was set aside, or it is left alone and this session's queue
     /// isn't saved); the queue starts empty.
@@ -248,6 +250,18 @@ public actor JobQueue {
         subscribers.removeAll()
     }
 
+    /// Pauses the queue and cancels every running job so its partial output is discarded and it returns to
+    /// `.queued`. Unlike `shutdown()`, the queue stays open and can be resumed later.
+    public func pauseAndRequeueRunning() async {
+        paused = true
+        let tasks = running
+        for (id, task) in tasks {
+            requeuedByInterruption.insert(id)
+            task.cancel()
+        }
+        for (_, task) in tasks { await task.value }
+    }
+
     // MARK: - Internals
 
     private func removeSubscriber(_ key: UUID) {
@@ -362,13 +376,14 @@ public actor JobQueue {
         progressSink.finish()
         await progressReader.value
         let cancelled = cancelledByUser.remove(id) != nil
+        let interrupted = requeuedByInterruption.remove(id) != nil
         switch result {
         case .success(let state):
             return .finished(state)
         case .failure(let error):
             if cancelled { return .remove }
-            // Only a cancelled worker (shutdown) is not a failure.
-            if Task.isCancelled { return .requeue }
+            // Shutdown or background expiration: partial was discarded by cancellation; put the job back to `.queued`.
+            if interrupted || Task.isCancelled { return .requeue }
             // The sentence for the user; the full error (domain, code, user info) only to the log.
             Self.log.error("Job \(id, privacy: .public) failed: \(String(describing: error), privacy: .private)")
             let failure = Self.failure(for: error)

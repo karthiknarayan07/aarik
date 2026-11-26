@@ -175,6 +175,19 @@ public final class AppServices {
         updatesTask?.cancel()
     }
 
+    /// Pauses the queue and cancels running jobs so their partial output is discarded and they return to `.queued`.
+    public func pauseForBackgroundExpiration() async {
+        isQueuePaused = true
+        let previous = lastQueueCommand
+        let queue = self.queue
+        let command = Task {
+            await previous?.value
+            await queue.pauseAndRequeueRunning()
+        }
+        lastQueueCommand = command
+        await command.value
+    }
+
     // MARK: Queue commands
 
     /// Sends a command to the queue after the previous one.

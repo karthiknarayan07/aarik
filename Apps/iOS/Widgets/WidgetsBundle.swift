@@ -6,6 +6,6 @@ struct WidgetsBundle: WidgetBundle {
     var body: some Widget {
         PlaceholderWidget()
         PlaceholderControl()
-        PlaceholderLiveActivity()
+        ConvertLiveActivity()
     }
 }

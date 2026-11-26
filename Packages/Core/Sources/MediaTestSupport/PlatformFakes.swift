@@ -133,3 +133,113 @@ public final class FakeBackgroundGrant: BackgroundExecutionGrant {
         func end() { owner.endedCount += 1 }
     }
 }
+
+/// A fake continued-processing task handle for testing `BackgroundTaskScheduler` without BackgroundTasks.
+public final class FakeContinuedProcessingTask: ContinuedProcessingTask, @unchecked Sendable {
+    private let lock = NSLock()
+    public let identifier: String
+    private var expirationHandler: (@Sendable () -> Void)?
+    private var _progressUpdates: [(completed: Int64, total: Int64)] = []
+    private var _titleUpdates: [(title: String, subtitle: String)] = []
+    private var _completedResults: [Bool] = []
+
+    public init(identifier: String) {
+        self.identifier = identifier
+    }
+
+    public var hasExpirationHandler: Bool { lock.withLock { expirationHandler != nil } }
+    public var progressUpdates: [(completed: Int64, total: Int64)] { lock.withLock { _progressUpdates } }
+    public var titleUpdates: [(title: String, subtitle: String)] { lock.withLock { _titleUpdates } }
+    public var completedResults: [Bool] { lock.withLock { _completedResults } }
+
+    public func setExpirationHandler(_ handler: (@Sendable () -> Void)?) {
+        lock.withLock { expirationHandler = handler }
+    }
+
+    public func updateProgress(completedUnitCount: Int64, totalUnitCount: Int64) {
+        lock.withLock { _progressUpdates.append((completedUnitCount, totalUnitCount)) }
+    }
+
+    public func updateTitle(_ title: String, subtitle: String) {
+        lock.withLock { _titleUpdates.append((title, subtitle)) }
+    }
+
+    public func setTaskCompleted(success: Bool) {
+        lock.withLock {
+            _completedResults.append(success)
+            expirationHandler = nil
+        }
+    }
+
+    /// Simulates the system or user expiring the task.
+    public func expire() {
+        let handler = lock.withLock {
+            let current = expirationHandler
+            expirationHandler = nil
+            return current
+        }
+        handler?()
+    }
+}
+
+/// Fake `BackgroundTaskScheduler` for unit testing `ContinuedProcessingCoordinator` and queue expiration.
+@MainActor
+public final class FakeBackgroundTaskScheduler: BackgroundTaskScheduler {
+    public private(set) var registeredIdentifiers: [String] = []
+    public private(set) var submittedRequests: [ContinuedProcessingRequest] = []
+    public private(set) var cancelledIdentifiers: [String] = []
+    public private(set) var tasksByIdentifier: [String: FakeContinuedProcessingTask] = [:]
+    public private(set) var launchOrder: [FakeContinuedProcessingTask] = []
+
+    public var submitError: (any Error)?
+    public var registerShouldSucceed = true
+    public var autoLaunchOnSubmit = true
+
+    private var handlers: [String: @Sendable (any ContinuedProcessingTask) -> Void] = [:]
+
+    public init() {}
+
+    @discardableResult
+    public func register(
+        identifier: String,
+        handler: @escaping @Sendable (any ContinuedProcessingTask) -> Void
+    ) -> Bool {
+        registeredIdentifiers.append(identifier)
+        guard registerShouldSucceed else { return false }
+        handlers[identifier] = handler
+        return true
+    }
+
+    public func submit(_ request: ContinuedProcessingRequest) throws {
+        submittedRequests.append(request)
+        if let submitError { throw submitError }
+        if autoLaunchOnSubmit {
+            launch(identifier: request.identifier)
+        }
+    }
+
+    public func cancel(identifier: String) {
+        cancelledIdentifiers.append(identifier)
+    }
+
+    /// Delivers the registered launch handler for `identifier`, returning the fake task handle.
+    @discardableResult
+    public func launch(identifier: String) -> FakeContinuedProcessingTask? {
+        guard let handler = handlers[identifier] else { return nil }
+        let task = FakeContinuedProcessingTask(identifier: identifier)
+        tasksByIdentifier[identifier] = task
+        launchOrder.append(task)
+        handler(task)
+        return task
+    }
+
+    /// Fires expiration on the task with `identifier`.
+    public func expire(identifier: String) {
+        tasksByIdentifier[identifier]?.expire()
+    }
+
+    /// Fires expiration on the most recently launched task.
+    public func expireLatest() {
+        launchOrder.last?.expire()
+    }
+}
