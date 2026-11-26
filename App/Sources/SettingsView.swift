@@ -28,7 +28,7 @@ private struct GeneralSettings: View {
 
     var body: some View {
         Form {
-            Picker("Default preset", selection: $preset) {
+            Picker("Default Preset", selection: $preset) {
                 ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
             Toggle(isOn: $autoStart) {
@@ -36,22 +36,18 @@ private struct GeneralSettings: View {
                 Text("When off, the queue waits until you press Resume.")
             }
             Section("Performance") {
-                Picker("Conversion speed", selection: $speed) {
+                Picker("Conversion Speed", selection: $speed) {
                     ForEach(SpeedSetting.allCases) { option in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(option.title)
-                            Text(option.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tag(option)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(option.title). \(option.summary)")
+                        Text(option.title).tag(option)
                     }
                 }
                 .pickerStyle(.radioGroup)
-                .accessibilityLabel("Conversion speed")
-                .accessibilityHint("Quiet, Balanced or Fastest. A hot Mac slows down or pauses whatever you choose.")
+                .accessibilityLabel("Conversion Speed")
+                // What the selected option does, like the explanatory text under a control in System Settings.
+                Text(speed.summary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("\(speed.title): \(speed.summary)")
             }
             Section("Updates") {
                 if updater.isConfigured {

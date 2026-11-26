@@ -25,7 +25,7 @@ public enum SpeedSetting: String, CaseIterable, Codable, Sendable, Identifiable 
     /// One sentence under the option (sentence case).
     public var summary: String {
         switch self {
-        case .quiet: "One video at a time at low priority, so your Mac stays cool and quiet."
+        case .quiet: "One video at a time at low priority: easiest on heat, fan noise and other apps."
         case .balanced: "Uses about half of your Mac's cores and leaves room for other apps."
         case .fastest: "Uses all performance cores. Your Mac may get warm and its fans louder."
         }

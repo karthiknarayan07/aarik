@@ -156,6 +156,28 @@ struct SpeedSettingTests {
         #expect(!state.effect(cores: eightCores).runsInBackground)
     }
 
+    @Test func fastestIsNeverBelowBalancedOnRealLayouts() {
+        // (active, performance): M3 4P+4E, M4 4P+6E, M4 Pro 10P+4E, M3 Max 12P+4E, M1 Ultra 16P+4E.
+        let layouts: [(CoreCounts, balanced: Int, fastest: Int)] = [
+            (CoreCounts(active: 8, performance: 4), 4, 4),
+            (CoreCounts(active: 10, performance: 4), 5, 5),
+            (CoreCounts(active: 14, performance: 10), 7, 10),
+            (CoreCounts(active: 16, performance: 12), 8, 12),
+            (CoreCounts(active: 20, performance: 16), 10, 16),
+        ]
+        for layout in layouts {
+            #expect(state(speed: .balanced).concurrencyLimit(cores: layout.0) == layout.balanced)
+            #expect(state(speed: .fastest).concurrencyLimit(cores: layout.0) == layout.fastest)
+            #expect(state(speed: .quiet).concurrencyLimit(cores: layout.0) == 1)
+        }
+    }
+
+    @Test func fastestNeverExceedsTheActiveCores() {
+        // Cores switched off: fewer active than performance cores.
+        let limited = CoreCounts(active: 3, performance: 4)
+        #expect(state(speed: .fastest).concurrencyLimit(cores: limited) == 3)
+    }
+
     @Test(arguments: SpeedSetting.allCases) func seriousHeatLimitsEverySpeedToOne(speed: SpeedSetting) {
         #expect(state(thermal: [.serious], speed: speed).concurrencyLimit(cores: eightCores) == 1)
     }

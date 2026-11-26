@@ -1,41 +1,48 @@
 import AppCore
 import AppKit
 
-/// The "Stop converting and quit?" question, and the check that skips it when the system is ending the session.
+/// The "Stop converting and quit?" question, and the signals that skip it when the system is ending the session.
 @MainActor
 enum QuitConfirmation {
-    /// Set when the system announced a shutdown, restart or logout (the quit that follows is not the user's).
-    private static var isPoweringOff = false
-    private static var observer: (any NSObjectProtocol)?
+    /// When the system last announced a shutdown, restart or logout. Cleared when the app becomes active again (the
+    /// power-off was cancelled), and ignored after `QuitPolicy.powerOffWindow` seconds.
+    private static var powerOffAnnouncedAt: Date?
+    private static var observers: [any NSObjectProtocol] = []
 
     /// Starts watching for the system powering off. Safe to call more than once.
     static func watchForPowerOff() {
-        guard observer == nil else { return }
-        observer = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated { isPoweringOff = true }
-        }
+        guard observers.isEmpty else { return }
+        observers.append(
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { powerOffAnnouncedAt = Date() }
+            })
+        observers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { powerOffAnnouncedAt = nil }
+            })
     }
 
-    /// Whether this quit comes from a logout, restart or shutdown: the quit Apple event says why (`kAEQuitReason`).
+    /// Whether this quit comes from a logout, restart or shutdown: the quit Apple event says why (`kAEQuitReason`), or
+    /// the system just announced a power-off.
     static var isSessionEnding: Bool {
-        if isPoweringOff { return true }
         let descriptor = NSAppleEventManager.shared().currentAppleEvent?
             .attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))
-        guard let descriptor else { return false }
-        let code = descriptor.enumCodeValue != 0 ? descriptor.enumCodeValue : descriptor.typeCodeValue
-        return QuitPolicy.isSessionEnding(quitReason: code)
+        let code = descriptor.map { $0.enumCodeValue != 0 ? $0.enumCodeValue : $0.typeCodeValue }
+        return QuitPolicy.isSessionEnding(quitReason: code, powerOffAnnouncedAt: powerOffAnnouncedAt, now: Date())
     }
 
     /// Asks with a standard alert; "Stop and Quit" is the default button.
-    static func confirmStop() -> Bool {
+    static func confirmStop(queueStartsAutomatically: Bool, automaticPause: AutoPauseReason?) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Stop converting and quit?"
-        alert.informativeText =
-            "The video in progress stops and no partial file is kept. It and the rest of the queue continue the "
-            + "next time you open \(AppModel.displayName)."
+        alert.informativeText = QuitPolicy.explanation(
+            appName: AppModel.displayName, queueStartsAutomatically: queueStartsAutomatically,
+            automaticPause: automaticPause)
         let stop = alert.addButton(withTitle: "Stop and Quit")
         stop.hasDestructiveAction = true
         stop.setAccessibilityLabel("Stop and Quit")

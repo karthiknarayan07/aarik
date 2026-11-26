@@ -53,7 +53,8 @@ not exist yet. Change a rule only together with its test.
   "Stop and Quit", `QuitConfirmation`) when work is under way, using `QuitPolicy.needsConfirmation` (the same
   definition of busy as `RelaunchGate`: a job running, or waiting jobs about to start). It does not ask when the queue
   is idle or paused with nothing running, nor while the system is logging out, restarting or shutting down (the quit
-  Apple event's `kAEQuitReason`, and `NSWorkspace.willPowerOffNotification`): then it quits without asking.
+  Apple event's `kAEQuitReason`, or a `NSWorkspace.willPowerOffNotification` in the last 30 seconds, cleared when the app
+  becomes active again; either signal is enough, `QuitPolicy.isSessionEnding`): then it quits without asking.
 - After the answer, it replies later: pending library saves finish and the running job is returned to the queue
   (`AppModel.prepareForTermination` -> `JobQueue.shutdown`) before the app exits. The encoder removes its partial
   file when cancelled, and every job, the interrupted one and the rest, is saved as `queued`

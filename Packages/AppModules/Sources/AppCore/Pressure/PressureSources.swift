@@ -72,7 +72,7 @@ public final class SystemPowerSource: PowerSource {
             }, context
         )?.takeRetainedValue()
         guard let source else { return }
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         runLoopSource = source
     }
 

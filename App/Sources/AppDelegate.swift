@@ -154,7 +154,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if QuitPolicy.needsConfirmation(
             jobs: model.jobs, isQueuePaused: model.queuePause.isPaused,
             isSessionEnding: QuitConfirmation.isSessionEnding)
-            && !QuitConfirmation.confirmStop()
+            && !QuitConfirmation.confirmStop(
+                queueStartsAutomatically: AppSettings.autoStartQueue(model.defaults),
+                automaticPause: model.queuePause.automatic)
         {
             return .terminateCancel
         }

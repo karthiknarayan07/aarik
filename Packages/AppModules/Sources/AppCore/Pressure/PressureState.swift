@@ -89,15 +89,20 @@ public struct PressureState: Sendable, Equatable {
         return nil
     }
 
-    /// How many downscales may run at once: the speed's number, and one at most while the Mac is hot.
+    /// How many videos may convert at once (the queue's concurrency, once it runs several; today the downscale
+    /// limit). Quiet: 1. Balanced: half the cores, at least 2. Fastest: the performance cores, never fewer than
+    /// Balanced and never more than the cores there are. The speed's number, and one at most while the Mac is hot.
     public func concurrencyLimit(cores: CoreCounts) -> Int {
         if thermal >= .serious { return 1 }
         switch speed {
         case .quiet: return 1
-        case .balanced: return max(2, cores.active / 2)
-        case .fastest: return max(1, cores.performance)
+        case .balanced: return balanced(cores)
+        case .fastest: return min(cores.active, max(balanced(cores), cores.performance))
         }
     }
+
+    /// Half the cores, at least two.
+    private func balanced(_ cores: CoreCounts) -> Int { max(2, cores.active / 2) }
 
     /// What the rest of the app acts on.
     public func effect(cores: CoreCounts) -> PressureEffect {
