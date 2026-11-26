@@ -102,4 +102,25 @@ import Testing
         #expect(content.detail.hasSuffix("no longer in your library"))
         #expect(content.detail.contains("iCloud space is freed"))
     }
+
+    @Test func countedActionTitleHandlesSingularPluralAndStatuses() {
+        #expect(
+            PendingDeletionBarContent(count: 1, status: .ready).countedActionTitle
+                == "Move 1 Original to Recently Deleted…")
+        #expect(
+            PendingDeletionBarContent(count: 12, status: .ready).countedActionTitle
+                == "Move 12 Originals to Recently Deleted…")
+        #expect(
+            PendingDeletionBarContent(count: 3, status: .declined).countedActionTitle
+                == "Move 3 Originals to Recently Deleted…")
+        #expect(
+            PendingDeletionBarContent(count: 2, status: .failed("x")).countedActionTitle
+                == "Move 2 Originals to Recently Deleted…")
+        #expect(
+            PendingDeletionBarContent(count: 0, status: .ready, heldCount: 1, heldCanRetry: true)
+                .countedActionTitle == PendingDeletionBarContent.actionTitle)
+        #expect(PendingDeletionBarContent(count: 0, status: .ready, heldCount: 1).countedActionTitle == nil)
+        #expect(PendingDeletionBarContent(count: 3, status: .working).countedActionTitle == nil)
+        #expect(PendingDeletionBarContent(count: 5, status: .moved(savedBytes: 100)).countedActionTitle == "Done")
+    }
 }

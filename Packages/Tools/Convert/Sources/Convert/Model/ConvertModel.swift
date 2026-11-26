@@ -104,6 +104,16 @@ public final class ConvertModel {
     public var isMovingOriginals = false
     /// Originals pending when the user declined the confirmation; a run that adds none doesn't ask again.
     @ObservationIgnored var declinedOriginals: Set<String> = []
+    /// Whether the app is currently in the foreground. Originals deletion is foreground-only because Photos requires
+    /// a foreground system confirmation; iOS scenes update this from `scenePhase`.
+    public var isForeground = true {
+        didSet {
+            if isForeground {
+                let latest = services.pendingDeletions.all
+                if pendingOriginals != latest { pendingOriginals = latest }
+            }
+        }
+    }
     /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?

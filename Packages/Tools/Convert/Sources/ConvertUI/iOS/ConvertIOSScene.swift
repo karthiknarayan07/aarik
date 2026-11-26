@@ -20,15 +20,36 @@
         }
 
         @ViewBuilder public func root() -> some View {
-            Text(model.tool.title)
+            let model = model
+            ForegroundObserver(model: model) {
+                Text(model.tool.title)
+            }
         }
 
         @ViewBuilder public func detail(for destination: VideoPage?) -> some View {
+            let model = model
             Text(destination?.title ?? model.tool.title)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaBar(edge: .bottom) {
+                    IOSPendingDeletionBar(model: model)
+                }
         }
 
         @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {
             ToolbarItemGroup {}
+        }
+    }
+
+    private struct ForegroundObserver<Content: View>: View {
+        let model: ConvertModel
+        @ViewBuilder let content: () -> Content
+        @Environment(\.scenePhase) private var scenePhase
+
+        var body: some View {
+            content()
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    model.isForeground = (phase == .active)
+                }
         }
     }
 #endif
