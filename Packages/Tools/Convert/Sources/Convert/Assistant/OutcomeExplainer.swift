@@ -1,5 +1,5 @@
-import AarikCore
-import SharedUI
+import AppCore
+import AppUI
 import Convert
 import Foundation
 import Observation

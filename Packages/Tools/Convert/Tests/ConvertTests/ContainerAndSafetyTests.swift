@@ -1,5 +1,5 @@
 import AVFoundation
-import AarikCore
+import AppCore
 import Foundation
 import MediaEngine
 import MediaTestSupport

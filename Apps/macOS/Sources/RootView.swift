@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import SwiftUI
 
 /// The main window's content. It hosts one tool module (its sidebar, pages, toolbar, inspector and dialogs) and knows

@@ -51,7 +51,7 @@ engine time and memory are caught by the performance tests below.
 
 1. State the symptom with a number ("launch 1.8 s", "RAM 600 MB after 30 videos").
 2. Measure a **Release** build only. Debug is `-Onone` and tells you nothing about speed:
-   `xcodebuild -workspace Aarik.xcworkspace -scheme App -configuration Release -derivedDataPath .build/xcode-p6 build`.
+   `xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -derivedDataPath .build/xcode-p6 build`.
 3. Profile with Instruments (Time Profiler, Allocations, Hangs, Points of Interest) or time the engine without the
    UI: `cd Packages/AppModules && swift run -c release devtool downscale <in> <out>` (`devtool fixture <path>`
    makes a test clip; `devtool inspect <file>` prints metadata).

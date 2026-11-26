@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import LocalLibrary
 
 /// The pages of the video tool: what its sidebar selects.

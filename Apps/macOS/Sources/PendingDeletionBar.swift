@@ -1,4 +1,4 @@
-import SharedUI
+import AppUI
 import SwiftUI
 
 /// The system bottom bar that says originals are waiting to move to Recently Deleted, with the one button that asks

@@ -12,7 +12,7 @@ deletes files, and `PERFORMANCE.md` before touching the engine, the queue or the
   - `DownscaleVideo`: the tool: planner, presets, estimator, `DownscaleRunner` (verify, Replace, Trash).
   - `LocalLibrary`, `PhotosLibrary`: file and Photos browsing, `WorkFolder`, `PhotoInputFetcher`.
   - `AppUI`: shared view models. `MediaTestSupport` and `devtool`: fixtures and a command line for the engine.
-- `Apps/macOS`: the SwiftUI + AppKit shell (`Apps/macOS/Sources`, `Aarik.xcodeproj`, Sparkle updater `Updater.swift`). `Apps/iOS`: the iOS app. `Aarik.xcworkspace` at the root holds both projects and the packages.
+- `Apps/macOS`: the SwiftUI + AppKit shell (`Apps/macOS/Sources`, `App.xcodeproj`, Sparkle updater `Updater.swift`). `Apps/iOS`: the iOS app. `App.xcworkspace` at the root holds both projects and the packages.
 - `Config/*.xcconfig (`macOS.xcconfig`, `iOS.xcconfig`)`: build settings and brand values (`Brand.xcconfig`). `.github/workflows`: CI and release.
 - `docs/`: ADRs, specs, plans (`docs/superpowers/plans`), `RELEASING.md`.
 
@@ -27,7 +27,7 @@ cd Packages/AppModules && RUN_PERF_TESTS=1 swift test --filter PerformanceTests 
 cd Packages/AppModules && swift test --sanitize=thread     # CI runs this and the address one as separate jobs
 cd Packages/AppModules && swift test --sanitize=address
 swift format lint --recursive --strict Packages/AppModules/Sources Packages/AppModules/Tests Apps/macOS/Sources
-xcodebuild -workspace Aarik.xcworkspace -scheme App -configuration Debug -derivedDataPath .build/xcode-p6 \
+xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -derivedDataPath .build/xcode-p6 \
   -destination 'platform=macOS,arch=arm64' build    # also Release
 scripts/run-app.sh                                   # build Debug and open it
 ```

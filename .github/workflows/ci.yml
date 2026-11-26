@@ -43,7 +43,7 @@ jobs:
 
       - name: Build app (Release)
         run: |
-          xcodebuild -workspace Aarik.xcworkspace -scheme App -configuration Release \
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
             -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 
   sanitizers:

@@ -1,5 +1,5 @@
 import AppKit
-import SharedUI
+import AppUI
 import Observation
 import SwiftUI
 

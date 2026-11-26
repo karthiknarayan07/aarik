@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import Foundation
 
 /// The jobs made for a selection, and the files that couldn't get one.

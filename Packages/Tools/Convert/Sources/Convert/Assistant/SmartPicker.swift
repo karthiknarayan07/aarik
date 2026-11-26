@@ -1,4 +1,4 @@
-import SharedUI
+import AppUI
 import Convert
 import Foundation
 import FoundationModels

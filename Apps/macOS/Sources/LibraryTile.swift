@@ -1,4 +1,4 @@
-import SharedUI
+import AppUI
 import CoreGraphics
 import LocalLibrary
 import SwiftUI

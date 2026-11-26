@@ -1,5 +1,5 @@
-import AarikCore
-import SharedUI
+import AppCore
+import AppUI
 import Assistant
 import Convert
 import LocalLibrary

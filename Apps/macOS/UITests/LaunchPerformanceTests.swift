@@ -12,7 +12,7 @@ import XCTest
 /// baseline, to match the plan's 20 % rule. The budget is a cold launch under 1 s in a **Release** build (`PERFORMANCE.md`); a Debug build
 /// is slower and tells nothing, so set the baseline from a Release run:
 ///
-///     RUN_PERF_TESTS=1 xcodebuild test -workspace Aarik.xcworkspace -scheme App -configuration Release \
+///     RUN_PERF_TESTS=1 xcodebuild test -workspace App.xcworkspace -scheme App -configuration Release \
 ///       -only-testing:AppUITests/LaunchPerformanceTests
 ///
 /// Skipped unless `RUN_PERF_TESTS=1`, like the package's performance tests: it launches the app several times and

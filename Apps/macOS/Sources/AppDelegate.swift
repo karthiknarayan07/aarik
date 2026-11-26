@@ -1,6 +1,6 @@
-import AarikCore
+import AppCore
 import AppKit
-import SharedUI
+import AppUI
 import PhotosLibrary
 import QuickRunService
 import UserNotifications

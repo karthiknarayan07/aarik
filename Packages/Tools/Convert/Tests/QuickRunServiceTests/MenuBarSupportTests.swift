@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import AppKit
 import Foundation
 import Testing

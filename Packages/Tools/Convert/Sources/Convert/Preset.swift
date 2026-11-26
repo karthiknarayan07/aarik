@@ -1,6 +1,6 @@
 import Foundation
 import MediaEngine
-import AarikCore
+import AppCore
 
 /// How hard to shrink a video.
 ///

@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import MediaEngine
 
 /// What converting a Photos video is predicted to lose, from what Photos says about it. Nothing is downloaded

@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 root=$PWD
 
-project="Apps/macOS/Aarik.xcodeproj"
+project="Apps/macOS/App.xcodeproj"
 scheme="App"
 brand_file="Config/Brand.xcconfig"
 

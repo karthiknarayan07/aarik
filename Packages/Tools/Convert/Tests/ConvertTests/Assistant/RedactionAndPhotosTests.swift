@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import Convert
 import Foundation
 import LocalLibrary

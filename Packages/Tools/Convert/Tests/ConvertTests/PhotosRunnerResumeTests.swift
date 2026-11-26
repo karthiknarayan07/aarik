@@ -1,4 +1,4 @@
-import AarikCore
+import AppCore
 import CoreGraphics
 import Foundation
 import PhotosLibrary

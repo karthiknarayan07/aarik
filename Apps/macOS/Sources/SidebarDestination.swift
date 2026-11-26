@@ -1,4 +1,4 @@
-import SharedUI
+import AppUI
 import Convert
 
 /// Where the sidebar points: the video tool's pages.

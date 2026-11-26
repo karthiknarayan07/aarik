@@ -1,5 +1,5 @@
 import AppKit
-import SharedUI
+import AppUI
 import ImageIO
 import LocalLibrary
 import PhotosLibrary

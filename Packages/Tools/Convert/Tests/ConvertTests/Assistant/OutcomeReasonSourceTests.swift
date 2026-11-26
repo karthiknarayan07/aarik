@@ -1,11 +1,11 @@
-import AarikCore
+import AppCore
 import Convert
 import Foundation
 import MediaEngine
 import PhotosLibrary
 import Testing
 
-@testable import AarikCore
+@testable import AppCore
 @testable import Assistant
 @testable import Convert
 
