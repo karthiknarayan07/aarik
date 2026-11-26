@@ -12,6 +12,11 @@ public struct ClipOptions: Sendable {
     public var height = 2160
     public var fps = 30
     public var seconds = 1.0
+    /// Frames at uneven intervals (alternately 1.5 and 0.5 frame periods apart, the average still `fps`), as a
+    /// screen recording or a dropped-frame capture has; false spaces them evenly.
+    /// Such a clip has no audio: with it the writer was seen to stop taking video (cause not found), so
+    /// `includeAudio` is ignored.
+    public var variableFrameRate = false
     public var hdr: FixtureHDR = .hlg
     /// key → string value, keySpace mdta
     public var quickTimeMetadata: [String: String] = [:]
@@ -81,8 +86,9 @@ public enum FixtureFactory {
     /// Writes a new clip (`fixture.mov`, or `.mp4` / `.m4v` per `options.fileType`) into a fresh temporary
     /// directory and returns its URL.
     public static func makeClip(_ options: ClipOptions = .init()) async throws -> URL {
-        // Tests make many clips at once; a few at a time keeps the hardware encoder from being swamped (an
-        // overloaded encoder misses the requested bit rate by orders of magnitude).
+        // Tests make many clips at once, beside the downscales they run. One clip at a time: with several, the
+        // hardware encoder was seen to miss the requested bit rate by orders of magnitude, and the writer to stop
+        // taking video for good (a clip takes a fraction of a second, so the queue stays short).
         await slots.acquire()
         do {
             let clip = try await writeClip(options)
@@ -94,7 +100,11 @@ public enum FixtureFactory {
         }
     }
 
-    private static let slots = WorkSlots(count: WorkSlots.defaultCount)
+    /// One fixture at a time (concurrent writers were seen to stall). A test's time limit includes its wait in this
+    /// queue, so tests that build fixtures carry 5 minutes, not 2: the limit is only there to catch a hang, and a
+    /// stalled fixture already fails by itself after 30 seconds. (Caching fixtures was the alternative; nearly every
+    /// test needs its own options, and many damage or rewrite the clip, so a cache would rarely hit.)
+    private static let slots = WorkSlots(count: 1)
 
     private static func writeClip(_ options: ClipOptions) async throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -157,7 +167,7 @@ public enum FixtureFactory {
 
         // Audio
         var audioInputs: [AVAssetWriterInput] = []
-        if options.includeAudio {
+        if options.includeAudio && !options.variableFrameRate {
             for _ in 0..<(options.includeFallbackAudioTrack ? 2 : 1) {
                 let input = AVAssetWriterInput(
                     mediaType: .audio,
@@ -228,19 +238,23 @@ public enum FixtureFactory {
             let timedSeconds = options.seconds + (audioInputs.isEmpty ? 0 : options.audioTailSeconds)
             let groupCount = max(1, Int(timedSeconds.rounded(.up)))
             var groupsWritten = 0
-            var audioSamplesWritten = [Int](repeating: 0, count: audioInputs.count)
+            // The writer interleaves its inputs by time and holds back an input that runs far ahead of the others.
+            // Waiting on one input while another starves therefore deadlocks, so every wait feeds the audio too.
+            let feeder = AudioFeeder(
+                inputs: audioInputs, writer: writer, totalSamples: audioFrameCount * sampleRate / options.fps)
+            let feedAudio: () throws -> Void = { try feeder.pump(limit: .max) }
             for frame in 0..<max(frameCount, audioFrameCount) {
                 if let metadataAdaptor, let metadataInput, groupsWritten < groupCount,
                     Double(frame) / Double(options.fps) >= Double(groupsWritten)
                 {
                     try await appendTimedGroup(
                         groupsWritten, totalSeconds: timedSeconds, adaptor: metadataAdaptor, input: metadataInput,
-                        writer: writer)
+                        writer: writer, whileWaiting: feedAudio)
                     groupsWritten += 1
                     if groupsWritten == groupCount { metadataInput.markAsFinished() }
                 }
                 if frame < frameCount {
-                    try await waitUntilReady(videoInput, writer: writer)
+                    try await waitUntilReady(videoInput, writer: writer, whileWaiting: feedAudio)
                     guard let pool = adaptor.pixelBufferPool else {
                         throw FixtureError.writerFailed("no pixel buffer pool")
                     }
@@ -257,25 +271,32 @@ public enum FixtureFactory {
                             pixelBuffer, kCVImageBufferAmbientViewingEnvironmentKey, ambient as CFData,
                             .shouldPropagate)
                     }
-                    let pts = CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
+                    let pts =
+                        options.variableFrameRate
+                        ? CMTime(value: CMTimeValue(2 * frame + frame % 2), timescale: CMTimeScale(2 * options.fps))
+                        : CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(options.fps))
                     guard adaptor.append(pixelBuffer, withPresentationTime: pts) else {
                         throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "video append failed")
                     }
                     if frame == frameCount - 1 { videoInput.markAsFinished() }
                 }
-                for (index, audioInput) in audioInputs.enumerated() {
-                    try await appendAudio(
-                        frame: frame, fps: options.fps, input: audioInput, writer: writer,
-                        written: &audioSamplesWritten[index])
-                }
+                try feedAudio()
             }
             if let metadataAdaptor, let metadataInput, groupsWritten < groupCount {
                 for index in groupsWritten..<groupCount {
                     try await appendTimedGroup(
                         index, totalSeconds: timedSeconds, adaptor: metadataAdaptor, input: metadataInput,
-                        writer: writer)
+                        writer: writer, whileWaiting: feedAudio)
                 }
                 metadataInput.markAsFinished()
+            }
+            while !feeder.isDone {
+                try feedAudio()
+                if feeder.isDone { break }
+                if writer.status == .failed || writer.status == .cancelled {
+                    throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "writer \(writer.status)")
+                }
+                try await Task.sleep(for: .milliseconds(1))
             }
             for audioInput in audioInputs { audioInput.markAsFinished() }
 
@@ -328,7 +349,7 @@ public enum FixtureFactory {
     /// Appends timed-metadata group `index`, covering second `index` (clipped to `totalSeconds`).
     private static func appendTimedGroup(
         _ index: Int, totalSeconds: Double, adaptor: AVAssetWriterInputMetadataAdaptor, input: AVAssetWriterInput,
-        writer: AVAssetWriter
+        writer: AVAssetWriter, whileWaiting: () throws -> Void
     ) async throws {
         let item = AVMutableMetadataItem()
         item.identifier = AVMetadataIdentifier(rawValue: timedMetadataIdentifier)
@@ -339,32 +360,62 @@ public enum FixtureFactory {
         let range = CMTimeRange(
             start: CMTime(seconds: start, preferredTimescale: 600),
             end: CMTime(seconds: end, preferredTimescale: 600))
-        try await waitUntilReady(input, writer: writer)
+        try await waitUntilReady(input, writer: writer, whileWaiting: whileWaiting)
         guard adaptor.append(AVTimedMetadataGroup(items: [item], timeRange: range)) else {
             throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "metadata append failed")
         }
     }
 
-    /// Appends audio up to the end of video frame `frame`.
-    private static func appendAudio(
-        frame: Int, fps: Int, input: AVAssetWriterInput, writer: AVAssetWriter, written: inout Int
-    ) async throws {
-        let target = (frame + 1) * sampleRate / fps
-        let count = target - written
-        guard count > 0 else { return }
-        try await waitUntilReady(input, writer: writer)
-        let buffer = try makeAudioBuffer(startSample: written, count: count)
-        guard input.append(buffer) else {
-            throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "audio append failed")
+    /// Feeds the audio inputs without ever blocking: `pump` appends what each input accepts right now.
+    private final class AudioFeeder {
+        private let inputs: [AVAssetWriterInput]
+        private let writer: AVAssetWriter
+        private let totalSamples: Int
+        private var written: [Int]
+        private static let chunk = 1600
+
+        init(inputs: [AVAssetWriterInput], writer: AVAssetWriter, totalSamples: Int) {
+            self.inputs = inputs
+            self.writer = writer
+            self.totalSamples = totalSamples
+            written = [Int](repeating: 0, count: inputs.count)
         }
-        written = target
+
+        var isDone: Bool { written.allSatisfy { $0 >= totalSamples } }
+
+        /// Appends audio, up to `limit` samples in all, while an input is ready for more.
+        func pump(limit: Int) throws {
+            let end = min(limit, totalSamples)
+            for (index, input) in inputs.enumerated() {
+                while written[index] < end, input.isReadyForMoreMediaData {
+                    let count = min(Self.chunk, end - written[index])
+                    let buffer = try FixtureFactory.makeAudioBuffer(startSample: written[index], count: count)
+                    guard input.append(buffer) else {
+                        throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "audio append failed")
+                    }
+                    written[index] += count
+                }
+            }
+        }
     }
 
-    private static func waitUntilReady(_ input: AVAssetWriterInput, writer: AVAssetWriter) async throws {
+    /// Waits until `input` takes more data. While it doesn't, `whileWaiting` feeds the other inputs: the writer holds
+    /// this one back until they catch up.
+    private static func waitUntilReady(
+        _ input: AVAssetWriterInput, writer: AVAssetWriter, whileWaiting: () throws -> Void = {}
+    ) async throws {
+        // A writer that never takes more data would hang the test run (a time limit can't interrupt a wait that
+        // keeps running), so a stall fails the clip instead.
+        let deadline = ContinuousClock.now + .seconds(30)
         while !input.isReadyForMoreMediaData {
+            if ContinuousClock.now > deadline {
+                throw FixtureError.writerFailed("stalled: \(input.mediaType.rawValue) input not ready for 30 s")
+            }
             if writer.status == .failed || writer.status == .cancelled {
                 throw FixtureError.writerFailed(writer.error?.localizedDescription ?? "writer \(writer.status)")
             }
+            try whileWaiting()
+            if input.isReadyForMoreMediaData { break }
             try await Task.sleep(for: .milliseconds(1))
         }
     }
@@ -454,7 +505,7 @@ public enum FixtureFactory {
     }
 
     /// Interleaved Float32 stereo 440 Hz sine at 48 kHz as an LPCM sample buffer.
-    private static func makeAudioBuffer(startSample: Int, count: Int) throws -> CMSampleBuffer {
+    fileprivate static func makeAudioBuffer(startSample: Int, count: Int) throws -> CMSampleBuffer {
         var asbd = AudioStreamBasicDescription(
             mSampleRate: Double(sampleRate), mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,

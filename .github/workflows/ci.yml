@@ -15,7 +15,7 @@ jobs:
     # The project targets Xcode 27.2 locally; the step below selects the newest Xcode
     # installed on the runner, so bump the label when a newer image appears.
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -35,7 +35,7 @@ jobs:
 
       - name: Build packages
         working-directory: Packages/AppModules
-        run: swift build -Xswiftc -warnings-as-errors
+        run: swift build -Xswiftc -warnings-as-errors --build-tests
 
       - name: Test packages
         working-directory: Packages/AppModules
@@ -49,7 +49,7 @@ jobs:
   sanitizers:
     # Thread and address sanitizer runs of the package tests, one job each.
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -69,3 +69,35 @@ jobs:
       - name: Test (${{ matrix.sanitizer }} sanitizer)
         working-directory: Packages/AppModules
         run: swift test --sanitize=${{ matrix.sanitizer }}
+
+  performance-report:
+    # A report only: it runs the 4K downscale benchmark in a Release build, prints the numbers and uploads them as
+    # a JSON artifact. It enforces nothing. The stored baselines are for the release Mac (keyed by hardware model),
+    # and hosted runners vary too much to hold a 20 % rule; the check is done locally before each release
+    # (docs/RELEASING.md).
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -z "$newest" ]]; then
+            echo "No versioned Xcode found under /Applications" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+
+      - name: Measure
+        working-directory: Packages/AppModules
+        env:
+          RUN_PERF_TESTS: "1"
+          PERF_REPORT_PATH: ${{ runner.temp }}/perf-report.json
+        run: swift test -c release -Xswiftc -enable-testing --filter PerformanceTests
+
+      - name: Upload the numbers
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: ${{ runner.temp }}/perf-report.json

@@ -30,7 +30,7 @@ import Testing
         return try await FixtureFactory.makeClip(options)
     }
 
-    @Test(.timeLimit(.minutes(2)), arguments: [AVFileType.mp4, .m4v])
+    @Test(.timeLimit(.minutes(5)), arguments: [AVFileType.mp4, .m4v])
     func quickTimeOutputOfAnMPEG4SourceLosesExactlyThePredictedItems(_ fileType: AVFileType) async throws {
         let source = try await clip(fileType)
         defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
@@ -45,7 +45,7 @@ import Testing
         #expect(Set(report.lost.map(\.key)) == Set(predicted.map(\.key)))
     }
 
-    @Test(.timeLimit(.minutes(2))) func sameContainerOutputLosesNothing() async throws {
+    @Test(.timeLimit(.minutes(5))) func sameContainerOutputLosesNothing() async throws {
         let source = try await clip(.mp4)
         defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
         let inventory = try await MediaInspector().inventory(of: source)
@@ -57,7 +57,7 @@ import Testing
         #expect(report.lost.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func decisionSaysWhenAnMPEG4SourceFallsBackToQuickTime() async throws {
+    @Test(.timeLimit(.minutes(5))) func decisionSaysWhenAnMPEG4SourceFallsBackToQuickTime() async throws {
         // The M4V writer refuses timed metadata, so this is an MPEG-4 file with one, named .m4v.
         let written = try await clip(.mp4, timedMetadata: true)
         let m4v = written.deletingPathExtension().appendingPathExtension("m4v")
@@ -79,7 +79,7 @@ import Testing
                 == .init(pathExtension: "mov", fallsBackToQuickTime: false))
     }
 
-    @Test(.timeLimit(.minutes(2))) func isoUserDataItemsHaveReadableNames() async throws {
+    @Test(.timeLimit(.minutes(5))) func isoUserDataItemsHaveReadableNames() async throws {
         let source = try await clip(.mp4)
         defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
         let inventory = try await MediaInspector().inventory(of: source)

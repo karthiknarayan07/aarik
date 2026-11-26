@@ -52,6 +52,8 @@ public enum DownscaleError: Error, Equatable, Sendable {
     case sourceAlreadySmall
     case unsupportedSource(String)
     case encoderFailed(String)
+    /// Nothing moved for too long (`StallLimits`): the writer or encoder stopped responding.
+    case stalled
 }
 
 extension DownscaleError: LocalizedError {
@@ -61,6 +63,7 @@ extension DownscaleError: LocalizedError {
         case .sourceAlreadySmall: "The video is already small."
         case .unsupportedSource: "This kind of video can't be converted yet."
         case .encoderFailed: "The video couldn't be converted."
+        case .stalled: "The encoder stopped responding."
         }
     }
 }

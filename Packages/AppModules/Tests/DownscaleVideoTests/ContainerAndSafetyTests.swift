@@ -33,16 +33,17 @@ import Testing
                 let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
                 try FileManager.default.moveItem(at: url, to: trashed)
                 return trashed
-            }, inspect: inspect)
+            }, inspect: inspect,
+            diskSpace: RunnerFixture.roomy)
     }
 
-    @Test(.timeLimit(.minutes(2))) func mp4SourceGivesARealMP4WithAnMP4Name() async throws {
+    @Test(.timeLimit(.minutes(5))) func mp4SourceGivesARealMP4WithAnMP4Name() async throws {
         let source = try await RunnerFixture.source(name: "x.mp4", fileType: .mp4)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -53,7 +54,7 @@ import Testing
         #expect(outcome.isVerified)
     }
 
-    @Test(.timeLimit(.minutes(2))) func replacingAnMP4KeepsItsName() async throws {
+    @Test(.timeLimit(.minutes(5))) func replacingAnMP4KeepsItsName() async throws {
         let source = try await RunnerFixture.source(name: "x.mp4", fileType: .mp4)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -73,7 +74,7 @@ import Testing
         #expect(["mp42", "isom"].contains(try RunnerFixture.majorBrand(source)))
     }
 
-    @Test(.timeLimit(.minutes(2))) func trackTheSourceContainerCantCarryMakesAQuickTimeOutput() async throws {
+    @Test(.timeLimit(.minutes(5))) func trackTheSourceContainerCantCarryMakesAQuickTimeOutput() async throws {
         // An MPEG-4 file named .m4v with a timed metadata track, which the M4V container refuses.
         let source = try await RunnerFixture.source(name: "x.m4v", fileType: .mp4, timedMetadata: true)
         let directory = source.deletingLastPathComponent()
@@ -108,7 +109,7 @@ import Testing
         #expect(DownscaleRunner.replacementURL(for: mp4, output: URL(filePath: "/a/IMG_1 (1080p).mp4")) == mp4)
     }
 
-    @Test(.timeLimit(.minutes(2))) func sloMoKeepsItsFrameRateWhateverTheCap() async throws {
+    @Test(.timeLimit(.minutes(5))) func sloMoKeepsItsFrameRateWhateverTheCap() async throws {
         var options = ClipOptions()
         options.width = 1280
         options.height = 720
@@ -120,7 +121,7 @@ import Testing
         let custom = DownscaleSpec(targetShortSide: 360, averageBitRate: 500_000, maxFrameRate: 30)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -133,7 +134,7 @@ import Testing
         #expect(outcome.isVerified)
     }
 
-    @Test(.timeLimit(.minutes(2))) func originalReplacedDuringConversionIsNotTrashed() async throws {
+    @Test(.timeLimit(.minutes(5))) func originalReplacedDuringConversionIsNotTrashed() async throws {
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -158,7 +159,7 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: outcome.output.path))
     }
 
-    @Test(.timeLimit(.minutes(2))) func originalGrownDuringConversionIsNotTrashed() async throws {
+    @Test(.timeLimit(.minutes(5))) func originalGrownDuringConversionIsNotTrashed() async throws {
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -183,7 +184,7 @@ import Testing
         #expect(outcome.warnings == ["The original changed during conversion"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancelledAfterTheOutputIsWrittenRemovesItAndKeepsTheOriginal() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancelledAfterTheOutputIsWrittenRemovesItAndKeepsTheOriginal() async throws {
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
