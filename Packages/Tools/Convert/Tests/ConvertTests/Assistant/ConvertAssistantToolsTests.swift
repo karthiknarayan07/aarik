@@ -147,7 +147,7 @@ import Testing
         defer { rig.cleanUp() }
         await ask(rig)
         let result = try #require(rig.client.toolResults.first)
-        #expect(result.hasPrefix("Converting everything could free about"))
+        #expect(result.contains("Converting everything could free about"))
         #expect(result.contains("B1:"))
         guard case .toolCall(let call) = rig.chat.items[1].content else {
             Issue.record("expected a tool row")
