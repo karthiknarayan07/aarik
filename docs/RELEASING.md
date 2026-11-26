@@ -54,6 +54,27 @@ Do these once, on your own Mac. The private key never goes into the repository, 
    deployment ▸ Deploy from a branch ▸ `gh-pages` / `(root)`. Check that
    `https://<owner>.github.io/<repo>/appcast.xml` opens.
 
+## Before each release: performance checks (on the release Mac)
+
+CI only reports performance numbers (the `performance-report` job uploads them); it enforces nothing. The 20 % rule is
+checked here, on the Mac the baselines were recorded on, with nothing else running:
+
+1. Engine benchmark, Release build, against the stored baseline (fails on more than 20 % worse time or memory):
+
+   ```sh
+   cd Packages/AppModules
+   RUN_PERF_TESTS=1 swift test -c release -Xswiftc -enable-testing --filter PerformanceTests
+   ```
+
+   After a deliberate change that moves the numbers, record the new baseline the same way with
+   `RECORD_PERF_BASELINE=1` added, and commit `Tests/PerformanceTests/Baselines/baselines.json`.
+2. Launch time: run `LaunchPerformanceTests` (UI tests, Release; see the file's header) and compare with the baseline
+   (set "Max % Regression" to 20).
+3. By hand, Release build: cold launch under 1 s, idle CPU under 1 %, idle memory under 150 MB, no hang over 250 ms
+   in the Hangs instrument during a 20-video batch, and a 50-video batch with memory flat (under 10 % growth after
+   warm-up) and every original intact on each failure.
+4. ASan and TSan CI jobs are green.
+
 ## Each release
 
 1. Update `CHANGELOG.md`: give the version a section `## [X.Y.Z] - YYYY-MM-DD`.

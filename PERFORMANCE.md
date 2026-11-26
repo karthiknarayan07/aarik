@@ -67,20 +67,27 @@ The names are stable; `PipelineStage` is the list and a test pins it. Adding a s
 ## Performance tests
 
 - `Packages/AppModules/Tests/PerformanceTests` (XCTest, because `measure` and the metrics are XCTest's):
-  - `DownscalePerformanceTests` downscales a **generated** 3840x2160 HLG clip (two seconds, no audio; never personal
+  - `DownscalePerformanceTests` downscales a **generated** 3840x2160 HLG clip (two seconds, with audio; never personal
     media) five times under `measure(metrics: [XCTClockMetric(), XCTMemoryMetric()])`, and compares the fastest time
-    and the median rise in physical memory with the stored baseline. More than 20 % worse fails.
+    and the median rise in physical memory with the stored baseline. More than 20 % worse fails; memory also gets
+    10 MB of room, since it is sampled every 10 ms on a machine doing other things.
   - It runs only with `RUN_PERF_TESTS=1` (it skips itself otherwise): it takes about 5 to 15 s, but timings need a
-    quiet machine and would flake in a shared everyday run. CI has its own `performance` job that sets it.
+    quiet machine and would flake in a shared everyday run.
   - **Baselines are a JSON file** (`PerformanceTests/Baselines/baselines.json`), keyed by hardware model and core
     count. SwiftPM can't store XCTest baselines (`swift test` neither reads nor writes `xcbaseline` files, which
     belong to an Xcode project), so the 20 % rule is applied in the test. A machine with no entry measures, prints
-    the numbers and passes. Record or update one on a quiet Mac with
-    `RUN_PERF_TESTS=1 RECORD_PERF_BASELINE=1 swift test --filter DownscalePerformanceTests` and commit the file.
-    `BaselineGuardTests` covers the rule itself and runs every time.
-- Launch time: `App/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines) belongs in
-  the `AppUITests` target of the `ui-tests` branch; the target is not on this branch, so it doesn't build yet. Running
-  UI tests needs automation permission.
+    the numbers and passes. `BaselineGuardTests` covers the rule itself and runs every time.
+  - **Release build.** The committed baseline was recorded from a Release build, and the benchmark runs the same way:
+    `RUN_PERF_TESTS=1 swift test -c release -Xswiftc -enable-testing --filter PerformanceTests` (`-enable-testing`
+    because the other test targets use `@testable`; with the filter only this target runs). Record or update the
+    baseline on a quiet Mac by adding `RECORD_PERF_BASELINE=1`, and commit the file. A plain Debug `swift test` run
+    also works but is slower to build and its numbers are not comparable.
+  - **Who enforces it.** The 20 % rule is enforced locally, on the release Mac, as a step of the release checklist
+    (`docs/RELEASING.md`). The CI job `performance-report` only runs the benchmark in Release, prints the numbers
+    and uploads them as a JSON artifact (`PERF_REPORT_PATH`); hosted runners are too varied to hold a baseline.
+- Launch time: `App/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines; set "Max %
+  Regression" to 20, Xcode's default is 10) belongs in the `AppUITests` target of the `ui-tests` branch; the target is
+  not on this branch, so it doesn't build yet. Running UI tests needs automation permission.
 
 ## Rules of thumb for changes
 

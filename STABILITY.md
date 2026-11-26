@@ -69,11 +69,14 @@ Time Machine exclusion, for one, is not); "planned" items (sleep and thermal han
 - **Disk space preflight** (`AppCore/Safety/DiskSpace.swift`, B1). Before a job writes anything, every volume it
   will write to must have `volumeAvailableCapacityForImportantUsage` of at least what goes there plus a 1 GB margin
   (`DiskSpaceCheck.margin`). Needs on one volume add up.
-  - A file job: the planner's estimated output on the output folder's volume (`DownscaleRunner.convert`, after the
-    plan and before the encoder starts).
+  - A file job: the planner's estimated output on the output folder's volume, plus, for a Replace with an originals
+    backup, the original on the backup volume (`DownscaleRunner.convert`, after the plan and before the encoder
+    starts).
   - A Photos job, before the download and before the job's folder is created: the video as Photos has it, plus the
     planner's estimate for the converted copy, on the Work volume (the converted copy goes to a chosen folder's
-    volume instead when the destination is a folder); with a Replace and an originals backup, the original on the
+    volume instead when the destination is a folder; saving to Photos also copies it into the library, so the
+    converted size counts on the volume of `~/Pictures` too, and again with the real size right before the save);
+    with a Replace and an originals backup, the original on the
     backup volume, and, for an edited video, a second copy of the original on the Work volume
     (`PhotosDownscaleRunner.checkFreeSpaceBeforeDownload`). Skipped when Photos doesn't report the video's size. Once
     the video is read, the exact estimate is checked again as for a file.

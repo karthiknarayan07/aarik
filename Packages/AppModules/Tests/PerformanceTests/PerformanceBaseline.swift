@@ -23,6 +23,10 @@ struct PerformanceBaselines: Codable, Equatable {
     /// A change this much worse than the baseline fails (the plan's 20 %).
     static let tolerance = 0.20
 
+    /// Memory is a footprint sampled every 10 ms on a machine doing other things, so it also gets this much room
+    /// before 20 % counts (a 45 MB rise would otherwise fail on a 9 MB wobble).
+    static let memorySlackMB = 10.0
+
     enum Verdict: Equatable {
         case noBaseline
         case withinTolerance
@@ -38,7 +42,7 @@ struct PerformanceBaselines: Codable, Equatable {
                 "time \(format(measured.seconds)) s against a baseline of \(format(baseline.seconds)) s "
                     + "(\(percent(measured.seconds, over: baseline.seconds)) worse)")
         }
-        if measured.peakMemoryMB > baseline.peakMemoryMB * (1 + tolerance) {
+        if measured.peakMemoryMB > baseline.peakMemoryMB * (1 + tolerance) + memorySlackMB {
             problems.append(
                 "memory \(format(measured.peakMemoryMB)) MB against a baseline of \(format(baseline.peakMemoryMB)) MB "
                     + "(\(percent(measured.peakMemoryMB, over: baseline.peakMemoryMB)) worse)")
@@ -70,8 +74,8 @@ struct PerformanceBaselines: Codable, Equatable {
 
     func save(to url: URL = fileURL) throws {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(self).write(to: url, options: .atomic)
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        try (encoder.encode(self) + Data("\n".utf8)).write(to: url, options: .atomic)
     }
 
     private static func format(_ value: Double) -> String { String(format: "%.2f", value) }

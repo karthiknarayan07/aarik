@@ -7,8 +7,9 @@ import XCTest
 /// folder there).
 ///
 /// Baselines: an Xcode project keeps XCTest baselines (the metric's "Set Baseline" in the Report navigator, stored
-/// in the project's `xcshareddata/xcbaselines`), and a run fails when it is more than 20 % worse than the baseline
-/// set for this Mac. The budget is a cold launch under 1 s in a **Release** build (`PERFORMANCE.md`); a Debug build
+/// in the project's `xcshareddata/xcbaselines`), and a run fails when it is worse than the baseline set for this Mac by
+/// more than the metric's "Max % Regression". Xcode's default for that is 10 %: set it to 20 when setting the
+/// baseline, to match the plan's 20 % rule. The budget is a cold launch under 1 s in a **Release** build (`PERFORMANCE.md`); a Debug build
 /// is slower and tells nothing, so set the baseline from a Release run:
 ///
 ///     RUN_PERF_TESTS=1 xcodebuild test -project App/App.xcodeproj -scheme App -configuration Release \

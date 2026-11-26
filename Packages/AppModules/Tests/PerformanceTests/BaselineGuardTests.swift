@@ -14,6 +14,11 @@ final class BaselineGuardTests: XCTestCase {
         XCTAssertEqual(PerformanceBaselines.verdict(measured: measured, baseline: baseline), .withinTolerance)
     }
 
+    func testMemoryWithinTheSlackPasses() {
+        let measured = PerformanceSample(seconds: 2.0, peakMemoryMB: 489)
+        XCTAssertEqual(PerformanceBaselines.verdict(measured: measured, baseline: baseline), .withinTolerance)
+    }
+
     func testSlowerByMoreThanTwentyPercentFails() {
         let measured = PerformanceSample(seconds: 2.41, peakMemoryMB: 400)
         guard case .regressed(let problems) = PerformanceBaselines.verdict(measured: measured, baseline: baseline)
@@ -22,12 +27,12 @@ final class BaselineGuardTests: XCTestCase {
         XCTAssertTrue(problems[0].hasPrefix("time 2.41 s against a baseline of 2.00 s"), problems[0])
     }
 
-    func testMoreMemoryByMoreThanTwentyPercentFails() {
-        let measured = PerformanceSample(seconds: 2.0, peakMemoryMB: 481)
+    func testMoreMemoryByMoreThanTwentyPercentPlusSlackFails() {
+        let measured = PerformanceSample(seconds: 2.0, peakMemoryMB: 491)
         guard case .regressed(let problems) = PerformanceBaselines.verdict(measured: measured, baseline: baseline)
         else { return XCTFail("expected a regression") }
         XCTAssertEqual(problems.count, 1)
-        XCTAssertTrue(problems[0].hasPrefix("memory 481.00 MB"), problems[0])
+        XCTAssertTrue(problems[0].hasPrefix("memory 491.00 MB"), problems[0])
     }
 
     func testBothWorseReportsBoth() {

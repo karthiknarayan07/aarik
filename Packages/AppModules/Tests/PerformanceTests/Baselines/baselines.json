@@ -1,9 +1,9 @@
 {
   "machines" : {
-    "MacBookPro18,3\/8" : {
+    "MacBookPro18,3/8" : {
       "downscale4K" : {
-        "peakMemoryMB" : 45.260956,
-        "seconds" : 0.430728125
+        "peakMemoryMB" : 51.650667999999996,
+        "seconds" : 0.429718209
       }
     }
   }

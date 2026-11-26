@@ -17,8 +17,7 @@ final class DownscalePerformanceTests: XCTestCase {
     private var enabled: Bool { ProcessInfo.processInfo.environment["RUN_PERF_TESTS"] == "1" }
     private var recording: Bool { ProcessInfo.processInfo.environment["RECORD_PERF_BASELINE"] == "1" }
 
-    /// 3840x2160 HLG HEVC at 30 fps, two seconds, at a phone-like bit rate. Video only: the fixture writer can stall
-    /// interleaving audio on a busy machine, and audio is passed through untouched anyway.
+    /// 3840x2160 HLG HEVC at 30 fps, two seconds, at a phone-like bit rate, with audio.
     private func makeSource() throws -> URL {
         try Self.blocking {
             var options = ClipOptions()
@@ -26,7 +25,6 @@ final class DownscalePerformanceTests: XCTestCase {
             options.height = 2160
             options.fps = 30
             options.seconds = 2
-            options.includeAudio = false
             options.videoBitRate = 40_000_000
             return try await FixtureFactory.makeClip(options)
         }
@@ -76,6 +74,13 @@ final class DownscalePerformanceTests: XCTestCase {
         let summary =
             "\(Self.benchmark) on \(machine): \(String(format: "%.2f", measured.seconds)) s, "
             + "\(String(format: "%.0f", measured.peakMemoryMB)) MB"
+
+        // `PERF_REPORT_PATH`: also write what was measured as JSON, for CI to upload.
+        if let path = ProcessInfo.processInfo.environment["PERF_REPORT_PATH"] {
+            var report = PerformanceBaselines()
+            report.record(measured, as: Self.benchmark, machine: machine)
+            try report.save(to: URL(filePath: path))
+        }
 
         if recording {
             stored.record(measured, as: Self.benchmark, machine: machine)
