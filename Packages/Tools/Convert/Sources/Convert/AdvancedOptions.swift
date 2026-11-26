@@ -97,7 +97,7 @@ extension VideoCodec {
     }
 }
 
-/// The Save to choice in the inspector.
+/// The Save To choice in the inspector.
 public struct SaveLocation: Sendable, Equatable {
     public enum Choice: String, CaseIterable, Sendable, Identifiable {
         case nextToOriginal, folder, replace, documents

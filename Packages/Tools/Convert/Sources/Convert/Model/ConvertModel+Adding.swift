@@ -94,7 +94,7 @@ extension ConvertModel {
     }
 
     /// Re-checks which files are still there, then adds one job per available selected video with its preset
-    /// (its own, else the header's), the Advanced spec and the Save to choice. Videos that would lose metadata (in the conversion, or because an
+    /// (its own, else the header's), the Advanced spec and the Save To choice. Videos that would lose metadata (in the conversion, or because an
     /// MPEG-4 file has to be saved as QuickTime) are listed for the user first (`lossReview`); the rest go
     /// straight in.
     public func addSelectionToQueue(kind: ConvertJobKind = .shrink) {

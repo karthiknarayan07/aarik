@@ -3,6 +3,7 @@ import Foundation
 import MediaEngine
 import MediaTestSupport
 import PhotosLibrary
+import Synchronization
 import Testing
 
 @testable import Convert
@@ -435,7 +436,7 @@ import Testing
         var firstIterator = firstStarted.makeAsyncIterator()
         let heldOnce = Mutex(false)
         rig.store.beforeInputStep = { step in
-            guard step == 0 else { return }
+            guard step == 1 else { return }
             let shouldHold = heldOnce.withLock { held in
                 guard !held else { return false }
                 held = true
@@ -450,7 +451,6 @@ import Testing
         let job1 = try rig.job()
         let job2 = try rig.job(id: secondID)
         let log1 = RunLog()
-        let log2 = RunLog()
 
         let task1 = Task { try await log1.run(runner, job1) }
         await firstIterator.next()
