@@ -1,46 +1,54 @@
-# Continuation prompt: Plan 10 Phase 3 & polish (paste into a new agent)
+# Continuation prompt: Aarik final test pass and polish (paste into a new agent)
 
 You are continuing work on Aarik. Your working directory is `/Users/karthiknarayan/Developer/personal/aarik`, on the integration branch `plan-2-app-shell`, which tracks `origin/plan-2-app-shell`.
 
 ## Read first
-- `AGENTS.md`, `STABILITY.md`, `PERFORMANCE.md`.
-- Project memory in `~/.claude/projects/-Users-karthiknarayan-Developer-personal-aarik/memory/MEMORY.md`:
-  - Max **3 parallel subagents** at a time (hard owner rule to preserve quota).
-  - Subagents implement/fix/test in isolated workspaces (`share` / `worktree`); coordinator plans, briefs, merges, and pushes.
-  - Native first on both platforms; brand-neutral code (never put `aarik` in Swift/plist/pbxproj/schemes).
-  - Push `plan-2-app-shell` after every commit or merge. Never push to or merge into `main`.
-  - Use the question tool (`ask_question` / `AskUserQuestion`) for owner questions.
-- `docs/superpowers/plans/2026-11-26-plan-10-ios-and-convert.md` and `docs/superpowers/specs/2026-11-26-ios-and-convert-design.md`.
-- `docs/adr/0005-compression-presets.md` and `docs/adr/0006-tool-core-services-and-scenes.md`.
-- Ledger: `.superpowers/sdd/2026-11-26-plan-10-ios-and-convert/progress.md`.
+- `AGENTS.md`.
+- The memory index `~/.claude/projects/-Users-karthiknarayan-Developer-personal-aarik/memory/MEMORY.md`. It covers:
+  - orchestrating Sonnet subagents
+  - native first, and the design direction
+  - token-lean working
+  - pushing after every commit
+  - asking via the question tool
+- The ledger `.superpowers/sdd/2026-11-26-plan-10-ios-and-convert/progress.md`. It holds every ruling and owner decision.
+- `docs/superpowers/plans/2026-11-26-plan-10-ios-and-convert.md`, `docs/adr/0006-tool-core-services-and-scenes.md` (amended for the iOS root tabs), and `docs/RELEASING.md` (the real-device checklist).
 
-## Where things stand (2026-11-26)
-- **Merged and pushed** to `plan-2-app-shell`:
-  - **Base**: Task 1 (iOS skeleton), Tasks 2+3 (`Apps/` layout, `App.xcworkspace`, `Packages/Core`, `Packages/Tools/Convert`, Convert rename), `scripts/verify.sh` + CI iOS job, Task 3b (`Tool`, `AppServices`, `ConvertModel`, `ConvertMacScene`, `ConvertIOSScene` stub, `MacShell`), Task 4 (`.iOS(.v26)`, `Platform` seams & iOS/fake adapters, Low Power Mode 1-slot rule, `#if os(macOS)` on `Photos.sqlite` fps).
-  - **Phase 3 (completed & merged)**:
-    - **Task 5**: Convert video compression (`.compress(CompressPreset)`, ADR 0005 Accepted, Mac "Compress…" UI, `ShrinkVideosIntent` `mode`, compression perf test).
-    - **Task 6**: iOS app shell & library (`NavigationSplitView` adaptive across iPhone/iPad/Duo, Photos browser, Files -> Documents, Queue/Completed/Inspector/Settings, Apple Intelligence).
-    - **Task 10**: iOS Replace originals (`IOSPendingDeletionBar`, foreground-only batch Recently Deleted flow, `ConvertModelOriginalsTests`).
-  - Note: after merging Tasks 5+6+10, verify `App` (macOS) + `App-iOS` + `Convert` `-warnings-as-errors` build and run `swift test` on `Core`/`Convert`.
-- **Paused with WIP commits saved on branches** (no active worktrees; resume in fresh `share`/`worktree` checkouts of each branch, max 3 parallel):
-  - `plan-10/task-7` (`ca2ecfd`): iOS background running (`BGContinuedProcessingTask`) & Live Activity — code written, needs `plan-2-app-shell` merge + verification (`AppCoreTests` + `App-iOS` build).
-  - `plan-10/task-8` (`24c8ad1`): iOS Share extension & foreground App Intent (`StagedInputs`) — code + tests written, `lint`/`hygiene` passed, needs `plan-2-app-shell` merge + `AppCoreTests` + `App-iOS` build.
-  - `plan-10/task-9` (`2a9e2e9`): iOS Home Screen widget & Control Center control (`WidgetSnapshotStore`, `SharedPauseFlagStore`) — code + `AppCoreTests` written, `App-iOS` build & `lint`/`hygiene` passed, needs `plan-2-app-shell` merge + post-format `AppCoreTests` verify.
-  - `plan-10/task-12` (`38cb744`): Mac copy & polish pass (Title Case, Convert docs, Plan 9/6/3 parked Minors) — edits + `lint`/`hygiene` done, needs `plan-2-app-shell` merge (especially after Task 5 Compression merges!) + Mac build/tests.
-- **Not started yet:**
-  - **Test speed optimization**: `MediaEngineTests` on iOS Simulator hit Swift Testing's 300s timeout (software HEVC encoding in `FixtureFactory.makeClip` across 35+ clips). Fix by caching identical read-only fixtures in `FixtureFactory` (cloning into fresh temp dirs) and gating heavy multi-pass software-encode tests on Simulator via `EncoderEnvironment.isRepresentative` (keeping smoke encodes + all non-encoder tests active).
-  - **Task 11**: iOS XCUITests (iPhone 17 Pro, iPad Pro 11-inch, iPhone Duo `AD2B36CE-232D-4240-9D6C-EFBA6367C0D3` by UDID), iOS performance tests/baseline, Instruments docs in `PERFORMANCE.md`, CI iOS UI tests.
-  - **Base gate final run**: `scripts/verify.sh --repeat 2` (two consecutive green runs).
-  - **Task 13**: Release gate checklist in `docs/RELEASING.md` for both apps.
-- **Device signing note:**
-  - `Karthik’s iPhone` (`00008120-00145D840AFBC01E`) uses Personal Team `95J795334T` (no App Group entitlement allowed on free teams). For local device preview installs, build with `DEVELOPMENT_TEAM=95J795334T CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" CODE_SIGN_ENTITLEMENTS=""`. Also `Config/iOS.xcconfig` currently sets `CODE_SIGN_STYLE = Manual` / `DEVELOPMENT_TEAM =` *after* `#include? "Signing.local.xcconfig"`, so move `#include? "Signing.local.xcconfig"` below the defaults if fixing local override ergonomics.
+## Owner rules
+- Run at most 3 parallel subagents.
+- Product code comes first. The tests are a final separate pass, which is now under way.
+- Stop gracefully at about 70–80% of the 5-hour usage window, and update this prompt when you do.
+- Push `plan-2-app-shell` after every merge. Never push to or merge into `main`.
+- Code stays brand-neutral. Never touch the owner's real Photos library. Never commit personal media or `docs/references/KeepFeather/`.
+- Focus on iPhone. iPad and Duo are deferred until there are more tools.
 
-## Next steps (strictly max 3 parallel subagents)
-1. Resume paused branches in batches of **at most 3**: Batch A = `plan-10/task-7`, `plan-10/task-8`, `plan-10/task-9` (each merges `plan-2-app-shell`, wires into `IOSShell`/`ConvertIOSScene` if needed, verifies fast targeted tests + `App-iOS` build + `lint`/`hygiene`, commits). Merge & push each.
-2. Batch B (<=3): `plan-10/task-12` (merge `plan-2-app-shell`, verify Mac tests/build) + **Test speed optimization** (`FixtureFactory` cache + Simulator test fast-track). Merge & push.
-3. Run **Task 11** (iOS UI tests & performance baseline) and **Task 13** (Release checklist in `docs/RELEASING.md`), then pass `scripts/verify.sh --repeat 2` twice green and push `plan-2-app-shell`.
+## Merged and pushed (2026-11-26)
+- Plan 10 Tasks 1–13: the Apps/ layout, Core and Convert packages, compression, the iOS app, background running with a Live Activity, share sheet and intent, widget and Control, Replace originals, the Mac polish pass, the test speed fix, iPhone UI tests and the release checklist.
+- Mac redesign rounds 1 and 2:
+  - Overview built on Swift Charts, backed by a SwiftData `SavingsStatsCache`.
+  - Stable window size: the cause was pages without toolbar items, which made the title bar shorter.
+  - Queue, Completed, Library with a storage bar, inspector, compare slider, menu bar popover and motion.
+- iPhone redesign:
+  - Native root tabs: Home, Browse (tool cards), Ask (hidden without Apple Intelligence) and Search.
+  - Convert opens as a pushed stack: Photos, Files, Queue, Completed.
+  - Select mode, onboarding, haptics and zoom transitions.
+- iOS hand-off routing: share and intent hand-offs open Browse, then Convert, then Queue.
+- The on-device AI Assistant: an Ask tab with streaming replies, tool calls, confirmation cards before any action, and SwiftData history. DEBUG `-AssistantDemo` runs it on a fake model.
+- **Confirmed:** the real Apple Intelligence model works in the iOS Simulator. On iPhone Air `F38FA01E-D51C-4314-8A60-6F63B8DBBD27` (iOS 27.2), the Ask tab appears about a minute after boot.
 
-## Rules that carry over
-- Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- Push `plan-2-app-shell` after every commit/merge. Never push to or merge into `main`.
-- Never delete or overwrite user files or touch the owner's real Photos library.
+## In flight when this prompt was written (check their branches; resume or redo)
+- `plan-10/final-ui`: make all iPhone UI tests pass on iPhone 17 (`D1013D0D-80AF-4106-A440-2CC70A3B8B0E`), add new tests, and take final screenshots in `.superpowers/.../final-shots/`.
+- `plan-10/final-unit`: run `scripts/verify.sh`, add missing unit tests (the assistant tools, Reduce Motion, the hand-off route, the zero-value chart cache, and the `#expect` main-actor warnings), then get `verify.sh --repeat 2` green twice.
+- `plan-10/real-ai-smoke`: `RealAssistantSmokeTests`, gated by `RUN_REAL_AI=1`. It drives the real model on iPhone Air: streaming, a tool-call row, and Cancel on the confirmation card queueing nothing.
+
+## Known gaps
+- **Real device:** the `docs/RELEASING.md` checklist (background grant, Live Activity, battery and heat, the share-sheet notification, the widget, Replace originals on test assets).
+- **Mac, by eye:** the Overview chart axis labels, the toolbar, and sidebar colours on a selected row. Mac screenshots can't be captured while the screen is locked; use the `ImageRenderer` tests (env `APP_MAC_SHOTS`).
+- **Mac Convert tests:** the compress4K fixture tests stall under heavy load. Rerun them on a quiet Mac.
+- **Queue throughput chart:** it is bucketed by the day each video was added, because jobs have no finish time.
+- **iPad and Duo:** deferred. The scratch simulators `nav-phone` and `nav-pad` can be deleted.
+
+## Next
+1. Merge the three final-pass branches once they are green, then push.
+2. Run `scripts/verify.sh --repeat 2` on `plan-2-app-shell`, then push.
+3. Send the owner the final iPhone and Mac screenshots.
+4. Offer the finishing options. Merging to `main` is the owner's call.
