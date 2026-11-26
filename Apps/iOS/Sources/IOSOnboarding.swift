@@ -43,14 +43,18 @@ struct IOSOnboardingView: View {
                         text: "There are no accounts, analytics or ads. Your photos and videos are never shared."),
                     Point(
                         symbol: "checkmark.seal.fill", heading: "Originals Stay Safe",
-                        text: "Every new copy is checked before anything changes. You choose what happens to the original."),
+                        text:
+                            "Every new copy is checked before anything changes. You choose what happens to the original."
+                    ),
                 ], button: "Continue"),
             Page(
                 title: "Photos Access", systemImage: "photo.on.rectangle.angled.fill", tint: .pink,
                 points: [
                     Point(
                         symbol: "list.bullet.rectangle.fill", heading: "See What Takes Space",
-                        text: "\(app) shows what is in your library and how much space it uses, without downloading anything."),
+                        text:
+                            "\(app) shows what is in your library and how much space it uses, without downloading anything."
+                    ),
                     Point(
                         symbol: "hand.raised.fill", heading: "You Stay in Control",
                         text: "Nothing in Photos changes until you say so. You can share only some items."),
