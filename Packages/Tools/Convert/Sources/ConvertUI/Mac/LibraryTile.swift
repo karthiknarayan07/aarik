@@ -12,13 +12,15 @@ struct LibraryTile: View {
     let thumbnails: ThumbnailSource
     /// A preset chosen in the inspector for this video alone, when it isn't the header's.
     var presetOverride: String?
+    /// "−58%": what converting would save, from `LibraryInsight.savingsBadge`.
+    var savingsBadge: String?
     @State private var image: CGImage?
 
     var body: some View {
         MediaTile(
             image: image, badges: MediaBadge.ordered(item.badges).map(\.tileLabel),
             sizeLabel: ByteFormat.string(item.byteSize), isAvailable: item.isAvailable, state: state,
-            note: presetOverride
+            note: presetOverride, savingsBadge: savingsBadge
         )
         // Keyed on the whole item: a re-read in place (same path, new file) or a move loads the new poster.
         .task(id: item) {
@@ -28,8 +30,11 @@ struct LibraryTile: View {
         .help(item.name)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            [ItemDescription.accessibilityLabel(for: item), presetOverride.map { "\($0) preset" }]
-                .compactMap { $0 }.joined(separator: ", "))
+            [
+                ItemDescription.accessibilityLabel(for: item), presetOverride.map { "\($0) preset" },
+                savingsBadge.map { "could save \($0.dropFirst())" },
+            ]
+            .compactMap { $0 }.joined(separator: ", "))
     }
 }
 

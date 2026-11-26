@@ -30,6 +30,12 @@
                             ItemSummaryHeader(item: items[0], thumbnails: model.thumbnailSource)
                         }
                     }
+                    if let prediction = LibraryInsight.prediction(for: items, preset: model.effectivePreset(for:)) {
+                        Section {
+                            PredictedSavingsGauge(
+                                prediction: prediction, presetName: model.selectionPreset?.displayName)
+                        }
+                    }
                     ConvertInspector(
                         sources: items.map(model.inspectorSource(for:)), preset: $model.selectionPreset,
                         advanced: $model.advanced,
@@ -63,18 +69,8 @@
                 Text(ItemDescription.details(item))
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                if !item.badges.isEmpty {
-                    HStack(spacing: 4) {
-                        ForEach(MediaBadge.ordered(item.badges), id: \.self) { badge in
-                            Text(badge.displayName)
-                                .font(.caption)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(.quaternary, in: .capsule)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                }
+                let chips = LibraryInsight.chips(for: item)
+                if !chips.isEmpty { ChipRow(chips: chips) }
                 if !item.isAvailable {
                     StatusLabel(
                         "The file is missing or its drive isn't connected.", systemImage: "exclamationmark.circle",

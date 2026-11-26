@@ -1,4 +1,5 @@
 import AppCore
+import AppUI
 import AppKit
 import ConvertUI
 import QuickRunService
@@ -11,6 +12,7 @@ struct MenuBarPanel: View {
     let shell: MacShell
     let close: () -> Void
     @State private var isDropTargeted = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var runningJobs: [(job: Job, progress: Double)] {
         shell.services.jobs.compactMap { job in
@@ -19,55 +21,66 @@ struct MenuBarPanel: View {
         }
     }
 
-    private var waitingCount: Int {
-        shell.services.jobs.count {
-            if case .queued = $0.state { true } else { false }
-        }
+    private var modules: MenuBarModules {
+        MenuBarModules(activity: shell.services.activity, isPaused: shell.services.queuePause.isPaused)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label {
-                Text(AppInfo.displayName)
-            } icon: {
-                let icon = StatusIconState(shell.services.activity, isPaused: shell.services.queuePause.isPaused)
+        let modules = modules
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            MenuBarStatusModules(
+                modules: modules, currentName: runningJobs.first?.job.displayName,
+                currentPhase: runningJobs.first?.job.phase, pauseText: shell.services.queuePause.statusText,
+                spokenStatus: spokenStatus, togglePause: { shell.services.toggleQueuePaused() })
+            runStatus
+            MenuBarDropModule(isTargeted: isDropTargeted, choose: chooseVideos)
+            Button {
+                close()
+                shell.showMainWindow()
+            } label: {
+                Label("Open Main Window", systemImage: "macwindow")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .controlModule()
+            .accessibilityHint("Shows the main window")
+        }
+        .padding(14)
+        .frame(width: 320, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(AppInfo.displayName) menu bar")
+        .onDrop(of: [.fileURL], delegate: PopoverDropDelegate(shell: shell, isTargeted: $isDropTargeted))
+    }
+
+    private var header: some View {
+        let icon = StatusIconState(shell.services.activity, isPaused: shell.services.queuePause.isPaused)
+        return Label {
+            Text(AppInfo.displayName)
+        } icon: {
+            Group {
                 if let value = icon.variableValue {
                     Image(systemName: icon.symbolName, variableValue: value)
                 } else {
                     Image(systemName: icon.symbolName)
                 }
             }
-            .font(.headline)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(AppInfo.displayName)
-            .accessibilityValue(
-                StatusIconState(shell.services.activity, isPaused: shell.services.queuePause.isPaused)
-                    .accessibilityStatus
-            )
-            .accessibilityAddTraits(.isHeader)
-            currentJob
-            runStatus
-            Divider()
-            HStack {
-                Button(shell.services.isQueuePaused ? "Resume Queue" : "Pause Queue") {
-                    shell.services.toggleQueuePaused()
-                }
-                .disabled(shell.services.activity.isIdle && !shell.services.isQueuePaused)
-                .accessibilityHint("Pauses or resumes converting videos in the queue")
-                Spacer()
-                Button("Open Main Window") {
-                    close()
-                    shell.showMainWindow()
-                }
-                .accessibilityHint("Shows the main window")
-            }
-            dropZone
+            // The symbol bounces once each time a video finishes.
+            .symbolEffect(
+                .bounce, options: .nonRepeating, value: reduceMotion ? 0 : shell.services.activity.completed)
         }
-        .padding(16)
-        .frame(width: 300, alignment: .leading)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(AppInfo.displayName) menu bar")
-        .onDrop(of: [.fileURL], delegate: PopoverDropDelegate(shell: shell, isTargeted: $isDropTargeted))
+        .font(.headline)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AppInfo.displayName)
+        .accessibilityValue(icon.accessibilityStatus)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private var spokenStatus: String {
+        let running = runningJobs
+        guard !running.isEmpty else { return idleText }
+        return running.map { "\($0.job.displayName), \(runningDetail($0.job, progress: $0.progress))" }
+            .joined(separator: "; ")
     }
 
     /// The runs started from the menu bar: what they are doing, then how they ended in one tally, with the skipped
@@ -97,39 +110,6 @@ struct MenuBarPanel: View {
         }
     }
 
-    @ViewBuilder private var currentJob: some View {
-        let running = runningJobs
-        if !running.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(running, id: \.job.id) { item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.job.displayName)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        ProgressView(value: item.progress)
-                            .accessibilityLabel("Converting \(item.job.displayName)")
-                        Text(runningDetail(item.job, progress: item.progress))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if waitingCount > 0 {
-                    Text(waitingCount == 1 ? "1 waiting" : "\(waitingCount) waiting")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let paused = shell.services.queuePause.statusText {
-                    Text(paused)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        } else {
-            Text(idleText)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     private func runningDetail(_ job: Job, progress: Double) -> String {
         let percent = "\(Int((progress * 100).rounded())) percent"
         return job.phase.map { "\($0) \(percent)" } ?? percent
@@ -141,25 +121,6 @@ struct MenuBarPanel: View {
         guard let paused = shell.services.queuePause.statusText else { return "\(waiting) waiting." }
         // The user's pause keeps its wording; an automatic one says why.
         return shell.services.isQueuePaused ? "Queue paused, \(waiting) waiting." : "\(paused), \(waiting) waiting."
-    }
-
-    private var dropZone: some View {
-        GroupBox {
-            VStack(spacing: 8) {
-                Label("Drop Videos Here", systemImage: "square.and.arrow.down")
-                    .foregroundStyle(isDropTargeted ? Color.accentColor : Color.primary)
-                Text("Or drop them on the menu bar icon. They are converted without opening the window.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("Choose Videos…", action: chooseVideos)
-                    .accessibilityHint("Opens a window to choose videos to convert, instead of dropping them here")
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Drop videos here to convert them")
-        .accessibilityHint("Drag video files onto this area, or use Choose Videos")
     }
 
     /// The keyboard and VoiceOver way to do what the drop does.
