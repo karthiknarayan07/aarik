@@ -142,7 +142,7 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             #expect(scene.hasInspector(for: .localFiles))
             #expect(scene.hasInspector(for: .mediaType(.k4)))
             #expect(scene.hasInspector(for: .photosVideos))
-            #expect(scene.hasInspector(on: .home))
+            #expect(!scene.hasInspector(on: .home))
             #expect(scene.hasInspector(on: .ask))
             #expect(scene.hasInspector(for: .queue))
             #expect(scene.hasInspector(for: .completed))

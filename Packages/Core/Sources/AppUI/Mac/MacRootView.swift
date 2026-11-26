@@ -55,20 +55,20 @@
 
         @ViewBuilder private var inspector: some View {
             switch module.selection {
-            case .home:
-                EmptyState(
-                    "No Selection", systemImage: "sidebar.trailing", message: "Select an item to see its details here.")
+            case .home: EmptyView()
             case .ask: MacChatHistoryView(chat: services.assistantChat)
             case .page(let destination): module.inspector(for: destination)
             case nil: module.inspector(for: nil)
             }
         }
 
-        /// The same items on every page, disabled where they don't apply: a toolbar that appears or disappears with the
-        /// page changes the title bar's height, and with it the window's frame.
+        /// The tool's items only on the tool's pages. New Chat and the inspector button stay on every page (disabled
+        /// where they don't apply), so the title bar always has items and its height, and with it the window's frame,
+        /// never changes with the page.
         @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-            let destination = module.selection?.destination
-            module.toolbar(for: destination)
+            if let destination = module.selection?.destination {
+                module.toolbar(for: destination)
+            }
             if showsAsk {
                 // ⌘N belongs to File → New Chat.
                 ToolbarItem(placement: .primaryAction) {
@@ -80,6 +80,7 @@
             ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItem(placement: .primaryAction) {
                 InspectorToggle(
+                    isEnabled: module.hasInspector(on: module.selection),
                     isPresented: Binding(
                         get: { module.isInspectorPresented }, set: { module.isInspectorPresented = $0 }))
             }
@@ -87,6 +88,7 @@
     }
 
     private struct InspectorToggle: View {
+        let isEnabled: Bool
         @Binding var isPresented: Bool
 
         var body: some View {
@@ -95,6 +97,7 @@
             } label: {
                 Label("Inspector", systemImage: "sidebar.trailing")
             }
+            .disabled(!isEnabled)
             .help(isPresented ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
             .accessibilityLabel(isPresented ? "Hide Inspector" : "Show Inspector")
         }

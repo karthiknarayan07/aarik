@@ -101,7 +101,7 @@ import Testing
 
         @Test func homeAndAskAlwaysHaveAnInspectorColumn() {
             let module = FakeModule()
-            #expect(module.hasInspector(on: .home))
+            #expect(!module.hasInspector(on: .home))
             #expect(module.hasInspector(on: .ask))
             #expect(module.hasInspector(on: .page(.first)))
             #expect(!module.hasInspector(on: .page(.second)))
