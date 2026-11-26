@@ -88,7 +88,8 @@ extension ConvertModel {
     // MARK: Subtitle
 
     /// "218 of 1,203 videos · 29.8 GB · 3 selected, 1.2 GB": the window subtitle for a library page.
-    public func subtitle(for browser: LibraryBrowser, total: Int, selected: [LibraryItem], activity: String?) -> String {
+    public func subtitle(for browser: LibraryBrowser, total: Int, selected: [LibraryItem], activity: String?) -> String
+    {
         let snapshot = browser.snapshot
         return LibrarySubtitle.text(
             shownCount: snapshot.items.count, shownBytes: snapshot.totalBytes, totalCount: total,

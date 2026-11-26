@@ -41,7 +41,7 @@ enum QuitConfirmation {
         alert.alertStyle = .warning
         alert.messageText = "Stop converting and quit?"
         alert.informativeText = QuitPolicy.explanation(
-            appName: AppModel.displayName, queueStartsAutomatically: queueStartsAutomatically,
+            appName: AppInfo.displayName, queueStartsAutomatically: queueStartsAutomatically,
             automaticPause: automaticPause)
         let stop = alert.addButton(withTitle: "Stop and Quit")
         stop.hasDestructiveAction = true

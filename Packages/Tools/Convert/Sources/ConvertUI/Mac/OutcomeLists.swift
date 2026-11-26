@@ -20,7 +20,7 @@ struct CompletedView: View {
                 List(selection: $selection) {
                     ForEach(rows, id: \.job.id) { row in
                         CompletedRow(
-                            job: row.job, outcome: row.outcome, thumbnails: model.thumbnails,
+                            job: row.job, outcome: row.outcome, thumbnails: model.thumbnailSource.cache,
                             assistant: model.assistant)
                     }
                 }
@@ -90,7 +90,7 @@ struct KeptAsIsView: View {
                 List(selection: $selection) {
                     ForEach(rows, id: \.job.id) { row in
                         ReasonRow(
-                            job: row.job, reason: row.reason, thumbnails: model.thumbnails,
+                            job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
                             assistant: model.assistant)
                     }
                 }
@@ -117,7 +117,7 @@ struct FailedView: View {
                 List(selection: $selection) {
                     ForEach(rows, id: \.job.id) { row in
                         ReasonRow(
-                            job: row.job, reason: row.reason, thumbnails: model.thumbnails,
+                            job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
                             assistant: model.assistant
                         ) {
                             Button("Retry") { model.retry(row.job) }

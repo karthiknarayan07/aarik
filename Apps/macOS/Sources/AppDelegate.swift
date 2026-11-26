@@ -1,18 +1,17 @@
 import AppCore
 import AppKit
 import AppUI
+import ConvertUI
 import PhotosLibrary
 import QuickRunService
 import UserNotifications
 
-/// Owns the model and the updater for the app's lifetime: starts the queue at launch and lets work settle before
+/// Owns the shell and the updater for the app's lifetime: starts the queue at launch and lets work settle before
 /// quitting.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    let model: AppModel
+    let shell: MacShell
     let updater: Updater
-    /// The one tool the window hosts; its menu commands ride on the scene (`MainApp`).
-    let module: ConvertModule
     private var isTerminating = false
     /// Clears Photos input left behind by a crash or quit. It starts as soon as launch begins, overlapping the
     /// window and menu construction; the queue waits for it.
@@ -52,24 +51,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     override init() {
-        let model = AppModel.shared
-        self.model = model
-        module = ConvertModule(model: model)
+        let shell = MacShell.shared
+        self.shell = shell
         assert(
-            !ToolRegistry.tools(for: .macOS, from: [module.tool]).isEmpty,
+            !ToolRegistry.tools(for: .macOS, from: [shell.scene.tool]).isEmpty,
             "The Mac app hosts a tool that is not for macOS")
-        updater = Updater(relaunchGate: model.relaunchGate)
+        updater = Updater(relaunchGate: shell.services.relaunchGate)
         super.init()
-        model.intentRunHandler = { [weak self] in _ = self?.intentRuns.receive([true]) }
+        shell.intentRunHandler = { [weak self] in _ = self?.intentRuns.receive([true]) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        windowController = MainWindowController(model: model, module: module)
+        windowController = MainWindowController(shell: shell)
         menuFixups.sweep()
-        let statusItem = StatusItemController(model: model)
+        let statusItem = StatusItemController(shell: shell)
         statusItem.start()
         statusItemController = statusItem
-        let dock = DockTileController(model: model)
+        let dock = DockTileController(shell: shell)
         dock.start()
         dockTile = dock
         let provider = ServiceProvider { [weak self] urls in self?.receiveServiceFiles(urls) }
@@ -84,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             await sweep?.value
             // Quitting during launch: the queue never starts and nothing is routed.
             guard !isTerminating else { return }
-            await model.start()
+            await shell.start()
             routeLaunch()
         }
         // A drive coming or going changes which library files are there.
@@ -110,11 +108,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             openedFileCount: files.count + serviced.count, hasNotificationResponse: !responses.isEmpty,
             hasIntentRun: !intents.isEmpty)
         if plan == .show {
-            model.showMainWindow()
+            shell.showMainWindow()
         }
-        if !files.isEmpty { model.openFiles(files) }
-        if !serviced.isEmpty { model.runQuickly(serviced) }
-        for runID in responses { Task { await model.reviewQuickRun(runID) } }
+        if !files.isEmpty { shell.openFiles(files) }
+        if !serviced.isEmpty { shell.runQuickly(serviced) }
+        for runID in responses { Task { await shell.reviewQuickRun(runID) } }
     }
 
     /// Quick runs outlive the window, so closing it never quits.
@@ -122,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// A click on the Dock icon brings the window back after it was closed or minimized.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !model.isMainWindowVisible { model.showMainWindow() }
+        if !shell.isMainWindowVisible { shell.showMainWindow() }
         return false
     }
 
@@ -130,21 +128,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// event arrives here once. With the window on screen the files join Local Files; otherwise they are a quick run.
     func application(_ application: NSApplication, open urls: [URL]) {
         let now = openedFiles.receive(urls)
-        if !now.isEmpty { model.openFiles(now) }
+        if !now.isEmpty { shell.openFiles(now) }
     }
 
     /// The Services menu's "Shrink Videos": always a quick run. A service that launched the app waits for launch.
     private func receiveServiceFiles(_ urls: [URL]) {
         let now = serviceFiles.receive(urls)
-        if !now.isEmpty { model.runQuickly(now) }
+        if !now.isEmpty { shell.runQuickly(now) }
     }
 
     /// The Dock menu: what is converting, Pause or Resume Queue, Show Queue and Add Videos…. The system adds its own
     /// items below.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
-        let state = dockTile?.state ?? DockTileState(jobs: model.jobs, name: \.displayName)
+        let state = dockTile?.state ?? DockTileState(jobs: shell.services.jobs, name: \.displayName)
         let menu = NSMenu()
-        for item in DockMenu.items(for: state, isPaused: model.isQueuePaused) {
+        for item in DockMenu.items(for: state, isPaused: shell.services.isQueuePaused) {
             switch item.kind {
             case .separator:
                 menu.addItem(.separator())
@@ -170,11 +168,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return menuItem
     }
 
-    @objc private func dockPauseOrResume() { model.perform(.pauseOrResumeQueue) }
+    @objc private func dockPauseOrResume() { shell.convert.perform(.pauseOrResumeQueue) }
 
-    @objc private func dockShowQueue() { model.showQueue() }
+    @objc private func dockShowQueue() { shell.showQueue() }
 
-    @objc private func dockAddVideos() { model.perform(.addVideos) }
+    @objc private func dockAddVideos() { shell.convert.perform(.addVideos) }
 
     /// A click on a quick run's notification (or its Review action) shows the skipped files; one on the queue's
     /// "Queue finished" notification (or its Show Queue action) shows the queue.
@@ -194,13 +192,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func showQueueFromNotification() async {
         // A click that relaunched the app waits for launch to finish, so the window isn't shown half-built.
-        await model.waitUntilStarted()
-        model.showQueue()
+        await shell.services.waitUntilStarted()
+        shell.showQueue()
     }
 
     private func receiveReviewRequest(_ runID: UUID) async {
         let now = notificationResponses.receive([runID])
-        for runID in now { await model.reviewQuickRun(runID) }
+        for runID in now { await shell.reviewQuickRun(runID) }
     }
 
     /// Files may have been moved, deleted or restored while the app was in the background.
@@ -209,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func refreshLibrary() {
-        let library = model.library
+        let library = shell.convert.library
         Task { await library.refreshAvailability() }
     }
 
@@ -218,18 +216,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Work under way: ask first, unless the system is logging out or restarting. The running job and the rest of
         // the queue are saved as queued below and continue next launch.
         if QuitPolicy.needsConfirmation(
-            jobs: model.jobs, isQueuePaused: model.queuePause.isPaused,
+            jobs: shell.services.jobs, isQueuePaused: shell.services.queuePause.isPaused,
             isSessionEnding: QuitConfirmation.isSessionEnding)
             && !QuitConfirmation.confirmStop(
-                queueStartsAutomatically: AppSettings.autoStartQueue(model.defaults),
-                automaticPause: model.queuePause.automatic)
+                queueStartsAutomatically: shell.services.settings.autoStartQueue,
+                automaticPause: shell.services.queuePause.automatic)
         {
             return .terminateCancel
         }
         isTerminating = true
         Task {
             // Pending library saves finish and the running job goes back to the queue for next launch.
-            await model.prepareForTermination()
+            await shell.prepareForTermination()
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

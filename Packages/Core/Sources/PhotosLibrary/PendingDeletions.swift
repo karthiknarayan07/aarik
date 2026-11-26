@@ -123,7 +123,7 @@ public final class PendingDeletions: Sendable {
         var saved: [SavedCopy]
     }
 
-    private let fileURL: URL
+    public let fileURL: URL
     private let state: Mutex<State>
 
     public init(fileURL: URL) {

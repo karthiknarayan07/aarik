@@ -1,12 +1,11 @@
 import AppUI
-import Convert
 import Foundation
 import LocalLibrary
 import MediaEngine
 
 extension ConvertModel {
     /// The media-type filter when the sidebar points at one.
-    var badgeFilter: MediaBadge? {
+    public var badgeFilter: MediaBadge? {
         if case .mediaType(let badge) = selection { return badge }
         return nil
     }

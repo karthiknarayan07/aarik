@@ -8,7 +8,7 @@ import SwiftUI
 
 extension Job {
     /// The file's name; a Photos video's file name in Photos (its source is an address, not a file).
-    var displayName: String {
+    public var displayName: String {
         guard isPhotosJob else { return source.lastPathComponent }
         return downscaleSettings?.photosFileName ?? "Video in Photos"
     }

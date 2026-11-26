@@ -1,3 +1,4 @@
+import AppCore
 import AppUI
 import SwiftUI
 
@@ -7,30 +8,14 @@ struct MainApp: App {
 
     var body: some Scene {
         Settings {
-            SettingsView(model: delegate.model, updater: delegate.updater)
+            SettingsView(shell: delegate.shell, updater: delegate.updater)
         }
         // The main window is AppKit's (`MainWindowController`); its menu commands ride on this scene.
         .commands {
             UpdateCommands(updater: delegate.updater)
-            ViewCommands(model: delegate.model)
-            delegate.module.commands
+            ViewCommands(shell: delegate.shell)
+            delegate.shell.scene.commands
             HelpCommands()
-        }
-    }
-}
-
-extension KeyChord {
-    /// The SwiftUI shortcut for a chord of the command model.
-    var keyboardShortcut: KeyboardShortcut {
-        var flags: EventModifiers = []
-        if modifiers.contains(.command) { flags.insert(.command) }
-        if modifiers.contains(.option) { flags.insert(.option) }
-        if modifiers.contains(.control) { flags.insert(.control) }
-        if modifiers.contains(.shift) { flags.insert(.shift) }
-        switch key {
-        case .character(let character): return KeyboardShortcut(KeyEquivalent(character), modifiers: flags)
-        case .return: return KeyboardShortcut(.return, modifiers: flags)
-        case .delete: return KeyboardShortcut(.delete, modifiers: flags)
         }
     }
 }
@@ -48,24 +33,24 @@ private struct UpdateCommands: Commands {
 }
 
 /// View → Show/Hide Sidebar (⌃⌘S) and Show/Hide Inspector (⌥⌘I),
-/// The sidebar and inspector commands change the model's state directly, so they work in the AppKit-hosted window
-/// without relying on SwiftUI's scene focus.
+/// The sidebar and inspector commands change the shell's and scene's state directly, so they work in the
+/// AppKit-hosted window without relying on SwiftUI's scene focus.
 private struct ViewCommands: Commands {
-    let model: AppModel
+    let shell: MacShell
 
     var body: some Commands {
         CommandGroup(replacing: .sidebar) {
-            Button(model.sidebarVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar") {
-                model.showMainWindow()
-                model.sidebarVisibility = model.sidebarVisibility == .detailOnly ? .all : .detailOnly
+            Button(shell.sidebarVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar") {
+                shell.showMainWindow()
+                shell.sidebarVisibility = shell.sidebarVisibility == .detailOnly ? .all : .detailOnly
             }
             .keyboardShortcut("s", modifiers: [.command, .control])
-            Button(model.isInspectorPresented ? "Hide Inspector" : "Show Inspector") {
-                model.showMainWindow()
-                model.isInspectorPresented.toggle()
+            Button(shell.scene.isInspectorPresented ? "Hide Inspector" : "Show Inspector") {
+                shell.showMainWindow()
+                shell.scene.isInspectorPresented.toggle()
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
-            .disabled(!model.inspectorAvailable)
+            .disabled(!shell.scene.hasInspector(for: shell.scene.selection))
         }
     }
 }
@@ -74,13 +59,13 @@ private struct ViewCommands: Commands {
 /// Info.plist value is missing) the one item is off, so nothing is a dead end.
 private struct HelpCommands: Commands {
     private let links = HelpMenu.links(
-        appName: AppModel.displayName,
+        appName: AppInfo.displayName,
         homepage: Bundle.main.object(forInfoDictionaryKey: HelpMenu.infoKey) as? String)
 
     var body: some Commands {
         CommandGroup(replacing: .help) {
             if links.isEmpty {
-                Button("\(AppModel.displayName) Help") {}.disabled(true)
+                Button("\(AppInfo.displayName) Help") {}.disabled(true)
             } else {
                 ForEach(links, id: \.url) { link in
                     Link(link.title, destination: link.url)

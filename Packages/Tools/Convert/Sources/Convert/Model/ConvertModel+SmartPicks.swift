@@ -1,6 +1,5 @@
 import AppCore
 import Assistant
-import Convert
 import Foundation
 import LocalLibrary
 

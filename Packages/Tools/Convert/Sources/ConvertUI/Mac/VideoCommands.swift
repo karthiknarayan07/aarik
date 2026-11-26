@@ -5,10 +5,14 @@ import SwiftUI
 
 /// The video tool's menu commands: View → Group By and Sort By, the Go menu, File → Add Videos…, Edit → Remove from
 /// Library and the Queue menu. They ride on the app's scene through `MacToolScene.commands`.
-struct VideoCommands: Commands {
+public struct VideoCommands: Commands {
     let model: ConvertModel
 
-    var body: some Commands {
+    public init(model: ConvertModel) {
+        self.model = model
+    }
+
+    public var body: some Commands {
         CommandGroup(after: .sidebar) {
             Divider()
             GroupSortMenus(model: model)
@@ -68,7 +72,7 @@ private struct GoCommands: Commands {
         CommandMenu("Go") {
             ForEach(Array(ConvertModel.goDestinations.enumerated()), id: \.offset) { index, destination in
                 Button(destination.title) {
-                    model.showMainWindow()
+                    model.host.showMainWindow()
                     model.selection = destination
                 }
                 .keyboardShortcut(SectionShortcuts.chord(at: index)?.keyboardShortcut)

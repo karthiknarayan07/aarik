@@ -8,11 +8,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Where System Settings opens for the two permissions this page can ask about.
-enum PrivacySettings {
-    static let photos = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Photos")!
+public enum PrivacySettings {
+    public static let photos = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Photos")!
     static let fullDiskAccess = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
 
-    @MainActor static func open(_ url: URL) {
+    @MainActor public static func open(_ url: URL) {
         NSWorkspace.shared.open(url)
     }
 }

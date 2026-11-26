@@ -1,6 +1,5 @@
 import AppCore
 import AppUI
-import Convert
 import Foundation
 import LocalLibrary
 import PhotosLibrary

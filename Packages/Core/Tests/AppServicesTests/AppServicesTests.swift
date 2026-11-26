@@ -52,7 +52,8 @@ private struct InstantTool: Tool {
         #expect(services.queue.registeredToolIDs == ["instant"])
         await services.start()
         await services.queue.enqueue([job(tool: "instant", name: "a"), job(tool: "instant", name: "b")])
-        for await jobs in await services.queue.updates() where jobs.count == 2 && !jobs.contains(where: { $0.state.isPending }) {
+        for await jobs in await services.queue.updates()
+        where jobs.count == 2 && !jobs.contains(where: { $0.state.isPending }) {
             break
         }
         // The mirror follows the queue's stream; wait for the main actor to take the last snapshot.
@@ -160,7 +161,9 @@ private struct InstantTool: Tool {
     @Test func theSupportDirectoryIsUnderApplicationSupportUnlessATestLaunchOverridesIt() {
         let normal = AppServices.supportDirectory(bundleIdentifier: "id.example.app")
         #expect(normal.lastPathComponent == "id.example.app")
-        #expect(normal.deletingLastPathComponent().standardizedFileURL == URL.applicationSupportDirectory.standardizedFileURL)
+        #expect(
+            normal.deletingLastPathComponent().standardizedFileURL
+                == URL.applicationSupportDirectory.standardizedFileURL)
         let override = URL(filePath: "/tmp/ui-test", directoryHint: .isDirectory)
         #expect(AppServices.supportDirectory(bundleIdentifier: "id.example.app", override: override) == override)
     }
@@ -171,7 +174,8 @@ private struct InstantTool: Tool {
         let services = makeServices(directory: directory)
         #expect(services.library.local.items.isEmpty)
         #expect(services.library.thumbnailSource.photos is FakePhotoStore)
-        #expect(ThumbnailSource.size(for: CGSize(width: 200, height: 100), maxPixel: 50) == CGSize(width: 50, height: 25))
+        #expect(
+            ThumbnailSource.size(for: CGSize(width: 200, height: 100), maxPixel: 50) == CGSize(width: 50, height: 25))
         #expect(ThumbnailSource.size(for: .zero, maxPixel: 50) == CGSize(width: 50, height: 50))
     }
 }

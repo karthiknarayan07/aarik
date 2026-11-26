@@ -5,10 +5,10 @@ import Convert
 import Foundation
 import QuickRunService
 
-extension AppModel {
+extension MacShell {
     func makeQuickRun() -> QuickRun {
         QuickRun(
-            queue: queue, store: quickRunStore, notifier: QuickRunNotifier(model: self),
+            queue: services.queue, store: quickRunStore, notifier: QuickRunNotifier(shell: self),
             settings: { [unowned self] in await self.quickRunSettings() })
     }
 
@@ -16,8 +16,8 @@ extension AppModel {
     /// the inspector doesn't leak into a run nobody confirmed).
     private func quickRunSettings() -> QuickRunSettings {
         QuickRunSettings(
-            preset: preset, saveLocation: AppSettings.defaultSaveLocation(defaults),
-            startsQueue: AppSettings.autoStartQueue(defaults))
+            preset: convert.preset, saveLocation: AppSettings.defaultSaveLocation(services.defaults),
+            startsQueue: services.settings.autoStartQueue)
     }
 
     /// Converts `urls` in the background: no questions, no window. Skipped files and the result come in one
@@ -37,7 +37,7 @@ extension AppModel {
                     entry, runID: receipt.runID, jobIDs: receipt.queuedJobIDs, skipped: receipt.skipped.count,
                     now: Date(), popoverVisible: isStatusPopoverVisible)
             }
-            if !receipt.queuedJobIDs.isEmpty, AppSettings.autoStartQueue(defaults) { isQueuePaused = false }
+            if !receipt.queuedJobIDs.isEmpty, services.settings.autoStartQueue { services.isQueuePaused = false }
         }
     }
 
@@ -76,7 +76,7 @@ extension AppModel {
     /// otherwise they are a quick run.
     func openFiles(_ urls: [URL]) {
         switch OpenedFilesRoute.route(windowVisible: isMainWindowVisible) {
-        case .addToLibrary: addFiles(urls)
+        case .addToLibrary: convert.addFiles(urls)
         case .quickRun: runQuickly(urls)
         }
     }
@@ -93,11 +93,11 @@ extension AppModel {
         for runID in runIDs { urls += await quickRun.skippedURLs(runID: runID) }
         showMainWindow()
         guard !urls.isEmpty else { return }
-        addFiles(urls)
-        await library.waitUntilIdle()
+        convert.addFiles(urls)
+        await convert.library.waitUntilIdle()
         let wanted = Set(urls.map { $0.standardizedFileURL.path })
-        browser.selection = Set(
-            library.items.filter { $0.fileURL.map { wanted.contains($0.standardizedFileURL.path) } ?? false }
+        convert.browser.selection = Set(
+            convert.library.items.filter { $0.fileURL.map { wanted.contains($0.standardizedFileURL.path) } ?? false }
                 .map(\.id))
     }
 }
@@ -105,15 +105,15 @@ extension AppModel {
 /// Posts a finished run's notification. It stays quiet only when the app is active with its window on screen: a
 /// Dock drop activates a windowless app, and that run's notification is the only feedback.
 struct QuickRunNotifier: QuickRunNotifying {
-    /// Weak: the model owns the quick run that owns this.
-    weak let model: AppModel?
+    /// Weak: the shell owns the quick run that owns this.
+    weak let shell: MacShell?
 
     func post(_ notice: QuickRunNotice) async {
-        await model?.postQuickRunNotice(notice)
+        await shell?.postQuickRunNotice(notice)
     }
 }
 
-extension AppModel {
+extension MacShell {
     func postQuickRunNotice(_ notice: QuickRunNotice) {
         // The popover lists every menu-bar run's result, however the others stand; the banner below follows the policy
         // for each run on its own. The result is kept even if it arrives before the run's entry is attached.
@@ -133,7 +133,7 @@ extension AppModel {
     }
 }
 
-extension AppModel {
+extension MacShell {
     /// Says `text` to VoiceOver, so a person who dropped videos hears the result without going back to the popover.
     func announce(_ text: String) {
         guard NSWorkspace.shared.isVoiceOverEnabled else { return }

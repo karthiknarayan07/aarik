@@ -1,14 +1,15 @@
+import AppCore
 import AppKit
+import ConvertUI
 import QuickRunService
 import SwiftUI
 
-/// The window's content: the shell, with the sidebar's visibility the app model keeps for the View menu.
+/// The window's content: the shell, with the sidebar's visibility kept for the View menu.
 private struct MainWindowContent: View {
-    @Bindable var model: AppModel
-    let module: ConvertModule
+    @Bindable var shell: MacShell
 
     var body: some View {
-        RootView(module: module, sidebarVisibility: $model.sidebarVisibility)
+        RootView(module: shell.scene, sidebarVisibility: $shell.sidebarVisibility)
     }
 }
 
@@ -18,16 +19,16 @@ private struct MainWindowContent: View {
 final class MainWindowController {
     let window: NSWindow
 
-    init(model: AppModel, module: ConvertModule) {
+    init(shell: MacShell) {
         let hosting = NSHostingController(
-            rootView: MainWindowContent(model: model, module: module).frame(minWidth: 900, minHeight: 600))
+            rootView: MainWindowContent(shell: shell).frame(minWidth: 900, minHeight: 600))
         // The window's size is its own (autosaved), not the content's ideal size.
         hosting.sizingOptions = []
         // The SwiftUI toolbar, search field, inspector button and navigation title belong to the real window.
         hosting.sceneBridgingOptions = .all
         let window = NSWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.title = AppModel.displayName
+        window.title = AppInfo.displayName
         window.isReleasedWhenClosed = false
         // As in Apple's apps: green button and View > Enter Full Screen work; one window, so no tab bar.
         window.collectionBehavior.insert(.fullScreenPrimary)
@@ -38,11 +39,11 @@ final class MainWindowController {
         // Overrides the default size and position when a saved frame exists.
         window.setFrameAutosaveName("main")
         self.window = window
-        model.mainWindow = window
+        shell.mainWindow = window
     }
 }
 
-extension AppModel {
+extension MacShell {
     /// On screen: shown, not minimized to the Dock, and the app isn't hidden.
     var isMainWindowVisible: Bool {
         guard let mainWindow else { return false }

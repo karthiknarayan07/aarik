@@ -59,7 +59,7 @@ let package = Package(
         .testTarget(
             name: "ConvertTests",
             dependencies: [
-                "Convert", "ConvertUI",
+                "Convert", "ConvertUI", "QuickRunService",
                 .product(name: "AppCore", package: "Core"),
                 .product(name: "MediaEngine", package: "Core"),
                 .product(name: "LocalLibrary", package: "Core"),

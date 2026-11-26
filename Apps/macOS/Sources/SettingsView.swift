@@ -7,13 +7,13 @@ import UniformTypeIdentifiers
 
 /// The Settings window: General and Output.
 struct SettingsView: View {
-    let model: AppModel
+    let shell: MacShell
     let updater: Updater
 
     var body: some View {
         TabView {
-            Tab("General", systemImage: "gearshape") { GeneralSettings(model: model, updater: updater) }
-            Tab("Output", systemImage: "square.and.arrow.down") { OutputSettings(model: model) }
+            Tab("General", systemImage: "gearshape") { GeneralSettings(shell: shell, updater: updater) }
+            Tab("Output", systemImage: "square.and.arrow.down") { OutputSettings(shell: shell) }
         }
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
@@ -21,7 +21,7 @@ struct SettingsView: View {
 }
 
 private struct GeneralSettings: View {
-    let model: AppModel
+    let shell: MacShell
     @Bindable var updater: Updater
     @AppStorage(AppSettings.Keys.preset) private var preset = Preset.balanced
     @AppStorage(AppSettings.Keys.autoStartQueue) private var autoStart = true
@@ -78,16 +78,16 @@ private struct GeneralSettings: View {
         .formStyle(.grouped)
         // The inspector's preset is this same stored value; keep the open window in step.
         .onChange(of: preset) { _, newValue in
-            if model.preset != newValue { model.preset = newValue }
+            if shell.convert.preset != newValue { shell.convert.preset = newValue }
         }
         .onChange(of: speed) { _, newValue in
-            if model.speed != newValue { model.speed = newValue }
+            if shell.services.speed != newValue { shell.services.speed = newValue }
         }
     }
 }
 
 private struct OutputSettings: View {
-    let model: AppModel
+    let shell: MacShell
     @AppStorage(AppSettings.Keys.defaultSaveTo) private var saveTo = SaveLocation.Choice.nextToOriginal
     @AppStorage(AppSettings.Keys.defaultSaveFolder) private var saveFolder: Data?
     @AppStorage(AppSettings.Keys.keepOriginals) private var keepOriginals = false
@@ -151,10 +151,10 @@ private struct OutputSettings: View {
             chose(url)
         }
         .onChange(of: keepOriginals) { _, isOn in
-            if isOn { AppSettings.prepareOriginalsFolder(.standard) }
+            if isOn { AppSettings.prepareOriginalsFolder(shell.services.defaults) }
         }
-        .onChange(of: saveTo) { model.applyDefaultSaveLocation() }
-        .onChange(of: saveFolder) { model.applyDefaultSaveLocation() }
+        .onChange(of: saveTo) { shell.convert.applyDefaultSaveLocation() }
+        .onChange(of: saveFolder) { shell.convert.applyDefaultSaveLocation() }
     }
 
     private func chose(_ url: URL) {

@@ -11,9 +11,9 @@ struct ShrinkDataInput: Sendable {
     let data: Data
 }
 
-extension AppModel {
+extension MacShell {
     func makeShrinkVideosAction() -> ShrinkVideos {
-        ShrinkVideos(sources: ShrinkVideosLibraries(model: self), quickRun: quickRun)
+        ShrinkVideos(sources: ShrinkVideosLibraries(shell: self), quickRun: quickRun)
     }
 
     /// Runs the Shortcuts, Siri and Spotlight action. An intent that launched the app can arrive before launch has
@@ -28,15 +28,15 @@ extension AppModel {
         _ request: ShrinkVideosRequest, dataInputs: [ShrinkDataInput] = [], providedCount: Int
     ) async -> (outcome: ShrinkVideosOutcome, notes: [String]) {
         intentRunHandler?()
-        await waitUntilStarted()
+        await services.waitUntilStarted()
         notifier.requestAuthorizationOnce()
         var request = request
         var notes: [String] = []
         var staged: [URL] = []
+        let stagedInputs = services.staging
         if !dataInputs.isEmpty {
-            let inputs = stagedInputs
             staged = await Task.detached {
-                dataInputs.compactMap { try? inputs.stage(name: $0.name, data: $0.data) }
+                dataInputs.compactMap { try? stagedInputs.stage(name: $0.name, data: $0.data) }
             }.value
             request.files += staged
             if !staged.isEmpty {
@@ -55,16 +55,18 @@ extension AppModel {
         }
         let stagedCopies = Set(staged)
         let outcome = await shrinkVideosAction.perform(request) { [unowned self] receipt in
-            if !receipt.queuedJobIDs.isEmpty, receipt.startedQueue { isQueuePaused = false }
+            if !receipt.queuedJobIDs.isEmpty, receipt.startedQueue { services.isQueuePaused = false }
             // A copy whose job was never queued is not needed; the others are removed when their jobs end.
             let notQueued = Set(receipt.skipped.map(\.url.standardizedFileURL))
+            var watched: [URL] = []
             for url in stagedCopies {
                 if notQueued.contains(url.standardizedFileURL) {
                     stagedInputs.remove(url)
                 } else {
-                    stagedWatch.insert(url)
+                    watched.append(url)
                 }
             }
+            if !watched.isEmpty { services.watchStaged(watched) }
         }
         // Nothing was queued at all (the run didn't start): nothing will read the copies.
         if case .queued = outcome {} else { for url in staged { stagedInputs.remove(url) } }
@@ -75,10 +77,11 @@ extension AppModel {
     /// Movies folder, with a sentence saying so when the Settings folder was set but isn't available. Outputs never
     /// overwrite (their names are made unique).
     private func visibleOutputFolder() -> (URL, String?)? {
-        let wantsFolder = defaults.string(forKey: AppSettings.Keys.defaultSaveTo) == SaveLocation.Choice.folder.rawValue
+        let wantsFolder =
+            services.defaults.string(forKey: AppSettings.Keys.defaultSaveTo) == SaveLocation.Choice.folder.rawValue
         var note: String?
         if wantsFolder {
-            let saved = AppSettings.defaultSaveLocation(defaults)
+            let saved = AppSettings.defaultSaveLocation(services.defaults)
             var probe = SaveLocation()
             if saved.choice == .folder, let folder = saved.folder, (try? probe.setFolder(folder)) != nil {
                 return (folder, nil)
@@ -90,33 +93,26 @@ extension AppModel {
         }
         return (movies, note)
     }
-
-    /// Removes the copies no job needs any more (finished, kept as is, cancelled, or a failed job taken out of the
-    /// queue); a failed job keeps its copy so Retry works. The queue itself is asked, so a job just added is never
-    /// missed.
-    func releaseStagedInputs() async {
-        stagedWatch = stagedInputs.release(watching: stagedWatch, jobs: await queue.jobs)
-    }
 }
 
 /// The libraries the action picks from when it is given no files. It only reads: Photos is never asked for access
 /// from here, because a run started from Shortcuts or Siri has no window to show the system prompt in.
 @MainActor
 final class ShrinkVideosLibraries: ShrinkVideosSources {
-    private unowned let model: AppModel
+    private unowned let shell: MacShell
 
-    init(model: AppModel) { self.model = model }
+    init(shell: MacShell) { self.shell = shell }
 
     func localLibrary() async -> any MediaCollection {
-        await model.library.waitUntilIdle()
-        return model.library
+        await shell.convert.library.waitUntilIdle()
+        return shell.convert.library
     }
 
     func photosLibrary() async -> (any MediaCollection)? {
         // Reads the current authorization without prompting, and loads the videos when reading is allowed.
-        await model.photos.start()
-        guard model.photos.authorization.allowsReading else { return nil }
-        await model.photos.waitUntilIdle()
-        return model.photos
+        await shell.convert.photos.start()
+        guard shell.convert.photos.authorization.allowsReading else { return nil }
+        await shell.convert.photos.waitUntilIdle()
+        return shell.convert.photos
     }
 }

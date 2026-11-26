@@ -34,7 +34,9 @@ struct QueueView: View {
             } else {
                 List(selection: $selection) {
                     ForEach(jobs) { job in
-                        QueueRow(job: job, pauseText: model.queuePause.statusText, thumbnails: model.thumbnails) {
+                        QueueRow(
+                            job: job, pauseText: model.queuePause.statusText, thumbnails: model.thumbnailSource.cache
+                        ) {
                             model.cancel(job)
                         }
                     }
