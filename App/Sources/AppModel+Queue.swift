@@ -123,14 +123,14 @@ extension AppModel {
 
     var keptAsIsJobs: [(job: Job, reason: String)] {
         jobs.reversed().compactMap { job in
-            if case .keptAsIs(let reason) = job.state { return (job, reason) }
+            if case .keptAsIs(let reason, _) = job.state { return (job, reason) }
             return nil
         }
     }
 
     var failedJobs: [(job: Job, reason: String)] {
         jobs.reversed().compactMap { job in
-            if case .failed(let reason) = job.state { return (job, reason) }
+            if case .failed(let reason, _) = job.state { return (job, reason) }
             return nil
         }
     }

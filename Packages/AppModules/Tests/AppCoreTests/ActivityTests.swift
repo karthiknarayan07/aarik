@@ -83,7 +83,7 @@ private func makeStore() throws -> (JobStore, URL) {
     #expect(decoded.source == nil)
     // Notes explain; they are not warnings.
     var noted = outcome(before: 2, after: 1)
-    noted.notes = ["Saved as a .mov file because MP4 can't hold all of its tracks"]
+    noted.addNote("Saved as a .mov file because MP4 can't hold all of its tracks", code: .containerChanged)
     noted.source = URL(fileURLWithPath: "/tmp/moved.mp4")
     #expect(noted.isVerified)
     let roundTrip = try JSONDecoder().decode(JobOutcome.self, from: JSONEncoder().encode(noted))
@@ -185,7 +185,7 @@ private func waitUntil(_ queue: JobQueue, _ predicate: @Sendable ([Job]) -> Bool
     let queue = JobQueue(store: store, runners: [:])
     let first = job("a", .queued, tool: "nope")
     await queue.enqueue([first])
-    await waitUntil(queue) { $0.first?.state == .failed(reason: "No tool can run this job") }
+    await waitUntil(queue) { $0.first?.state == .failed(reason: "No tool can run this job", code: .noToolForJob) }
     await queue.pause()
     let again = job("a", .queued, tool: "nope")
     #expect(await queue.enqueue([again]).map(\.id) == [again.id])
@@ -198,7 +198,7 @@ private func waitUntil(_ queue: JobQueue, _ predicate: @Sendable ([Job]) -> Bool
     let jobs = ["a", "b", "c"].map { job($0, .queued, tool: "nope") }
     await queue.enqueue(jobs)
     await waitUntil(queue) {
-        $0.count == 3 && $0.allSatisfy { $0.state == .failed(reason: "No tool can run this job") }
+        $0.count == 3 && $0.allSatisfy { $0.state == .failed(reason: "No tool can run this job", code: .noToolForJob) }
     }
     #expect(ActivitySummary(jobs: await queue.jobs).failed == 3)
 

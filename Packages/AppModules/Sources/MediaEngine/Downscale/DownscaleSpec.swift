@@ -1,3 +1,4 @@
+import AppCore
 import CoreGraphics
 import Foundation
 
@@ -61,6 +62,17 @@ extension DownscaleError: LocalizedError {
         case .sourceAlreadySmall: "The video is already small."
         case .unsupportedSource: "This kind of video can't be converted yet."
         case .encoderFailed: "The video couldn't be converted."
+        }
+    }
+}
+
+extension DownscaleError: OutcomeCoded {
+    public var outcomeCode: OutcomeCode {
+        switch self {
+        case .outputExists: .outputNameTaken
+        case .sourceAlreadySmall: .alreadySmall
+        case .unsupportedSource: .unsupportedVideo
+        case .encoderFailed: .conversionFailed
         }
     }
 }

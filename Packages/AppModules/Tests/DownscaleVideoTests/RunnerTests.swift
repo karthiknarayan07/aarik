@@ -155,7 +155,7 @@ import Testing
 
         let state = try await runner.run(try job(source, settings)) { _ in }
 
-        #expect(state == .keptAsIs(reason: "Already small"))
+        #expect(state == .keptAsIs(reason: "Already small", code: .alreadySmall))
         #expect(!called.withLock { $0 })
         #expect(FileManager.default.fileExists(atPath: source.path))
     }
@@ -258,7 +258,9 @@ import Testing
         // Decided once, by the runner: the unexpected change is a warning, and so is the original being kept.
         #expect(!outcome.isVerified)
         #expect(outcome.warnings.contains("Bit depth changed from 8 to 10"))
+        #expect(outcome.warningCodes.contains(.unexpectedChange))
         #expect(outcome.warnings.contains("The original was kept because the copy couldn't be verified"))
+        #expect(outcome.warningCodes.contains(.originalKeptNotVerified))
     }
 
     @Test(.timeLimit(.minutes(2))) func failedTrashKeepsBothFiles() async throws {
@@ -296,7 +298,7 @@ import Testing
 
         let state = try await DownscaleRunner().run(try job(source, settings)) { _ in }
 
-        #expect(state == .keptAsIs(reason: "Would save less than 10%"))
+        #expect(state == .keptAsIs(reason: "Would save less than 10%", code: .savesLittle))
     }
 
     @Test(.timeLimit(.minutes(2))) func outputNotSmallEnoughIsRemovedAndKeptAsIs() async throws {
@@ -315,7 +317,7 @@ import Testing
 
         let state = try await runner.run(try job(source, settings)) { _ in }
 
-        #expect(state == .keptAsIs(reason: "Would save less than 10%"))
+        #expect(state == .keptAsIs(reason: "Would save less than 10%", code: .savesLittle))
         #expect(!called.withLock { $0 })
         #expect(FileManager.default.fileExists(atPath: source.path))
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)

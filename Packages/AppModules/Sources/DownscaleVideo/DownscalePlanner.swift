@@ -4,7 +4,7 @@ import MediaEngine
 
 public enum PlanDecision: Sendable, Equatable {
     case convert(DownscaleSpec, estimatedBytes: Int64, predicted: MetadataReport)
-    case keptAsIs(reason: String)
+    case keptAsIs(reason: String, code: OutcomeCode = .other)
 }
 
 public enum DownscalePlanner {
@@ -46,16 +46,20 @@ public enum DownscalePlanner {
         var spec = requested
         if source.isSloMo { spec.maxFrameRate = nil }
         let byteSize = source.byteSize
-        if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: spatialReason) }
-        guard source.durationSeconds > 0 else { return .keptAsIs(reason: lengthUnreadableReason) }
+        if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: spatialReason, code: .spatialVideo) }
+        guard source.durationSeconds > 0 else {
+            return .keptAsIs(reason: lengthUnreadableReason, code: .lengthUnreadable)
+        }
         if let target = spec.targetShortSide {
-            if source.shortSide > 0, source.shortSide <= target { return .keptAsIs(reason: alreadySmallReason) }
+            if source.shortSide > 0, source.shortSide <= target {
+                return .keptAsIs(reason: alreadySmallReason, code: .alreadySmall)
+            }
         } else if source.videoBitRate > 0, source.videoBitRate <= Double(spec.averageBitRate) {
-            return .keptAsIs(reason: alreadySmallReason)
+            return .keptAsIs(reason: alreadySmallReason, code: .alreadySmall)
         }
         let estimate = Estimator.estimatedBytes(source: source, spec: spec)
         if Double(estimate) > Double(byteSize) * 0.9 {
-            return .keptAsIs(reason: savesLittleReason)
+            return .keptAsIs(reason: savesLittleReason, code: .savesLittle)
         }
         var report = predicted(inventory: inventory, source: source, spec: spec)
         if fallsBackToQuickTime { report = movingToQuickTime(report, inventory: inventory) }

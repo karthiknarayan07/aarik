@@ -68,7 +68,7 @@ private struct PresetRow: View {
 
     private var helpText: String {
         if isCustom { return PresetControl(shared: estimate.preset, isCustom: true).help }
-        if case .keptAsIs(let reason) = estimate.decision { return reason }
+        if case .keptAsIs(let reason, _) = estimate.decision { return reason }
         return "Use the \(estimate.preset.displayName) preset"
     }
 

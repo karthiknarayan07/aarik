@@ -17,7 +17,7 @@ struct AdvancedSettingsView: View {
 
     var body: some View {
         DisclosureGroup("Advanced", isExpanded: $isExpanded) {
-            Toggle("Use custom settings", isOn: $options.isEnabled)
+            Toggle("Use Custom Settings", isOn: $options.isEnabled)
             Group {
                 Picker("Resolution", selection: $options.resolution) {
                     ForEach(AdvancedOptions.Resolution.allCases) { Text($0.title).tag($0) }
@@ -28,7 +28,7 @@ struct AdvancedSettingsView: View {
                 .multilineTextAlignment(.trailing)
                 .accessibilityLabel("Bit rate in megabits per second")
                 .help("Average video bit rate in Mbps, at least 1")
-                Picker("Frame rate", selection: $options.frameRate) {
+                Picker("Frame Rate", selection: $options.frameRate) {
                     ForEach(AdvancedOptions.FrameRate.allCases) { Text($0.title).tag($0) }
                 }
                 .disabled(locksFrameRate)
@@ -59,7 +59,7 @@ struct AdvancedSettingsView: View {
             let saved = ByteFormat.savedPercent(before: byteSize, after: estimate) ?? ""
             Label("About \(ByteFormat.string(estimate)) (\(saved))", systemImage: "arrow.down.circle")
                 .foregroundStyle(.green)
-        case .keptAsIs(let reason):
+        case .keptAsIs(let reason, _):
             Label("Kept as is: \(reason)", systemImage: "equal.circle")
                 .foregroundStyle(.secondary)
         }

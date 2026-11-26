@@ -1,3 +1,4 @@
+import AppCore
 import Foundation
 
 /// A Photos video fetched into the work folder, ready to convert.
@@ -134,6 +135,17 @@ public struct PhotoInputFetcher: Sendable {
         case .downloadFailed(let reason): return .downloadFailed(underlying: reason)
         case .unavailable(let reason): return .failed(reason)
         case .notAuthorized, nil: return .failed(error.localizedDescription)
+        }
+    }
+}
+
+extension PhotoFetchError: OutcomeCoded {
+    public var outcomeCode: OutcomeCode {
+        switch self {
+        case .notInLibrary: .originalUnavailable
+        case .downloadFailed: .iCloudDownloadFailed
+        case .cancelled: .cancelled
+        case .failed: .originalUnavailable
         }
     }
 }

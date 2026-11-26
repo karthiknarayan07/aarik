@@ -1,3 +1,4 @@
+import AppCore
 import CoreGraphics
 import Foundation
 
@@ -143,6 +144,15 @@ public struct PhotoSaver: Sendable {
             return .notFound
         } catch {
             return .failed(error.localizedDescription)
+        }
+    }
+}
+
+extension PhotoSaveError: OutcomeCoded {
+    public var outcomeCode: OutcomeCode {
+        switch self {
+        case .saveFailed, .verifyFailed: .photosSaveFailed
+        case .cancelled: .cancelled
         }
     }
 }

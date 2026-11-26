@@ -181,6 +181,7 @@ import Testing
         #expect(!outcome.replacedOriginal)
         #expect(!called.isSet)
         #expect(outcome.warnings == ["The original changed during conversion"])
+        #expect(outcome.warningCodes == [.originalChangedDuringConversion])
     }
 
     @Test(.timeLimit(.minutes(2))) func cancelledAfterTheOutputIsWrittenRemovesItAndKeepsTheOriginal() async throws {

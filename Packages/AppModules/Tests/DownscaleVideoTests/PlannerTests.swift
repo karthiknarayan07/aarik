@@ -61,7 +61,7 @@ import Testing
         let source = inventory(size: "1280x720")
         let decision = DownscalePlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 3), preset: .balanced)
-        #expect(decision == .keptAsIs(reason: "Already small"))
+        #expect(decision == .keptAsIs(reason: "Already small", code: .alreadySmall))
     }
 
     @Test func highBitrate1080pBalancedKeepsResolutionAndConverts() {
@@ -80,21 +80,21 @@ import Testing
         let source = inventory(size: "3840x2160", durationMs: 0)
         let decision = DownscalePlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: 1_000_000, preset: .balanced)
-        #expect(decision == .keptAsIs(reason: "Couldn't read the video's length"))
+        #expect(decision == .keptAsIs(reason: "Couldn't read the video's length", code: .lengthUnreadable))
     }
 
     @Test func customSpecUsesTheSameRules() {
         let source = inventory(size: "2560x1440")
         let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 9_000_000)
         let decision = DownscalePlanner.decide(inventory: source, byteSize: bytes(mbps: 10), spec: spec)
-        #expect(decision == .keptAsIs(reason: "Would save less than 10%"))
+        #expect(decision == .keptAsIs(reason: "Would save less than 10%", code: .savesLittle))
     }
 
     @Test func lowBitrateKeepResolutionIsKeptAsIs() {
         let source = inventory(size: "3840x2160")
         let decision = DownscalePlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 5), preset: .high)
-        #expect(decision == .keptAsIs(reason: "Already small"))
+        #expect(decision == .keptAsIs(reason: "Already small", code: .alreadySmall))
     }
 
     @Test func smallSavingIsKeptAsIs() {
@@ -102,7 +102,7 @@ import Testing
         let source = inventory(size: "2560x1440")
         let decision = DownscalePlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 10), preset: .balanced)
-        #expect(decision == .keptAsIs(reason: "Would save less than 10%"))
+        #expect(decision == .keptAsIs(reason: "Would save less than 10%", code: .savesLittle))
     }
 
     @Test func spatialIsKeptAsIs() {
@@ -111,7 +111,9 @@ import Testing
         let source = inventory(size: "3840x2160", extra: [stereo])
         let decision = DownscalePlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 60), preset: .balanced)
-        #expect(decision == .keptAsIs(reason: "Spatial video isn't supported yet — it would lose one eye"))
+        #expect(
+            decision
+                == .keptAsIs(reason: "Spatial video isn't supported yet — it would lose one eye", code: .spatialVideo))
     }
 
     @Test func cinematicPredictsAuxLoss() throws {

@@ -95,11 +95,11 @@ public struct DownscaleInspector: View {
                 isMultiple: sources.count > 1)
         }
         if let decision {
-            Section("What happens to metadata") {
+            Section("What Happens to Metadata") {
                 switch decision {
                 case .convert(_, _, let predicted):
                     MetadataSummary(report: predicted)
-                case .keptAsIs(let reason):
+                case .keptAsIs(let reason, _):
                     Label("Kept as is: \(reason)", systemImage: "equal.circle")
                         .foregroundStyle(.secondary)
                 }

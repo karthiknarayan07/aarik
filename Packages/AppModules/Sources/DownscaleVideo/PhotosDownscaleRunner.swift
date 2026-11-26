@@ -5,7 +5,7 @@ import MediaEngine
 import PhotosLibrary
 import Synchronization
 
-public enum PhotosRunnerError: Error, LocalizedError, Equatable {
+public enum PhotosRunnerError: Error, LocalizedError, Equatable, OutcomeCoded {
     /// The job's source isn't a Photos address.
     case notAPhotosJob
     /// The Mac doesn't have room for the download and the converted copy.
@@ -16,6 +16,13 @@ public enum PhotosRunnerError: Error, LocalizedError, Equatable {
         case .notAPhotosJob: "This isn't a video in Photos"
         case .notEnoughSpace(let needed):
             "Not enough free space on this Mac to download this video (about \(needed / 1_000_000) MB needed)"
+        }
+    }
+
+    public var outcomeCode: OutcomeCode {
+        switch self {
+        case .notAPhotosJob: .unsupportedVideo
+        case .notEnoughSpace: .notEnoughSpace
         }
     }
 }
@@ -74,21 +81,23 @@ public struct PhotosDownscaleRunner: JobRunner {
     static let movedNote = "Original moved to Recently Deleted"
 
     /// Records on a finished job that its original was kept out of the batch, and why.
-    public static func markOriginalKept(_ outcome: inout JobOutcome, because reason: String) {
-        outcome.notes.removeAll { $0 == recentlyDeletedNote }
-        if !outcome.warnings.contains(reason) { outcome.warnings.append(reason) }
+    public static func markOriginalKept(
+        _ outcome: inout JobOutcome, because reason: String, code: OutcomeCode = .originalKeptOtherReason
+    ) {
+        outcome.removeNotes { text, _ in text == recentlyDeletedNote }
+        outcome.addWarning(reason, code: code)
     }
 
     /// Records on a finished job that its original was already gone from Photos when the batch ran.
     public static func markOriginalGone(_ outcome: inout JobOutcome) {
         clearKeptWarnings(&outcome)
-        outcome.notes.removeAll { $0 == recentlyDeletedNote }
-        if !outcome.notes.contains(goneNote) { outcome.notes.append(goneNote) }
+        outcome.removeNotes { text, _ in text == recentlyDeletedNote }
+        outcome.addNote(goneNote, code: .originalGone)
     }
 
     private static func clearKeptWarnings(_ outcome: inout JobOutcome) {
         let messages = Set(PendingBlock.allCases.map(\.message))
-        outcome.warnings.removeAll { messages.contains($0) }
+        outcome.removeWarnings { text, _ in messages.contains(text) }
     }
 
     static let goneNote = "Original no longer in Photos"
@@ -99,8 +108,8 @@ public struct PhotosDownscaleRunner: JobRunner {
     public static func markOriginalMoved(_ outcome: inout JobOutcome) {
         outcome.replacedOriginal = true
         clearKeptWarnings(&outcome)
-        outcome.notes.removeAll { $0 == recentlyDeletedNote || $0 == movedNote }
-        outcome.notes.append(movedNote)
+        outcome.removeNotes { text, _ in text == recentlyDeletedNote || text == movedNote }
+        outcome.addNote(movedNote, code: .originalInRecentlyDeleted)
     }
 
     public func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
@@ -143,7 +152,9 @@ public struct PhotosDownscaleRunner: JobRunner {
 
         // What Photos has now: gone, or spatial, ends the job before anything is downloaded.
         let queued = try await fetcher.asset(id: id)
-        if queued.subtypes.contains(.spatial) { return .keptAsIs(reason: DownscalePlanner.spatialReason) }
+        if queued.subtypes.contains(.spatial) {
+            return .keptAsIs(reason: DownscalePlanner.spatialReason, code: .spatialVideo)
+        }
 
         let jobFolder = try workFolder.create(for: job.id)
         defer { workFolder.remove(jobID: job.id) }
@@ -172,7 +183,7 @@ public struct PhotosDownscaleRunner: JobRunner {
             }, progress: progress)
         let converted: DownscaleRunner.Conversion
         switch result {
-        case .keptAsIs(let reason): return .keptAsIs(reason: reason)
+        case .keptAsIs(let reason, let code): return .keptAsIs(reason: reason, code: code)
         case .converted(let value): converted = value
         }
 
@@ -182,8 +193,9 @@ public struct PhotosDownscaleRunner: JobRunner {
             return .completed(
                 JobOutcome(
                     output: converted.output, bytesBefore: input.bytes, bytesAfter: converted.outputSize,
-                    report: converted.report, replacedOriginal: false, warnings: converted.warnings,
-                    notes: converted.notes, source: job.source))
+                    report: converted.report, replacedOriginal: false, warnings: converted.warnings.map(\.text),
+                    warningCodes: converted.warnings.map(\.code), notes: converted.notes.map(\.text),
+                    noteCodes: converted.notes.map(\.code), source: job.source))
         case .newAsset, .replace:
             return try await saveToPhotos(
                 job, id: id, input: input, current: current, converted: converted, replace: destination == .replace,
@@ -234,8 +246,9 @@ public struct PhotosDownscaleRunner: JobRunner {
         } catch PhotoStoreError.notInLibrary {
             throw PhotoFetchError.notInLibrary
         } catch {
-            warnings.append(Self.albumsWarning)
+            warnings.append(OutcomeLine(Self.albumsWarning, .notAddedToAlbums))
         }
+        let savedLine = OutcomeLine(Self.savedNote, .savedToPhotos)
         // Throws when Photos refuses, or when the new video doesn't check out (it is then removed again).
         let newID = try await PhotoSaver(store: store).save(
             file: converted.output, like: current, albums: albums,
@@ -244,8 +257,9 @@ public struct PhotosDownscaleRunner: JobRunner {
 
         var outcome = JobOutcome(
             output: PhotoAssetURL.url(for: newID), bytesBefore: input.bytes, bytesAfter: converted.outputSize,
-            report: converted.report, replacedOriginal: false, warnings: warnings,
-            notes: converted.notes + [Self.savedNote], source: job.source)
+            report: converted.report, replacedOriginal: false, warnings: warnings.map(\.text),
+            warningCodes: warnings.map(\.code), notes: (converted.notes + [savedLine]).map(\.text),
+            noteCodes: (converted.notes + [savedLine]).map(\.code), source: job.source)
         // From here a second attempt must not save again, so the saved copy is written down at once.
         pendingDeletions.markSaved(
             SavedCopy(
@@ -281,7 +295,7 @@ public struct PhotosDownscaleRunner: JobRunner {
             return .completed(outcome)
         }
         if pendingDeletions.all.contains(where: { $0.assetID == saved.originalID && $0.jobID == job.id }) {
-            if !outcome.notes.contains(Self.recentlyDeletedNote) { outcome.notes.append(Self.recentlyDeletedNote) }
+            outcome.addNote(Self.recentlyDeletedNote, code: .originalInRecentlyDeleted)
             return .completed(outcome)
         }
         let jobFolder = try workFolder.create(for: job.id)
@@ -301,13 +315,14 @@ public struct PhotosDownscaleRunner: JobRunner {
         fetcher: PhotoInputFetcher, phase: @escaping @Sendable (String?) -> Void
     ) async throws {
         if !outcome.warnings.isEmpty {
-            outcome.warnings.append(Self.keptBecause(DownscaleRunner.unverifiedCopyReason))
+            outcome.addWarning(
+                Self.keptBecause(DownscaleRunner.unverifiedCopyReason), code: .originalKeptNotVerified)
         } else if let problem = try await prepareReplace(
             job, id: id, input: input, jobFolder: jobFolder, fetcher: fetcher, phase: phase)
         {
-            outcome.warnings.append(problem)
+            outcome.addWarning(problem.text, code: problem.code)
         } else {
-            outcome.notes.append(Self.recentlyDeletedNote)
+            outcome.addNote(Self.recentlyDeletedNote, code: .originalInRecentlyDeleted)
         }
     }
 
@@ -322,9 +337,10 @@ public struct PhotosDownscaleRunner: JobRunner {
     private func prepareReplace(
         _ job: Job, id: String, input: FetchedInput?, jobFolder: URL, fetcher: PhotoInputFetcher,
         phase: @escaping @Sendable (String?) -> Void
-    ) async throws -> String? {
-        guard let saved = pendingDeletions.savedCopy(for: job.id) else { return Self.originalChanged }
-        guard await originalIsUnchanged(id: id, saved: saved, fetcher: fetcher) else { return Self.originalChanged }
+    ) async throws -> OutcomeLine? {
+        let changed = OutcomeLine(Self.originalChanged, .originalChangedDuringConversion)
+        guard let saved = pendingDeletions.savedCopy(for: job.id) else { return changed }
+        guard await originalIsUnchanged(id: id, saved: saved, fetcher: fetcher) else { return changed }
         try Task.checkCancellation()
         var writtenBackup: URL?
         do {
@@ -339,19 +355,17 @@ public struct PhotosDownscaleRunner: JobRunner {
                         writtenBackup = url
                         pendingDeletions.setBackup(url, forJob: job.id)
                     } catch let error as OriginalsBackupError {
-                        return Self.keptBecause(error.keptBecause)
+                        return OutcomeLine(Self.keptBecause(error.keptBecause), .originalKeptBackupFailed)
                     } catch is CancellationError {
                         throw CancellationError()
                     } catch PhotoFetchError.cancelled {
                         throw CancellationError()
                     } catch {
-                        return Self.keptBecause(Self.backupDownloadReason)
+                        return OutcomeLine(Self.keptBecause(Self.backupDownloadReason), .originalKeptBackupFailed)
                     }
                 }
                 try Task.checkCancellation()
-                guard await originalIsUnchanged(id: id, saved: saved, fetcher: fetcher) else {
-                    return Self.originalChanged
-                }
+                guard await originalIsUnchanged(id: id, saved: saved, fetcher: fetcher) else { return changed }
             }
             try Task.checkCancellation()
             pendingDeletions.add(

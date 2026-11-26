@@ -1,3 +1,4 @@
+import AppCore
 import CoreGraphics
 import Foundation
 
@@ -196,4 +197,15 @@ public protocol PhotoStore: Sendable {
     func exportCurrentVersion(
         id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void
     ) async throws
+}
+
+extension PhotoStoreError: OutcomeCoded {
+    public var outcomeCode: OutcomeCode {
+        switch self {
+        case .notAuthorized: .photosAccessDenied
+        case .notInLibrary: .originalUnavailable
+        case .downloadFailed: .iCloudDownloadFailed
+        case .unavailable: .originalUnavailable
+        }
+    }
 }

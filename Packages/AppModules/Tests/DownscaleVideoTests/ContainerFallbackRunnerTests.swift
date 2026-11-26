@@ -110,6 +110,7 @@ import Testing
         #expect(outcome.report.lost.contains { $0.key == "qt.uiso/loci" })
         #expect(outcome.isVerified)
         #expect(outcome.notes == ["Saved as a .mov file because M4V can't hold all of its tracks"])
+        #expect(outcome.noteCodes == [.containerChanged])
     }
 
     /// Regression: a library entry read before ISO user data had names ("loci") still gets a job whose fallback
@@ -162,7 +163,8 @@ import Testing
             progressReported.withLock { $0 = true }
         }
 
-        #expect(state == .keptAsIs(reason: "Its file format can't keep all of its details"))
+        #expect(
+            state == .keptAsIs(reason: "Its file format can't keep all of its details", code: .formatCannotKeepDetails))
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
         #expect(!progressReported.withLock { $0 })
     }
@@ -179,7 +181,7 @@ import Testing
 
         let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
 
-        #expect(state == .keptAsIs(reason: "Already small"))
+        #expect(state == .keptAsIs(reason: "Already small", code: .alreadySmall))
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
     }
 
@@ -225,7 +227,8 @@ import Testing
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
-        #expect(state == .keptAsIs(reason: "Its file format can't keep all of its details"))
+        #expect(
+            state == .keptAsIs(reason: "Its file format can't keep all of its details", code: .formatCannotKeepDetails))
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
     }
 
