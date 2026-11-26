@@ -203,6 +203,7 @@
                             .foregroundStyle(.green)
                             .cornerRadius(3)
                     }
+                    .chartYScale(domain: 0...Swift.max(1, snapshot?.throughput.map(\.savedBytes).max() ?? 0))
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                 }
@@ -221,6 +222,9 @@
                         BarMark(x: .value("Freed", couldFree(of: Self.filesName)), y: .value("Library", "Files"))
                             .foregroundStyle(.cyan)
                     }
+                    .chartXScale(
+                        domain: 0...Swift.max(1, couldFree(of: Self.photosName), couldFree(of: Self.filesName))
+                    )
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                 }
@@ -239,6 +243,7 @@
                         "Waiting": Color.orange, "Done": Color.green, "Kept": Color.gray, "Failed": Color.red,
                     ])
                     .chartLegend(.hidden)
+                    .chartYScale(domain: 0...Swift.max(1, counts.map(\.value).max() ?? 0))
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                 }
@@ -254,6 +259,7 @@
                             .foregroundStyle(.purple)
                             .cornerRadius(3)
                     }
+                    .chartXScale(domain: 0...Swift.max(1, snapshot?.groups.prefix(4).map(\.bytes).max() ?? 0))
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                 }
@@ -284,6 +290,7 @@
                             .accessibilityLabel(day.day.formatted(Self.dayFormat))
                             .accessibilityValue(ByteFormat.string(day.savedBytes))
                     }
+                    .chartYScale(domain: 0...Swift.max(1, history.map(\.savedBytes).max() ?? 0))
                     .chartYAxis {
                         AxisMarks { value in
                             AxisGridLine()
@@ -319,6 +326,7 @@
                             .accessibilityLabel(group.title)
                             .accessibilityValue("Could free \(ByteFormat.string(group.bytes))")
                     }
+                    .chartXScale(domain: 0...Swift.max(1, groups.prefix(6).map(\.bytes).max() ?? 0))
                     .chartXAxis {
                         AxisMarks { value in
                             AxisGridLine()

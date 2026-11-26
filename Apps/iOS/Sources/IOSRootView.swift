@@ -55,7 +55,7 @@ struct IOSRootView: View {
             new != nil && old != new ? .warning : nil
         }
         .modifier(SheetsModifier(scenes: shell.scenes))
-        .fullScreenCover(isPresented: onboardingShown) {
+        .sheet(isPresented: onboardingShown) {
             IOSOnboardingView(requestPhotosAccess: { await shell.requestPhotosAccess() }) {
                 hasOnboarded = true
             }
