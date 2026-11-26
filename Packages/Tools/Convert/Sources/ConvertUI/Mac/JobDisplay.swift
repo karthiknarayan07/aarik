@@ -19,9 +19,14 @@ extension Job {
         return try? JSONDecoder().decode(ConvertJobSettings.self, from: settings)
     }
 
-    /// "Balanced", "Custom"; nil for a job of another tool.
+    /// "Balanced", "Custom", or "Compress · Balanced"; nil for a job of another tool.
     var presetLabel: String? {
-        downscaleSettings.map { $0.custom == nil ? $0.preset.displayName : "Custom" }
+        downscaleSettings.map { settings in
+            switch settings.kind {
+            case .shrink: settings.custom == nil ? settings.preset.displayName : "Custom"
+            case .compress(let preset): "Compress · \(preset.displayName)"
+            }
+        }
     }
 
     /// What the job was predicted to lose when it was added; nil when unknown (an older job, another tool).

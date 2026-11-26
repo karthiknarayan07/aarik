@@ -32,6 +32,7 @@
         }
 
         @ViewBuilder public func root() -> some View {
+            let model = model
             ForegroundObserver(model: model) {
                 IOSRootView(scene: self, model: model)
             }

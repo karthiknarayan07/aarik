@@ -27,6 +27,27 @@ public enum ConvertPlanner {
             inventory: inventory, byteSize: byteSize, spec: preset.spec(for: inventory, byteSize: byteSize))
     }
 
+    public static func decide(
+        source: URL, inventory: MetadataInventory, byteSize: Int64, kind: ConvertJobKind,
+        preset: Preset = .balanced, custom: DownscaleSpec? = nil
+    ) -> PlanDecision {
+        decide(inventory: inventory, byteSize: byteSize, kind: kind, preset: preset, custom: custom)
+    }
+
+    public static func decide(
+        inventory: MetadataInventory, byteSize: Int64, kind: ConvertJobKind, preset: Preset = .balanced,
+        custom: DownscaleSpec? = nil, fallsBackToQuickTime: Bool = false
+    ) -> PlanDecision {
+        let profile = SourceProfile(inventory: inventory, byteSize: byteSize)
+        let spec: DownscaleSpec =
+            switch kind {
+            case .shrink: custom ?? preset.spec(for: profile)
+            case .compress(let compressPreset): compressPreset.spec(for: profile)
+            }
+        return decide(
+            source: profile, inventory: inventory, spec: spec, fallsBackToQuickTime: fallsBackToQuickTime)
+    }
+
     /// Decides for an explicit spec (a preset's or a custom one). `fallsBackToQuickTime` says the output leaves
     /// the source's MPEG-4 container for QuickTime (`OutputContainer.decide(for:)`), which the prediction counts.
     public static func decide(
@@ -54,7 +75,7 @@ public enum ConvertPlanner {
             if source.shortSide > 0, source.shortSide <= target {
                 return .keptAsIs(reason: alreadySmallReason, code: .alreadySmall)
             }
-        } else if source.videoBitRate > 0, source.videoBitRate <= Double(spec.averageBitRate) {
+        } else if source.videoBitRate <= Double(spec.averageBitRate) {
             return .keptAsIs(reason: alreadySmallReason, code: .alreadySmall)
         }
         let estimate = Estimator.estimatedBytes(source: source, spec: spec)

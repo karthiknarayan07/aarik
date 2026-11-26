@@ -132,6 +132,12 @@ extension ConvertModel {
         requestAddSelectionToQueue()
     }
 
+    /// Context menu: Compress…, for the selection or the clicked tile.
+    public func compressClicked(_ item: LibraryItem) {
+        selectContextTargets(clicked: item)
+        presentCompress()
+    }
+
     public func canAddToQueue(clicked item: LibraryItem) -> Bool {
         saveLocation.destination != nil && contextTargets(clicked: item).contains(where: \.isAvailable)
     }

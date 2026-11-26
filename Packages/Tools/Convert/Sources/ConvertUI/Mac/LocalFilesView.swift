@@ -130,6 +130,8 @@
         var body: some View {
             Button("Add to Queue", systemImage: "plus") { model.addToQueue(clicked: item) }
                 .disabled(!model.canAddToQueue(clicked: item))
+            Button("Compress…", systemImage: "rectangle.compress.vertical") { model.compressClicked(item) }
+                .disabled(!model.canAddToQueue(clicked: item))
             Divider()
             Button("Open", systemImage: "arrow.up.forward.app") { model.openLocal(clicked: item) }
                 .disabled(!item.isAvailable)

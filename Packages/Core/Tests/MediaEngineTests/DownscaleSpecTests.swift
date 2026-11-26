@@ -28,6 +28,7 @@ import Testing
         for spec in [
             DownscaleSpec(), DownscaleSpec(targetShortSide: nil, averageBitRate: 5, maxFrameRate: 30),
             DownscaleSpec(targetShortSide: 720, averageBitRate: 8, codec: .h264Compatible),
+            DownscaleSpec(targetShortSide: nil, averageBitRate: 16_000_000, maxBitRate: 32_000_000),
         ] {
             let data = try JSONEncoder().encode(spec)
             #expect(try JSONDecoder().decode(DownscaleSpec.self, from: data) == spec)
@@ -39,6 +40,7 @@ import Testing
         let spec = try JSONDecoder().decode(DownscaleSpec.self, from: json)
         #expect(spec == DownscaleSpec(targetShortSide: 1080, averageBitRate: 9_000_000))
         #expect(spec.codec == .hevcKeepHDR)
+        #expect(spec.maxBitRate == nil)
     }
 
     @Test func keepingResolutionOnlyEvensTheSize() {
