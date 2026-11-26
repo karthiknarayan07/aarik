@@ -301,3 +301,26 @@ private final class Locked<Value: Sendable>: Sendable {
         set { state.withLock { $0 = newValue } }
     }
 }
+
+/// Frame rate comes from Photos.sqlite, which only the Mac reads. Elsewhere it stays unknown (0) until the video is
+/// local and inspected.
+@MainActor
+@Suite struct PlatformFpsTests {
+    @Test func iosFpsUnknownUntilLocal() async {
+        let asset = Samples.asset(id: "00000000-0000-0000-0000-000000000001/L0/001", byteSize: 1_000)
+        let store = FakePhotoStore(assets: [asset])
+        // The iOS loader gives no entries; elsewhere stand in for it so the real library is never read.
+        #if os(iOS)
+            let loader = PhotosLibrary.platformIndexLoader
+        #else
+            let loader: PhotosLibrary.IndexLoader = { ([:], .notFound) }
+        #endif
+        let photos = PhotosLibrary(store: store, loadIndex: loader)
+        await photos.start()
+        await photos.waitUntilIdle()
+        #expect(photos.items.count == 1)
+        #expect(photos.items.allSatisfy { $0.frameRate == 0 })
+        #expect(PhotoItemBuilder.build(asset).frameRate == 0)
+        #expect(PhotoIndexEntry().fps == nil)
+    }
+}

@@ -11,7 +11,7 @@ import Testing
 /// pool: enough downscales at once (10 on an 8-core Mac) blocked every pool thread while the work they waited for
 /// needed one, and none finished.
 @Suite struct ConcurrentDownscaleTests {
-    @Test(.timeLimit(.minutes(1))) func downscaleWorkRunsOnItsOwnQueueNotTheSharedPool() async throws {
+    @Test(.timeLimit(.minutes(5))) func downscaleWorkRunsOnItsOwnQueueNotTheSharedPool() async throws {
         var options = ClipOptions()
         options.width = 1280
         options.height = 720

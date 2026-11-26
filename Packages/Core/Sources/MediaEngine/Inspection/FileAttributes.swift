@@ -15,13 +15,17 @@ enum FileAttributes {
 
     static func read(_ url: URL) throws -> [MetadataItem] {
         var items: [MetadataItem] = []
-        let values = try uncached(url).resourceValues(forKeys: [.tagNamesKey, .creationDateKey])
-        if let tags = values.tagNames, !tags.isEmpty {
-            items.append(
-                MetadataItem(
-                    key: "fs.tags", category: .fileSystem, displayName: "Finder tags",
-                    value: tags.sorted().joined(separator: ",")))
-        }
+        #if os(macOS)
+            let values = try uncached(url).resourceValues(forKeys: [.tagNamesKey, .creationDateKey])
+            if let tags = values.tagNames, !tags.isEmpty {
+                items.append(
+                    MetadataItem(
+                        key: "fs.tags", category: .fileSystem, displayName: "Finder tags",
+                        value: tags.sorted().joined(separator: ",")))
+            }
+        #else
+            let values = try uncached(url).resourceValues(forKeys: [.creationDateKey])
+        #endif
         for name in try attributeNames(url) {
             items.append(
                 MetadataItem(
@@ -54,16 +58,23 @@ enum FileAttributes {
         }
 
         // Tags normally travel in their xattr above; set them only if that did not carry them.
-        let sourceValues = try uncached(source).resourceValues(forKeys: [
-            .tagNamesKey, .creationDateKey, .contentModificationDateKey,
-        ])
-        let sourceTags = sourceValues.tagNames ?? []
-        var destinationURL = uncached(destination)
-        if try destinationURL.resourceValues(forKeys: [.tagNamesKey]).tagNames ?? [] != sourceTags {
-            var tagValues = URLResourceValues()
-            tagValues.tagNames = sourceTags
-            try destinationURL.setResourceValues(tagValues)
-        }
+        #if os(macOS)
+            let sourceValues = try uncached(source).resourceValues(forKeys: [
+                .tagNamesKey, .creationDateKey, .contentModificationDateKey,
+            ])
+            let sourceTags = sourceValues.tagNames ?? []
+            var destinationURL = uncached(destination)
+            if try destinationURL.resourceValues(forKeys: [.tagNamesKey]).tagNames ?? [] != sourceTags {
+                var tagValues = URLResourceValues()
+                tagValues.tagNames = sourceTags
+                try destinationURL.setResourceValues(tagValues)
+            }
+        #else
+            // Finder tags are a Mac concept.
+            let sourceValues = try uncached(source).resourceValues(forKeys: [
+                .creationDateKey, .contentModificationDateKey,
+            ])
+        #endif
 
         var dates: [FileAttributeKey: Any] = [:]
         dates[.creationDate] = sourceValues.creationDate

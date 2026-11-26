@@ -63,10 +63,10 @@ public enum AppSettings {
         var stale = false
         return
             (try? URL(
-                resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutMounting, .withoutUI],
+                resolvingBookmarkData: bookmark, options: PlatformBookmark.resolution,
                 relativeTo: nil, bookmarkDataIsStale: &stale))
             ?? (try? URL(
-                resolvingBookmarkData: bookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
+                resolvingBookmarkData: bookmark, options: PlatformBookmark.fallbackResolution, relativeTo: nil,
                 bookmarkDataIsStale: &stale))
     }
 }

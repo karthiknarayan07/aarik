@@ -50,9 +50,19 @@ public final class PhotosLibrary: MediaCollection {
     /// The access level the last started fetch ran under; a different one needs a new fetch.
     @ObservationIgnored private var fetchedAuthorization: PhotoAuthorization?
 
+    /// Photos.sqlite is read on the Mac only (it needs Full Disk Access and isn't reachable on iOS). Elsewhere the frame
+    /// rate, codec and range stay unknown until the video is local and inspected.
+    public static let platformIndexLoader: IndexLoader = {
+        #if os(macOS)
+            await PhotosIndex().load()
+        #else
+            ([:], .notFound)
+        #endif
+    }
+
     public init(store: any PhotoStore, loadIndex: IndexLoader? = nil) {
         self.store = store
-        self.loadIndex = loadIndex ?? { await PhotosIndex().load() }
+        self.loadIndex = loadIndex ?? Self.platformIndexLoader
     }
 
     // MARK: - Authorization and loading

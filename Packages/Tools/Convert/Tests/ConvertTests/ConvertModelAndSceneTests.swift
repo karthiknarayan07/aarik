@@ -93,65 +93,80 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
         #expect(model.saveLocation.choice == .nextToOriginal)
     }
 
-    @Test func sceneExposesConvertToolAndMirrorsSelectionAndInspector() throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let model = makeModel(directory: directory)
-        let scene = ConvertMacScene(model: model)
+    #if os(macOS)
+        @Test func sceneExposesConvertToolAndMirrorsSelectionAndInspector() throws {
+            let directory = try makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let model = makeModel(directory: directory)
+            let scene = ConvertMacScene(model: model)
 
-        #expect(scene.tool.id == ConvertTool.toolID)
-        #expect(scene.tool.platforms == [.macOS, .iOS])
+            #expect(scene.tool.id == ConvertTool.toolID)
+            #expect(scene.tool.platforms == [.macOS, .iOS])
 
-        scene.selection = .overview
-        scene.isInspectorPresented = false
-        #expect(model.selection == .overview)
-        #expect(!model.isInspectorPresented)
-    }
+            scene.selection = .overview
+            scene.isInspectorPresented = false
+            #expect(model.selection == .overview)
+            #expect(!model.isInspectorPresented)
+        }
 
-    @Test func sceneReportsInspectorAvailabilityByPage() throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let scene = ConvertMacScene(model: makeModel(directory: directory))
+        @Test func sceneReportsInspectorAvailabilityByPage() throws {
+            let directory = try makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let scene = ConvertMacScene(model: makeModel(directory: directory))
 
-        #expect(scene.hasInspector(for: .localFiles))
-        #expect(scene.hasInspector(for: .mediaType(.k4)))
-        #expect(scene.hasInspector(for: .photosVideos))
-        #expect(!scene.hasInspector(for: .overview))
-        #expect(!scene.hasInspector(for: .queue))
-        #expect(!scene.hasInspector(for: .completed))
-        #expect(!scene.hasInspector(for: .keptAsIs))
-        #expect(!scene.hasInspector(for: .failed))
-        #expect(!scene.hasInspector(for: nil))
-    }
+            #expect(scene.hasInspector(for: .localFiles))
+            #expect(scene.hasInspector(for: .mediaType(.k4)))
+            #expect(scene.hasInspector(for: .photosVideos))
+            #expect(!scene.hasInspector(for: .overview))
+            #expect(!scene.hasInspector(for: .queue))
+            #expect(!scene.hasInspector(for: .completed))
+            #expect(!scene.hasInspector(for: .keptAsIs))
+            #expect(!scene.hasInspector(for: .failed))
+            #expect(!scene.hasInspector(for: nil))
+        }
 
-    @Test func sceneReportsContextMenusAndFileDropsByPage() throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let scene = ConvertMacScene(model: makeModel(directory: directory))
+        @Test func sceneReportsContextMenusAndFileDropsByPage() throws {
+            let directory = try makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let scene = ConvertMacScene(model: makeModel(directory: directory))
 
-        #expect(scene.hasContextMenu(for: .localFiles))
-        #expect(scene.hasContextMenu(for: .queue))
-        #expect(scene.hasContextMenu(for: .failed))
-        #expect(!scene.hasContextMenu(for: .overview))
-        #expect(!scene.hasContextMenu(for: .photosVideos))
-        #expect(!scene.hasContextMenu(for: .completed))
-        #expect(!scene.hasContextMenu(for: .keptAsIs))
+            #expect(scene.hasContextMenu(for: .localFiles))
+            #expect(scene.hasContextMenu(for: .queue))
+            #expect(scene.hasContextMenu(for: .failed))
+            #expect(!scene.hasContextMenu(for: .overview))
+            #expect(!scene.hasContextMenu(for: .photosVideos))
+            #expect(!scene.hasContextMenu(for: .completed))
+            #expect(!scene.hasContextMenu(for: .keptAsIs))
 
-        #expect(scene.acceptsFileDrop(on: .localFiles))
-        #expect(!scene.acceptsFileDrop(on: .overview))
-        #expect(!scene.acceptsFileDrop(on: .queue))
-    }
+            #expect(scene.acceptsFileDrop(on: .localFiles))
+            #expect(!scene.acceptsFileDrop(on: .overview))
+            #expect(!scene.acceptsFileDrop(on: .queue))
+        }
 
-    @Test func sceneDropFilesAddsToLibraryAndSelectsLocalFiles() throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let model = makeModel(directory: directory)
-        let scene = ConvertMacScene(model: model)
-        scene.selection = .overview
+        @Test func sceneDropFilesAddsToLibraryAndSelectsLocalFiles() throws {
+            let directory = try makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let model = makeModel(directory: directory)
+            let scene = ConvertMacScene(model: model)
+            scene.selection = .overview
 
-        #expect(!scene.dropFiles([], on: .localFiles))
-        #expect(scene.dropFiles([URL(filePath: "/tmp/nonexistent.mov")], on: .localFiles))
-        #expect(model.selection == .localFiles)
-        model.library.cancelScan()
-    }
+            #expect(!scene.dropFiles([], on: .localFiles))
+            #expect(scene.dropFiles([URL(filePath: "/tmp/nonexistent.mov")], on: .localFiles))
+            #expect(model.selection == .localFiles)
+            model.library.cancelScan()
+        }
+    #elseif os(iOS)
+        @Test func iosSceneExposesConvertToolAndMirrorsSelection() throws {
+            let directory = try makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let model = makeModel(directory: directory)
+            let scene = ConvertIOSScene(model: model)
+
+            #expect(scene.tool.id == ConvertTool.toolID)
+            #expect(scene.tool.platforms == [.macOS, .iOS])
+
+            scene.selection = .overview
+            #expect(model.selection == .overview)
+        }
+    #endif
 }

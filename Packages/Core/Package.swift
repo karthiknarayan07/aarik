@@ -6,7 +6,7 @@ import PackageDescription
 // package; this package never depends on a tool.
 let package = Package(
     name: "Core",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
         .library(name: "AppCore", targets: ["AppCore"]),
         .library(name: "MediaEngine", targets: ["MediaEngine"]),
@@ -54,7 +54,7 @@ let package = Package(
         ),
         .target(
             name: "MediaTestSupport",
-            dependencies: ["MediaEngine"],
+            dependencies: ["MediaEngine", "AppCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
@@ -64,7 +64,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AppCoreTests",
-            dependencies: ["AppCore"],
+            dependencies: ["AppCore", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

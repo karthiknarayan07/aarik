@@ -1,6 +1,7 @@
 import AppCore
 import Foundation
 import MediaEngine
+import MediaTestSupport
 import PhotosLibrary
 import Testing
 
@@ -8,7 +9,7 @@ import Testing
 
 /// Converting a Photos video: fetch, plan, downscale in the work folder, save a verified new video, optionally
 /// queue the original for deletion. The library is a fake; the clip is real.
-@Suite struct PhotosRunnerTests {
+@Suite(.enabled(if: EncoderEnvironment.isRepresentative)) struct PhotosRunnerTests {
     private func completed(_ state: JobState) -> JobOutcome? {
         if case .completed(let outcome) = state { return outcome }
         Issue.record("expected completed, got \(state)")

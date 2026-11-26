@@ -1,4 +1,6 @@
-import AppKit
+#if os(macOS)
+    import AppKit
+#endif
 import CoreGraphics
 import SwiftUI
 
@@ -57,15 +59,28 @@ public struct MediaTile: View {
             .overlay {
                 if state.isFocused && !state.isSelected {
                     RoundedRectangle(cornerRadius: Self.cornerRadius + inset)
-                        .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: focusWidth)
+                        .strokeBorder(Self.focusRingColor, lineWidth: focusWidth)
                         .padding(-inset)
                 }
             }
     }
 
     private var selectionColor: Color {
-        Color(
-            nsColor: state.isEmphasized ? .selectedContentBackgroundColor : .unemphasizedSelectedContentBackgroundColor)
+        #if os(macOS)
+            Color(
+                nsColor: state.isEmphasized
+                    ? .selectedContentBackgroundColor : .unemphasizedSelectedContentBackgroundColor)
+        #else
+            Color.accentColor.opacity(state.isEmphasized ? 1 : 0.5)
+        #endif
+    }
+
+    private static var focusRingColor: Color {
+        #if os(macOS)
+            Color(nsColor: .keyboardFocusIndicatorColor)
+        #else
+            Color.accentColor
+        #endif
     }
 
     @ViewBuilder private var poster: some View {

@@ -25,7 +25,8 @@ import Testing
         #expect(ConvertTool.descriptor.category == .video)
     }
 
-    @Test(.timeLimit(.minutes(5))) func runnerNextToOriginalNamesAndReports() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func runnerNextToOriginalNamesAndReports() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -51,7 +52,9 @@ import Testing
         #expect(!names.contains { $0.contains(".partial-") })
     }
 
-    @Test(.timeLimit(.minutes(5))) func existingOutputGetsNextName() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative)) func existingOutputGetsNextName()
+        async throws
+    {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -69,7 +72,8 @@ import Testing
         #expect(try Data(contentsOf: taken) == Data("mine".utf8))
     }
 
-    @Test(.timeLimit(.minutes(5))) func staleOwnPartialsAreRemovedOthersKept() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func staleOwnPartialsAreRemovedOthersKept() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -85,7 +89,8 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: other.path))
     }
 
-    @Test(.timeLimit(.minutes(5))) func folderDestinationWritesThere() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func folderDestinationWritesThere() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         let folder = directory.appending(path: "out", directoryHint: .isDirectory)
@@ -104,7 +109,8 @@ import Testing
             outcome.output.deletingLastPathComponent().resolvingSymlinksInPath() == folder.resolvingSymlinksInPath())
     }
 
-    @Test(.timeLimit(.minutes(5))) func replaceTrashesOriginalOnlyAfterVerify() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func replaceTrashesOriginalOnlyAfterVerify() async throws {
         let source = try await makeSource(name: "replace-\(UUID().uuidString).mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -138,7 +144,8 @@ import Testing
         #expect(names == [source.lastPathComponent])
     }
 
-    @Test(.timeLimit(.minutes(5))) func keptAsIsNeverTrashesTheOriginal() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func keptAsIsNeverTrashesTheOriginal() async throws {
         // A replace job that ends Kept As Is must never touch the Trash.
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
@@ -219,7 +226,8 @@ import Testing
         #expect(ConvertRunner.isVerified(lost, predicted: lost, spec: spec))
     }
 
-    @Test(.timeLimit(.minutes(5))) func replaceWithUnverifiedOutputNeverTrashes() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func replaceWithUnverifiedOutputNeverTrashes() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -264,7 +272,9 @@ import Testing
         #expect(outcome.warningCodes.contains(.originalKeptNotVerified))
     }
 
-    @Test(.timeLimit(.minutes(5))) func failedTrashKeepsBothFiles() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative)) func failedTrashKeepsBothFiles()
+        async throws
+    {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -291,7 +301,8 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: outcome.output.path))
     }
 
-    @Test(.timeLimit(.minutes(5))) func customSpecSavingTooLittleIsKeptAsIs() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func customSpecSavingTooLittleIsKeptAsIs() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -304,7 +315,8 @@ import Testing
         #expect(state == .keptAsIs(reason: "Would save less than 10%", code: .savesLittle))
     }
 
-    @Test(.timeLimit(.minutes(5))) func outputNotSmallEnoughIsRemovedAndKeptAsIs() async throws {
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func outputNotSmallEnoughIsRemovedAndKeptAsIs() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }

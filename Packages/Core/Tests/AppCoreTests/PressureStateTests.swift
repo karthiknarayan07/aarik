@@ -235,3 +235,23 @@ struct QueuePauseTests {
         #expect(pause.isPaused)
     }
 }
+
+@Suite("Low Power Mode")
+struct LowPowerModePressureTests {
+    @Test func lowPowerModeLimitsToOneSlot() {
+        for speed in SpeedSetting.allCases {
+            let normal = state(speed: speed)
+            let lowPower = state(
+                power: [PowerSnapshot(onBattery: false, percent: nil, isLowPowerMode: true)], speed: speed)
+            #expect(normal.concurrencyLimit(cores: eightCores) >= 1)
+            #expect(lowPower.concurrencyLimit(cores: eightCores) == 1)
+            #expect(lowPower.automaticPause == nil)
+        }
+    }
+
+    @Test func leavingLowPowerModeRestoresTheSpeedsLimit() {
+        var state = state(power: [PowerSnapshot(onBattery: false, percent: nil, isLowPowerMode: true)])
+        state.update(power: .pluggedIn)
+        #expect(state.concurrencyLimit(cores: eightCores) == 4)
+    }
+}

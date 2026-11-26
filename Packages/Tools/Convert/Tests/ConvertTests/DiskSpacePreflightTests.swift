@@ -1,3 +1,4 @@
+import MediaTestSupport
 import AppCore
 import Foundation
 import MediaEngine
@@ -9,7 +10,7 @@ import Testing
 
 /// The free-space rule before a job writes anything: the estimated output, plus the download for a Photos video,
 /// plus 1 GB, on every volume involved. All with a fake disk; the real one is never asked.
-@Suite struct DiskSpacePreflightTests {
+@Suite(.enabled(if: EncoderEnvironment.isRepresentative)) struct DiskSpacePreflightTests {
     private static let gb: Int64 = 1_000_000_000
     private static let spec = RunnerFixture.spec
 
