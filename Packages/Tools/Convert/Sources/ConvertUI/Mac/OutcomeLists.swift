@@ -106,7 +106,7 @@
                         .monospacedDigit()
                         .foregroundStyle(.green)
                         .contentTransition(.numericText())
-                        .animation(reduceMotion ? nil : .smooth, value: savedBytes)
+                        .animation(Motion.animation(reduceMotion: reduceMotion), value: savedBytes)
                     Text("from \(ActivityText.videos(count))")
                         .font(.callout)
                         .foregroundStyle(.secondary)

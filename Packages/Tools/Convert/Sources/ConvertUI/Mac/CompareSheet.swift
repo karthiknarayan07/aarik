@@ -143,7 +143,9 @@
         }
 
         private func move(_ direction: Int) -> KeyPress.Result {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.15)) { split.nudge(direction) }
+            withAnimation(Motion.animation(.smooth(duration: 0.15), reduceMotion: reduceMotion)) {
+                split.nudge(direction)
+            }
             return .handled
         }
 
