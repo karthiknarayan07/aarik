@@ -57,6 +57,7 @@ final class IOSShell {
     func start() async {
         startWidgetSync()
         await convert.start()
+        pickUpStaged()
     }
 
     /// The app is the writer of the widget's snapshot: it writes on every queue change and every pause change, and
@@ -92,6 +93,14 @@ final class IOSShell {
             // Re-check Apple Intelligence availability and Photos access when returning to the foreground.
             convert.assistant.availability.refresh()
             Task { await convert.photos.start() }
+            pickUpStaged()
+        }
+    }
+
+    /// Picks up videos the share extension or the App Intent staged in the App Group, and hands them to Convert.
+    func pickUpStaged() {
+        Task { [services, scene] in
+            await StagedPickup.shared.pickUp(into: scene, services: services)
         }
     }
 

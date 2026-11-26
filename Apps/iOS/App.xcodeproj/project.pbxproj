@@ -18,6 +18,7 @@
 		B20000000000000000000107 /* Convert in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000207 /* Convert */; };
 		B20000000000000000000108 /* ConvertUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000208 /* ConvertUI */; };
 		B20000000000000000000109 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000209 /* AppCore */; };
+		B20000000000000000000110 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000210 /* AppCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -143,6 +144,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000110 /* AppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -254,6 +256,7 @@
 			);
 			name = ShareExtension;
 			packageProductDependencies = (
+				B20000000000000000000210 /* AppCore */,
 			);
 			productName = ShareExtension;
 			productReference = B20000000000000000000031 /* ShareExtension.appex */;
@@ -668,6 +671,11 @@
 			productName = ConvertUI;
 		};
 		B20000000000000000000209 /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppCore;
+		};
+		B20000000000000000000210 /* AppCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
 			productName = AppCore;
