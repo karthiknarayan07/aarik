@@ -21,11 +21,13 @@
 
         private var showsAsk: Bool { services.assistantAvailability.isAvailable }
 
+        /// The inspector is the person's choice for the whole window, never the page's. Showing or hiding it with the
+        /// page made macOS resize the window, and the content jump, on every switch to or from a page without one.
         private var inspectorShown: Binding<Bool> {
             Binding {
-                module.hasInspector(on: module.selection) && module.isInspectorPresented
+                module.isInspectorPresented
             } set: {
-                if module.hasInspector(on: module.selection) { module.isInspectorPresented = $0 }
+                module.isInspectorPresented = $0
             }
         }
 
@@ -55,7 +57,7 @@
 
         @ViewBuilder private var inspector: some View {
             switch module.selection {
-            case .home: EmptyView()
+            case .home: module.inspector(for: nil)
             case .ask: MacChatHistoryView(chat: services.assistantChat)
             case .page(let destination): module.inspector(for: destination)
             case nil: module.inspector(for: nil)
@@ -80,7 +82,7 @@
             ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItem(placement: .primaryAction) {
                 InspectorToggle(
-                    isEnabled: module.hasInspector(on: module.selection),
+                    isEnabled: true,
                     isPresented: Binding(
                         get: { module.isInspectorPresented }, set: { module.isInspectorPresented = $0 }))
             }
