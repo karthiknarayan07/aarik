@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # One command for the whole base gate: package tests, warnings-as-errors build, lint, Mac and iOS builds,
-# iOS tests, brand-neutral and stale-path checks. Prints a pass/fail table; exits non-zero on any failure.
+# iOS tests, brand-neutral, stale-path and text checks (no "..." in strings, no tool names on app-level screens).
+# Prints a pass/fail table; exits non-zero on any failure.
 #
 #   scripts/verify.sh [--only GROUP[,GROUP...]] [--repeat N]
 #
-# Groups: mac ios packages lint hygiene brand stale   (default: everything)
+# Groups: mac ios packages lint hygiene brand stale text   (default: everything)
 # Env:    SIM_UDID (force a simulator), MAC_SCHEME (default App), IOS_SCHEME (default App-iOS),
 #         VERIFY_DIR (logs and derived data, default .build/verify),
 #         IOS_SKIP_TESTING (space-separated -skip-testing identifiers for "iOS app test", e.g. "AppUITests")
@@ -15,7 +16,7 @@ VERIFY_DIR=${VERIFY_DIR:-$PWD/.build/verify}
 ONLY=""
 REPEAT=1
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
   case $1 in
     --only) ONLY=${2:?--only needs a group}; shift 2 ;;
@@ -28,7 +29,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ $REPEAT =~ ^[1-9][0-9]*$ ]] || { echo "verify: --repeat needs a positive integer" >&2; exit 2; }
 for g in ${ONLY//,/ }; do
-  case $g in mac|ios|packages|lint|hygiene|brand|stale) ;; *) echo "verify: unknown group '$g'" >&2; exit 2 ;; esac
+  case $g in mac|ios|packages|lint|hygiene|brand|stale|text) ;; *) echo "verify: unknown group '$g'" >&2; exit 2 ;; esac
 done
 
 mkdir -p "$VERIFY_DIR/logs"
@@ -121,6 +122,21 @@ stale_check() { # references to the old App/ layout outside history docs
     ':!docs/superpowers' ':!docs/adr' ':!CHANGELOG.md' ':!scripts/verify.sh' 2>/dev/null || true)
   if [[ -n $hits ]]; then echo "stale layout references:"; echo "$hits"; return 1; fi
 }
+text_sources() { # every Sources directory of the packages and apps
+  find Packages Apps -type d -name Sources -not -path '*/.build/*' -not -path '*/checkouts/*' 2>/dev/null | sort
+  [[ -d Apps/iOS/Shared ]] && echo Apps/iOS/Shared
+  [[ -d Apps/iOS/Widgets ]] && echo Apps/iOS/Widgets
+  [[ -d Apps/iOS/ShareExtension ]] && echo Apps/iOS/ShareExtension
+}
+ellipsis_check() { # three dots in a string literal: the text uses the ellipsis character
+  local dirs=() d
+  while IFS= read -r d; do [[ -n $d ]] && dirs+=("$d"); done < <(text_sources)
+  [[ ${#dirs[@]} -gt 0 ]] || { echo "no Sources directories found"; return 1; }
+  python3 -I scripts/text-lint.py ellipsis "${dirs[@]}"
+}
+app_level_text_check() { # app-level screens never name a tool; scripts/app-level-text-allowlist.txt lists the exceptions
+  python3 -I scripts/text-lint.py tools scripts/app-level-screens.txt scripts/app-level-text-allowlist.txt
+}
 swift_test() { (cd "$1" && swift test); }
 warnings_build() { (cd "$1" && swift build -Xswiftc -warnings-as-errors --build-tests); }
 package_scheme() { # the SwiftPM umbrella scheme of the package in $1
@@ -189,6 +205,8 @@ for ((n = 1; n <= REPEAT; n++)); do
 
   run $n "brand-neutral" "mac hygiene brand" brand_check
   run $n "stale paths" "mac hygiene stale" stale_check
+  run $n "no three dots in strings" "mac hygiene text" ellipsis_check
+  run $n "app-level text names no tool" "mac hygiene text" app_level_text_check
 done
 
 echo

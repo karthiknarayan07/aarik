@@ -1,0 +1,22 @@
+# App-level screens: the surfaces that belong to the app, not to a tool. They never name a tool ("Convert", "Shrink",
+# "compress"): a tool's name and wording appear only in that tool's own views. Checked by scripts/verify.sh (text
+# checks); legitimate uses go in scripts/app-level-text-allowlist.txt. One path per line, relative to the repository
+# root.
+
+# iOS: onboarding, the tab bar with Home and Browse, and the Ask tab
+Apps/iOS/Sources/IOSOnboarding.swift
+Apps/iOS/Sources/IOSRootView.swift
+Apps/iOS/Sources/IOSShell.swift
+Packages/Core/Sources/AppUI/Assistant/AssistantTabRoot.swift
+Packages/Core/Sources/AppUI/Assistant/AssistantContent.swift
+Packages/Core/Sources/AppUI/Assistant/AssistantTranscript.swift
+Packages/Core/Sources/AppUI/Assistant/ChatHistorySheet.swift
+
+# Mac: the shell's window, sidebar, Home and Ask
+Apps/macOS/Sources/MainWindow.swift
+Apps/macOS/Sources/MacShell.swift
+Packages/Core/Sources/AppUI/Mac/MacRootView.swift
+Packages/Core/Sources/AppUI/Mac/MacSidebarView.swift
+Packages/Core/Sources/AppUI/Mac/MacAskView.swift
+Packages/Core/Sources/AppUI/Mac/MacChatHistoryView.swift
+Packages/Core/Sources/AppUI/Mac/MainWindowLayout.swift
