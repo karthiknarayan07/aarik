@@ -12,13 +12,10 @@
         let presetName: String
         let isRefreshing: Bool
 
-        private static let cardColumns = [GridItem(.adaptive(minimum: 190), spacing: 12, alignment: .top)]
-        private static let trendColumns = [GridItem(.adaptive(minimum: 340), spacing: 16, alignment: .top)]
-
         var body: some View {
             VStack(alignment: .leading, spacing: 20) {
                 SavingsHero(charts: charts, presetName: presetName, isRefreshing: isRefreshing)
-                LazyVGrid(columns: Self.cardColumns, spacing: 12) {
+                AdaptiveGrid(minimumWidth: 190, spacing: 12) {
                     SummaryCard(
                         title: "Could Free", systemImage: "arrow.down.right.circle.fill", tint: .blue,
                         value: charts.couldFree > 0 ? ByteFormat.string(charts.couldFree) : "Nothing",
@@ -52,7 +49,7 @@
                 Text("Trends")
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
-                LazyVGrid(columns: Self.trendColumns, spacing: 16) {
+                AdaptiveGrid(minimumWidth: 340, spacing: 16) {
                     BeforeAfterChart(sizes: charts.sizes)
                     GroupSavingsChart(groups: charts.groups)
                     SavedOverTimeChart(points: charts.savedOverTime)
@@ -95,39 +92,47 @@
 
         var body: some View {
             GroupBox {
-                HStack(spacing: 24) {
-                    ring
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(insight)
-                            .font(.title2.weight(.semibold))
-                            .fixedSize(horizontal: false, vertical: true)
-                        if charts.couldFree > 0 {
-                            Text(
-                                "\(ByteFormat.string(charts.totalBytes)) now, about "
-                                    + "\(ByteFormat.string(max(0, charts.totalBytes - charts.couldFree))) after at the "
-                                    + "\(presetName) preset."
-                            )
-                            .foregroundStyle(.secondary)
-                        }
-                        Text("Nothing changes until you add videos to the queue.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 6) {
-                            if isRefreshing {
-                                ProgressView().controlSize(.small)
-                                Text("Updating…")
-                            } else {
-                                Text("Updated \(charts.updatedAt.formatted(.relative(presentation: .named)))")
-                            }
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 24) {
+                        ring; words
                     }
-                    Spacer(minLength: 0)
+                    VStack(alignment: .leading, spacing: 16) {
+                        ring; words
+                    }
                 }
                 .padding(8)
             }
             .accessibilityElement(children: .combine)
+        }
+
+        private var words: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(insight)
+                    .font(.title2.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                if charts.couldFree > 0 {
+                    Text(
+                        "\(ByteFormat.string(charts.totalBytes)) now, about "
+                            + "\(ByteFormat.string(max(0, charts.totalBytes - charts.couldFree))) after at the "
+                            + "\(presetName) preset."
+                    )
+                    .foregroundStyle(.secondary)
+                }
+                Text("Nothing changes until you add videos to the queue.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    if isRefreshing {
+                        ProgressView().controlSize(.small)
+                        Text("Updating…")
+                    } else {
+                        Text("Updated \(charts.updatedAt.formatted(.relative(presentation: .named)))")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         private var ring: some View {
@@ -394,6 +399,58 @@
             AxisGridLine()
             AxisValueLabel {
                 if let bytes = value.as(Int64.self) { Text(bytes == 0 ? "0" : ByteFormat.string(bytes)) }
+            }
+        }
+    }
+
+    /// Equal columns, as many as fit at `minimumWidth`, one row after another. Not lazy, so every row has its real
+    /// height at once and nothing below it can be laid over it while the charts size themselves.
+    private struct AdaptiveGrid: Layout {
+        let minimumWidth: CGFloat
+        let spacing: CGFloat
+
+        private func columns(for width: CGFloat) -> Int {
+            guard width.isFinite, width > 0 else { return 1 }
+            return max(1, Int((width + spacing) / (minimumWidth + spacing)))
+        }
+
+        private func cellWidth(_ width: CGFloat, columns: Int) -> CGFloat {
+            (width - spacing * CGFloat(columns - 1)) / CGFloat(columns)
+        }
+
+        private func rowHeights(_ subviews: Subviews, width: CGFloat) -> (heights: [CGFloat], columns: Int) {
+            let count = columns(for: width)
+            let cell = cellWidth(width, columns: count)
+            var heights: [CGFloat] = []
+            for start in stride(from: 0, to: subviews.count, by: count) {
+                let row = subviews[start..<min(start + count, subviews.count)]
+                heights.append(
+                    row.map { $0.sizeThatFits(ProposedViewSize(width: cell, height: nil)).height }.max() ?? 0)
+            }
+            return (heights, count)
+        }
+
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+            let width = proposal.width ?? minimumWidth
+            let rows = rowHeights(subviews, width: width).heights
+            return CGSize(width: width, height: rows.reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1)))
+        }
+
+        func placeSubviews(
+            in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+        ) {
+            let (heights, count) = rowHeights(subviews, width: bounds.width)
+            let cell = cellWidth(bounds.width, columns: count)
+            var y = bounds.minY
+            for (rowIndex, height) in heights.enumerated() {
+                for column in 0..<count {
+                    let index = rowIndex * count + column
+                    guard index < subviews.count else { break }
+                    subviews[index].place(
+                        at: CGPoint(x: bounds.minX + CGFloat(column) * (cell + spacing), y: y), anchor: .topLeading,
+                        proposal: ProposedViewSize(width: cell, height: height))
+                }
+                y += height + spacing
             }
         }
     }

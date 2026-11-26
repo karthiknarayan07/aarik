@@ -46,11 +46,12 @@ final class ConvertAssistantContext {
         var items: [LibraryItem] = []
         if scope != "files" { items += model.photos.items }
         if scope != "photos" { items += model.library.items }
-        let text = arguments.string("name_contains")?.lowercased()
+        let words = Self.nameWords(arguments.string("name_contains"))
         let year = arguments.integer("year")
         let minimum = Int64(arguments.integer("minimum_size_mb") ?? 0) * 1_000_000
         let matches = items.filter { item in
-            if let text, !item.name.lowercased().contains(text) { return false }
+            let name = item.name.lowercased()
+            if !words.allSatisfy(name.contains) { return false }
             if let year, item.captureDate.map({ Calendar.current.component(.year, from: $0) }) != year { return false }
             return item.byteSize >= minimum
         }.sorted { $0.byteSize > $1.byteSize }
@@ -59,8 +60,10 @@ final class ConvertAssistantContext {
             "\(item.name) · \(QualityBucket(item: item).title) · \(ByteFormat.string(item.byteSize))"
         }
         let total = ByteFormat.string(matches.reduce(0) { $0 + $1.byteSize })
-        let count = matches.count == 1 ? "1 video" : "\(matches.count.formatted()) videos"
-        var summary = "No videos found."
+        var summary =
+            items.isEmpty
+            ? "No videos found. The library is empty: nothing in Photos or Local Files yet."
+            : "No videos matched. The library has \(items.count.formatted()) videos; try again without the filters."
         if !matches.isEmpty {
             // Numbered, one per line: the model reads this as a list and repeats it by name.
             let numbered = lines.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
@@ -76,6 +79,17 @@ final class ConvertAssistantContext {
                 + (more > 0 ? "\n\(more.formatted()) other videos aren't listed." : "")
         }
         return AssistantToolOutput(text: summary, title: "Searched Library", count: matches.count, lines: lines)
+    }
+
+    /// The words of a name filter that can narrow anything. "Biggest videos" says what the person wants, not what the
+    /// files are called, so words about size and kind are dropped, and what is left must all appear in the name.
+    static func nameWords(_ text: String?) -> [String] {
+        let generic: Set<String> = [
+            "video", "videos", "movie", "movies", "clip", "clips", "file", "files", "biggest", "largest", "big",
+            "large", "my", "all", "the", "and", "of", "in", "on", "photos", "library",
+        ]
+        return (text ?? "").lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+            .filter { !generic.contains($0) }
     }
 
     // MARK: Savings
