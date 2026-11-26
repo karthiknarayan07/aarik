@@ -60,6 +60,23 @@ private final class Collection: MediaCollection {
         #expect(!rig.browser.quality.isActive)
     }
 
+    @Test func focusingTheSearchFieldReadsAvailabilityAgainWithoutAnActivation() {
+        let rig = rig(available: false)
+        #expect(!rig.search.isVisible)
+
+        // Apple Intelligence was turned on in System Settings; no app activation has happened.
+        rig.client.isAvailable = true
+        #expect(!rig.search.isVisible)
+        rig.search.searchFieldGainedFocus()
+        #expect(rig.search.isVisible)
+
+        // And off again: the sparkle goes at the next focus, and nothing is left behind.
+        rig.client.isAvailable = false
+        rig.search.searchFieldGainedFocus()
+        #expect(!rig.search.isVisible)
+        #expect(rig.search.tokens.isEmpty)
+    }
+
     @Test func turningTheModelOnShowsTheControlsAndOffRemovesWhatItApplied() async {
         let rig = rig(available: false)
         rig.client.isAvailable = true
