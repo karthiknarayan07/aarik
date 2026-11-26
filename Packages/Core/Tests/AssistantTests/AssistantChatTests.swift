@@ -50,6 +50,57 @@ struct AssistantChatTests {
         #expect(chat.items.map(\.content) == [.user("Hi"), .assistant("Hello there, friend.")])
     }
 
+    @Test func aContextReachesTheModelButNotTheTranscript() async {
+        let client = ScriptedChatClient { _ in [.text("It is big.")] }
+        let chat = makeChat(client: client)
+        chat.setContext(ChatContext(title: "Beach Day.mov", details: "4K at 60 fps, 1.8 GB."))
+        chat.send("Why so big?")
+        await chat.waitUntilIdle()
+        #expect(client.requests.last?.instructions.contains("Beach Day.mov") == true)
+        #expect(client.requests.last?.instructions.contains("4K at 60 fps") == true)
+        #expect(chat.items.map(\.content) == [.user("Why so big?"), .assistant("It is big.")])
+        #expect(chat.context?.title == "Beach Day.mov")
+    }
+
+    @Test func theContextSurvivesRegenerate() async {
+        let client = ScriptedChatClient { _ in [.text("Because it is 4K.")] }
+        let chat = makeChat(client: client)
+        chat.setContext(ChatContext(title: "Beach Day.mov", details: "4K."))
+        chat.send("Why so big?")
+        await chat.waitUntilIdle()
+        chat.regenerate()
+        await chat.waitUntilIdle()
+        #expect(client.requests.count == 2)
+        #expect(client.requests.last?.instructions.contains("Beach Day.mov") == true)
+        #expect(chat.context?.title == "Beach Day.mov")
+    }
+
+    @Test func noContextLeavesTheRulesAlone() async {
+        let client = ScriptedChatClient { _ in [.text("Hi.")] }
+        let chat = makeChat(client: client)
+        chat.send("Hello")
+        await chat.waitUntilIdle()
+        #expect(client.requests.last?.instructions == AssistantChat.instructions)
+    }
+
+    @Test func aNewChatOrAnotherChatDropsTheContext() async {
+        let client = ScriptedChatClient { _ in [.text("Hi.")] }
+        let chat = makeChat(client: client)
+        chat.send("First")
+        await chat.waitUntilIdle()
+        let first = chat.currentID
+        chat.newChat()
+        chat.setContext(ChatContext(title: "A.mov", details: ""))
+        chat.newChat()
+        #expect(chat.context == nil)
+        chat.setContext(ChatContext(title: "B.mov", details: ""))
+        if let first { chat.open(first) }
+        #expect(chat.context == nil)
+        chat.setContext(ChatContext(title: "C.mov", details: ""))
+        chat.clearContext()
+        #expect(chat.context == nil)
+    }
+
     @Test func aReadToolRunsOnItsOwn() async {
         let tool = CountingTool(name: "search_library", requiresConfirmation: false)
         let client = ScriptedChatClient { _ in [.tool("search_library"), .text("Found them.")] }

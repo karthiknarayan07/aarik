@@ -138,6 +138,10 @@
             Button("Compress…", systemImage: "rectangle.compress.vertical") { model.compressClicked(item) }
                 .disabled(!model.canAddToQueue(clicked: item))
             Divider()
+            if model.isAskAvailable {
+                Button("Ask About This…", systemImage: "sparkles") { model.askAbout(item) }
+                Divider()
+            }
             Button("Open", systemImage: "arrow.up.forward.app") { model.openLocal(clicked: item) }
                 .disabled(!item.isAvailable)
             Button("Show in Finder", systemImage: "folder") {
