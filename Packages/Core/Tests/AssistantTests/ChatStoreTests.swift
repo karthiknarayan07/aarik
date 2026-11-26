@@ -20,7 +20,10 @@ struct ChatStoreTests {
         let store = ChatStore(directory: nil)
         let id = store.createConversation()
         let user = ChatItem(.user("Find big videos"))
-        let call = ChatItem(.toolCall(ChatToolCall(toolName: "search_library", title: "Searched Library", count: 42, lines: ["a"], state: .done)))
+        let call = ChatItem(
+            .toolCall(
+                ChatToolCall(
+                    toolName: "search_library", title: "Searched Library", count: 42, lines: ["a"], state: .done)))
         let card = ChatItem(
             .confirmation(
                 ChatConfirmation(
@@ -45,7 +48,9 @@ struct ChatStoreTests {
         store.save(
             ChatItem(
                 .confirmation(
-                    ChatConfirmation(toolName: "t", arguments: AssistantArguments(), card: AssistantConfirmation(title: "A", message: "B")))),
+                    ChatConfirmation(
+                        toolName: "t", arguments: AssistantArguments(),
+                        card: AssistantConfirmation(title: "A", message: "B")))),
             order: 1, in: id)
         let items = store.items(in: id)
         guard case .toolCall(let call) = items[0].content, case .confirmation(let card) = items[1].content else {

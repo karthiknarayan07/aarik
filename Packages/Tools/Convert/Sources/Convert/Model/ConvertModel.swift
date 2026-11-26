@@ -147,6 +147,7 @@ public final class ConvertModel {
             photoStore: services.library.photoStore, pendingDeletions: services.pendingDeletions,
             originalsBackup: AppSettings.originalsBackupProvider(defaults))
         services.register(tool)
+        services.registerAssistantTools(ConvertAssistantToolProvider(model: self))
         services.observeJobs { [weak self] jobs in self?.jobsChanged(jobs) }
         services.observeRunFinished { [weak self] _ in self?.moveOriginalsAfterRun() }
     }

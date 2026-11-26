@@ -52,7 +52,8 @@ public final class ChatStore {
         let schema = Schema([ConversationRecord.self, MessageRecord.self])
         if let directory,
             let container = try? ModelContainer(
-                for: schema, configurations: ModelConfiguration(schema: schema, url: directory.appending(path: Self.fileName)))
+                for: schema,
+                configurations: ModelConfiguration(schema: schema, url: directory.appending(path: Self.fileName)))
         {
             self.container = container
             self.isPersistent = true
@@ -68,9 +69,13 @@ public final class ChatStore {
 
     /// Newest activity first.
     public func conversations() -> [ChatConversationSummary] {
-        let records = (try? context.fetch(FetchDescriptor<ConversationRecord>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? []
+        let records =
+            (try? context.fetch(
+                FetchDescriptor<ConversationRecord>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? []
         return records.map { record in
-            let last = record.messages.filter { $0.kind == "assistant" || $0.kind == "user" }.max { $0.order < $1.order }
+            let last = record.messages.filter { $0.kind == "assistant" || $0.kind == "user" }.max {
+                $0.order < $1.order
+            }
             return ChatConversationSummary(
                 id: record.id, title: record.title, updatedAt: record.updatedAt, preview: last?.text ?? "")
         }
@@ -114,7 +119,8 @@ public final class ChatStore {
         guard let conversation = conversation(id) else { return }
         let (kind, text, payload) = Self.encode(item.content)
         let itemID = item.id
-        let existing = try? context.fetch(FetchDescriptor<MessageRecord>(predicate: #Predicate { $0.id == itemID })).first
+        let existing = try? context.fetch(FetchDescriptor<MessageRecord>(predicate: #Predicate { $0.id == itemID }))
+            .first
         if let existing {
             existing.order = order
             existing.kind = kind
@@ -162,7 +168,8 @@ public final class ChatStore {
             content = .toolCall(call)
         case "confirmation":
             guard
-                var confirmation = record.payload.flatMap({ try? JSONDecoder().decode(ChatConfirmation.self, from: $0) })
+                var confirmation = record.payload.flatMap({ try? JSONDecoder().decode(ChatConfirmation.self, from: $0) }
+                )
             else { return nil }
             if confirmation.state == .pending { confirmation.state = .expired }
             content = .confirmation(confirmation)
