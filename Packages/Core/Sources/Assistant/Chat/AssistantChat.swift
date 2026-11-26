@@ -16,6 +16,9 @@ public final class AssistantChat {
     public private(set) var currentID: UUID?
     public private(set) var conversations: [ChatConversationSummary] = []
     public let availability: AssistantAvailability
+    /// What the next questions are about (a video chosen with Ask About This…). The model is told; the transcript
+    /// shows only what the person typed. Cleared by a new chat, opening another chat, or `clearContext()`.
+    public private(set) var context: ChatContext?
 
     @ObservationIgnored private let client: any LanguageModelClient
     @ObservationIgnored private let store: ChatStore
@@ -77,6 +80,11 @@ public final class AssistantChat {
         }
     }
 
+    /// Makes the next questions about this subject. Replaces any earlier one.
+    public func setContext(_ context: ChatContext) { self.context = context }
+
+    public func clearContext() { context = nil }
+
     /// Stops the answer being written. What was written stays; a waiting confirmation is cancelled, so nothing runs.
     public func stop() {
         generation?.cancel()
@@ -88,7 +96,8 @@ public final class AssistantChat {
 
     private func generate(prompt: String, history: [ChatTurn], in id: UUID, epoch: Int) async {
         let request = ChatRequest(
-            prompt: prompt, instructions: Self.instructions, history: history, tools: tools(),
+            prompt: prompt, instructions: Self.instructions + (context?.instructions ?? ""), history: history,
+            tools: tools(),
             invoke: { [weak self] name, arguments in
                 await self?.handleToolCall(name, arguments, in: id) ?? "The assistant is closed."
             })
@@ -267,6 +276,7 @@ public final class AssistantChat {
         leaveChat()
         items = []
         currentID = nil
+        context = nil
     }
 
     public func open(_ id: UUID) {
@@ -274,6 +284,7 @@ public final class AssistantChat {
         leaveChat()
         items = store.items(in: id)
         currentID = id
+        context = nil
     }
 
     public func rename(_ id: UUID, to title: String) {
