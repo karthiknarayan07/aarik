@@ -35,6 +35,8 @@ public struct PhotosDownscaleRunner: JobRunner {
     private let pendingDeletions: PendingDeletions
     private let originalsBackup: DownscaleRunner.BackupProvider
     private let core: DownscaleRunner
+    /// One fetch from Photos at a time, however many jobs run (shared by every job this runner runs).
+    private let downloads = DownloadGate()
 
     /// `originalsBackup` is asked at the moment of each Replace, as for files.
     public init(
@@ -59,6 +61,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     }
 
     static let downloadingPhase = "Downloading from iCloud…"
+    static let waitingPhase = "Waiting for another download…"
     static let copyingPhase = "Getting from Photos…"
     static let renderingPhase = "Rendering the edited version…"
     static let convertingPhase = "Converting…"
@@ -120,6 +123,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     ) async throws -> JobState {
         let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
         guard let id = PhotoAssetURL.identifier(from: job.source) else { throw PhotosRunnerError.notAPhotosJob }
+        defer { core.diskSpace.release(owner: job.id) }
         let destination = settings.photosDestination ?? .newAsset
         let fetcher = PhotoInputFetcher(store: store)
 
@@ -160,7 +164,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         let result = try await core.convert(
             source: input.url, byteSize: input.bytes, inventory: inventory, settings: settings,
             nameAfter: URL(filePath: PhotoInputFetcher.fileName(for: current, isEdited: false)),
-            requireLossShown: true,
+            requireLossShown: true, reservingFor: job.id,
             outputFolder: {
                 if case .folder(let bookmark) = destination {
                     return try DownscaleRunner.outputFolder(for: .folder(bookmark: bookmark), source: input.url)
@@ -198,21 +202,25 @@ public struct PhotosDownscaleRunner: JobRunner {
     ) async throws -> FetchedInput {
         let first = asset.isLocallyAvailable == true ? Self.copyingPhase : Self.downloadingPhase
         let last = Mutex<String?>(first)
-        phase(first)
-        return try await Signposts.interval(.download) {
-            try await fetcher.fetch(id: id, into: folder) { event in
-                let label =
-                    switch event {
-                    case .downloading: first
-                    case .exporting: Self.renderingPhase
+        phase(await downloads.isBusy ? Self.waitingPhase : first)
+        // Only one fetch at a time; a job waiting for its turn can still be cancelled.
+        return try await downloads.run {
+            phase(first)
+            return try await Signposts.interval(.download) {
+                try await fetcher.fetch(id: id, into: folder) { event in
+                    let label =
+                        switch event {
+                        case .downloading: first
+                        case .exporting: Self.renderingPhase
+                        }
+                    if last.withLock({ current in
+                        defer { current = label }
+                        return current != label
+                    }) {
+                        phase(label)
                     }
-                if last.withLock({ current in
-                    defer { current = label }
-                    return current != label
-                }) {
-                    phase(label)
+                    progress(event.fraction)
                 }
-                progress(event.fraction)
             }
         }
     }
@@ -396,7 +404,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         }
         if input == nil || input?.isEditedVersion == true {
             phase(Self.backupPhase)
-            original = try await fetcher.fetchOriginal(id: id, into: jobFolder)
+            original = try await downloads.run { try await fetcher.fetchOriginal(id: id, into: jobFolder) }
         }
         guard let original else { throw OriginalsBackupError.copyFailed }
         return try core.backUp(original.url, byteSize: original.bytes, into: folder)
@@ -440,7 +448,7 @@ public struct PhotosDownscaleRunner: JobRunner {
             needs.append(SpaceNeed(url: backup.folder, bytes: size))
             if asset.hasAdjustments { needs.append(SpaceNeed(url: work, bytes: size)) }
         }
-        try core.diskSpace.verify(needs)
+        try core.diskSpace.verify(needs, reservingFor: jobID)
     }
 
     static func keptBecause(_ reason: String) -> String {

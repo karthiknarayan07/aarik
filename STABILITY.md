@@ -54,18 +54,20 @@ not exist yet. Change a rule only together with its test.
   watchdog outside the job (`StallWatchdog.race`, reading the job's heartbeat) fails the call after 90 s without
   progress: it cancels the reader and writer, removes the partial and releases the `WorkSlots` slot, and the stuck task
   is abandoned until its call returns (it then commits nothing). Retry works. Tests force each stall with tiny limits
-  (`StallWatchdogTests`). This must stay in place before queue concurrency (B2b) so one stuck job cannot hold a slot.
-- `JobQueue` runs one job at a time and persists after every state change. A job found `running` at launch
-  (crash, quit) is put back to `queued`.
+  (`StallWatchdogTests`). It matters with several jobs at once: a stuck job frees its `WorkSlots` slot and its queue slot (the job fails) instead of holding them.
+- `JobQueue` runs up to the speed's limit of jobs at once (one for Quiet; see PERFORMANCE.md), in queue order, and
+  persists after every state change. Every job found `running` at launch (crash, quit) is put back to `queued`.
+  Cancelling one job stops only that job; Pause and the automatic hold let all running jobs finish and start nothing new;
+  lowering the limit never stops a running job. Duplicate detection counts every queued and running job.
 - `applicationShouldTerminate` first asks "Stop converting and quit?" (a standard `NSAlert`, default button
   "Stop and Quit", `QuitConfirmation`) when work is under way, using `QuitPolicy.needsConfirmation` (the same
   definition of busy as `RelaunchGate`: a job running, or waiting jobs about to start). It does not ask when the queue
   is idle or paused with nothing running, nor while the system is logging out, restarting or shutting down (the quit
   Apple event's `kAEQuitReason`, or a `NSWorkspace.willPowerOffNotification` in the last 30 seconds, cleared when the app
   becomes active again; either signal is enough, `QuitPolicy.isSessionEnding`): then it quits without asking.
-- After the answer, it replies later: pending library saves finish and the running job is returned to the queue
+- After the answer, it replies later: pending library saves finish and every running job is returned to the queue
   (`AppModel.prepareForTermination` -> `JobQueue.shutdown`) before the app exits. The encoder removes its partial
-  file when cancelled, and every job, the interrupted one and the rest, is saved as `queued`
+  file when cancelled, and every job, the interrupted ones and the rest, is saved as `queued`
   (`quittingKeepsTheRunningJobAndTheRestOfTheQueueForNextLaunch`); Photos input in `Work/` is cleared by the next
   launch's sweep. They continue at the next launch (when auto-start is on).
 
@@ -85,9 +87,10 @@ not exist yet. Change a rule only together with its test.
 
 ## Resources
 
-- Heavy work is bounded: `WorkSlots` (half the cores, at least 2) limits concurrent downscales; blocking reads run
-  on a dedicated executor, never the shared pool.
-- **Disk space preflight** (`AppCore/Safety/DiskSpace.swift`, B1). Before a job writes anything, every volume it
+- Heavy work is bounded: the queue's concurrency (the speed setting) and `WorkSlots` limit concurrent downscales;
+  blocking reads run on a dedicated executor, never the shared pool. Photos downloads run one at a time
+  (`DownloadGate`), whatever the concurrency; each job still has its own `Work/<job id>/` folder.
+- **Disk space preflight** (`AppCore/Safety/DiskSpace.swift`, B1). With several jobs at once, each running job reserves its needs in a shared `SpaceLedger` (replaced by its exact estimate, released when the job ends however it ends) and the check counts the other jobs' reservations as taken, with the 1 GB margin kept once per volume. Before a job writes anything, every volume it
   will write to must have `volumeAvailableCapacityForImportantUsage` of at least what goes there plus a 1 GB margin
   (`DiskSpaceCheck.margin`). Needs on one volume add up.
   - A file job: the planner's estimated output on the output folder's volume, plus, for a Replace with an originals
@@ -108,9 +111,6 @@ not exist yet. Change a rule only together with its test.
     can't be read is not checked (the write would then fail as before, with its partial removed).
   - The volume query is the `DiskSpaceProviding` protocol; tests use `FakeDiskSpace`
     (`DiskSpacePreflightTests`, `DiskSpaceTests`).
-- Sleep prevention during a batch and thermal throttling: **planned** (Plan 6 B2).
-- Disk space preflight: **planned** (Plan 6 B1). Until then a full disk surfaces as a failed job, with the partial
-  removed.
 
 ## Sleep, heat and battery
 
