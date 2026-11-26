@@ -7,6 +7,12 @@ import MediaEngine
 // plain values. The App Intents layer maps its enums onto these one to one, so what each choice means is decided and
 // tested here.
 
+/// Whether to shrink 4K to 1080p or compress at the original resolution.
+public enum ShrinkMode: Sendable, Equatable, CaseIterable {
+    case shrink
+    case compress
+}
+
 /// How hard to shrink; the presets, under the names the action shows.
 public enum ShrinkQuality: Sendable, Equatable, CaseIterable {
     case high, balanced, smaller
@@ -14,6 +20,15 @@ public enum ShrinkQuality: Sendable, Equatable, CaseIterable {
     public var preset: Preset {
         switch self {
         case .high: .high
+        case .balanced: .balanced
+        case .smaller: .smaller
+        }
+    }
+
+    /// Matching compression preset when `ShrinkMode.compress` is chosen.
+    public var compressPreset: CompressPreset {
+        switch self {
+        case .high: .bestQuality
         case .balanced: .balanced
         case .smaller: .smaller
         }
@@ -91,6 +106,7 @@ public enum ShrinkSource: Sendable, Equatable, CaseIterable {
 public struct ShrinkVideosRequest: Sendable, Equatable {
     /// Videos handed to the action. When there are any, they win over the selection below.
     public var files: [URL] = []
+    public var mode: ShrinkMode = .shrink
     public var quality: ShrinkQuality?
     public var format: ShrinkFormat?
     public var destination: ShrinkDestination?
@@ -106,13 +122,14 @@ public struct ShrinkVideosRequest: Sendable, Equatable {
     public var redirectedFolder: URL?
 
     public init(
-        files: [URL] = [], quality: ShrinkQuality? = nil, format: ShrinkFormat? = nil,
+        files: [URL] = [], mode: ShrinkMode = .shrink, quality: ShrinkQuality? = nil, format: ShrinkFormat? = nil,
         destination: ShrinkDestination? = nil, folder: URL? = nil, dateRange: ShrinkDateRange? = nil,
         resolution: ShrinkResolution? = nil, source: ShrinkSource? = nil, waitForCompletion: Bool = true,
         redirectedFolder: URL? = nil
     ) {
         self.redirectedFolder = redirectedFolder
         self.files = files
+        self.mode = mode
         self.quality = quality
         self.format = format
         self.destination = destination
@@ -128,7 +145,18 @@ public struct ShrinkVideosRequest: Sendable, Equatable {
 
     /// What the request changes about a quick run. Anything not given stays the saved setting.
     public func overrides() throws -> QuickRunOverrides {
-        var overrides = QuickRunOverrides(preset: quality?.preset, codec: format?.codec)
+        let kind: ConvertJobKind?
+        let codec: VideoCodec?
+        switch mode {
+        case .shrink:
+            kind = nil
+            codec = format?.codec
+        case .compress:
+            if format == .h264 { throw ShrinkVideosError.h264NotForCompress }
+            kind = .compress(quality?.compressPreset ?? .balanced)
+            codec = nil
+        }
+        var overrides = QuickRunOverrides(preset: quality?.preset, codec: codec, kind: kind)
         switch destination {
         case .none, .nextToOriginal:
             if let redirectedFolder {
@@ -153,6 +181,7 @@ public enum ShrinkVideosError: Error, Sendable, Equatable {
     case folderNeeded
     case folderUnavailable
     case h264NotForPhotos
+    case h264NotForCompress
     /// Videos were handed over but none could be read or copied.
     case inputsUnreadable
 
@@ -162,6 +191,7 @@ public enum ShrinkVideosError: Error, Sendable, Equatable {
         case .folderUnavailable: "That folder can't be used. Choose another folder."
         case .inputsUnreadable: "The videos you gave couldn't be read."
         case .h264NotForPhotos: "H.264 isn't available for videos in Photos. Choose HEVC, or shrink Local Files."
+        case .h264NotForCompress: "H.264 isn't available when compressing. Choose HEVC, or use Shrink."
         }
     }
 }

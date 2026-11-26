@@ -49,35 +49,51 @@ extension ConvertModel {
             isCustom: advanced.isEnabled)
     }
 
+    /// Opens the Compress picker sheet for the current selection.
+    public func presentCompress() {
+        guard canAddSelectionToQueue else { return }
+        isCompressPresented = true
+    }
+
+    /// Confirms the Compress sheet and queues the selection with the chosen compression preset.
+    public func confirmCompress() {
+        isCompressPresented = false
+        requestAddSelectionToQueue(kind: .compress(compressPreset))
+    }
+
     /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
-    public func requestAddSelectionToQueue() {
+    public func requestAddSelectionToQueue(kind: ConvertJobKind = .shrink) {
         guard canAddSelectionToQueue else { return }
         let replaces = isPhotosPage ? photosSaveLocation.choice == .replace : saveLocation.choice == .replace
         if replaces, replaceConsent.needsAsking {
+            pendingReplaceKind = kind
             isConfirmingReplace = true
         } else if isPhotosPage {
-            addPhotosSelectionToQueue()
+            addPhotosSelectionToQueue(kind: kind)
         } else {
-            addSelectionToQueue()
+            addSelectionToQueue(kind: kind)
         }
     }
 
     /// The confirmation holds only once videos are added: cancelling the loss sheet asks again next time.
     public func confirmReplace() {
+        let kind = pendingReplaceKind
+        pendingReplaceKind = .shrink
         replaceConsent.confirm()
-        if isPhotosPage { addPhotosSelectionToQueue() } else { addSelectionToQueue() }
+        if isPhotosPage { addPhotosSelectionToQueue(kind: kind) } else { addSelectionToQueue(kind: kind) }
     }
 
     /// Re-checks which files are still there, then adds one job per available selected video with its preset
     /// (its own, else the header's), the Advanced spec and the Save to choice. Videos that would lose metadata (in the conversion, or because an
     /// MPEG-4 file has to be saved as QuickTime) are listed for the user first (`lossReview`); the rest go
     /// straight in.
-    public func addSelectionToQueue() {
+    public func addSelectionToQueue(kind: ConvertJobKind = .shrink) {
         guard let destination = saveLocation.destination else {
             replaceConsent.abandon()
             return
         }
-        let settings = ConvertJobSettings(preset: preset, saveTo: destination, custom: advanced.spec)
+        let custom = kind == .shrink ? advanced.spec : nil
+        let settings = ConvertJobSettings(kind: kind, preset: preset, saveTo: destination, custom: custom)
         let presets = Dictionary(uniqueKeysWithValues: selectedItems.map { ($0.id, effectivePreset(for: $0)) })
         let selected = Set(selectedItems.map(\.id))
         let wasAvailable = Set(queueableItems.map(\.id))
@@ -94,7 +110,7 @@ extension ConvertModel {
                 among: items.compactMap { item in item.fileURL.map { (id: item.id, url: $0) } })
             let losses = LossCheck.losses(
                 for: items.map { (id: $0.id, source: $0.savingsSource, preset: presets[$0.id] ?? settings.preset) },
-                custom: settings.custom, quickTimeFallbacks: fallbacks)
+                kind: kind, custom: settings.custom, quickTimeFallbacks: fallbacks)
             let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
             let lostByURL = Dictionary(
                 uniqueKeysWithValues: losses.compactMap { loss in

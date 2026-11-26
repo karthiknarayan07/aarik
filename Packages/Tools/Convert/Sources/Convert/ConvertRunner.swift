@@ -154,7 +154,7 @@ public struct ConvertRunner: JobRunner {
 
         // Presets and custom specs go through the same planner: spatial check, Already small, 10% rule. The
         // planner's spec is the one encoded and verified (a slo-mo clip's frame-rate cap is dropped there).
-        let requested = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
+        let requested = settings.spec(for: inventory, byteSize: byteSize)
         let spec: DownscaleSpec
         let predicted: MetadataReport
         let estimatedBytes: Int64
@@ -376,8 +376,13 @@ public struct ConvertRunner: JobRunner {
 
     /// "<N>p" for a real downscale; for keep-resolution, the preset's name, or "Compressed" for a custom spec.
     static func label(for spec: DownscaleSpec, settings: ConvertJobSettings) -> String {
-        if let target = spec.targetShortSide { return "\(target)p" }
-        return settings.custom == nil ? settings.preset.displayName : "Compressed"
+        switch settings.kind {
+        case .compress(let compressPreset):
+            return compressPreset.displayName
+        case .shrink:
+            if let target = spec.targetShortSide { return "\(target)p" }
+            return settings.custom == nil ? settings.preset.displayName : "Compressed"
+        }
     }
 
     /// Verified: nothing lost beyond what was predicted, and no change beyond the expected ones.

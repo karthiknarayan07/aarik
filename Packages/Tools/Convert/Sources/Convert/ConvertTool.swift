@@ -23,9 +23,11 @@ public enum PhotosDestination: Codable, Sendable, Equatable {
 
 /// The settings a Convert job carries, encoded as JSON in `Job.settings`.
 public struct ConvertJobSettings: Codable, Sendable, Equatable {
+    /// Which operation to run; jobs saved before this existed decode as `.shrink`.
+    public var kind: ConvertJobKind
     public var preset: Preset
     public var saveTo: SaveDestination
-    /// When set, wins over `preset`.
+    /// When set (for `.shrink`), wins over `preset`.
     public var custom: DownscaleSpec?
     /// What the planner predicted, when the job was added, that converting loses (display names, as shown);
     /// empty for nothing. Nil for jobs saved before this was recorded.
@@ -40,10 +42,12 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
     public var photosFileName: String?
 
     public init(
-        preset: Preset, saveTo: SaveDestination, custom: DownscaleSpec? = nil, predictedLost: [String]? = nil,
+        kind: ConvertJobKind = .shrink, preset: Preset = .balanced, saveTo: SaveDestination,
+        custom: DownscaleSpec? = nil, predictedLost: [String]? = nil,
         predictedLostKeys: [String]? = nil, photosDestination: PhotosDestination? = nil,
         photosFileName: String? = nil
     ) {
+        self.kind = kind
         self.preset = preset
         self.saveTo = saveTo
         self.custom = custom
@@ -51,6 +55,30 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
         self.predictedLostKeys = predictedLostKeys
         self.photosDestination = photosDestination
         self.photosFileName = photosFileName
+    }
+
+    /// Jobs saved before `kind` existed have no `kind` key; they decode as `.shrink`.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decodeIfPresent(ConvertJobKind.self, forKey: .kind) ?? .shrink
+        preset = try container.decode(Preset.self, forKey: .preset)
+        saveTo = try container.decode(SaveDestination.self, forKey: .saveTo)
+        custom = try container.decodeIfPresent(DownscaleSpec.self, forKey: .custom)
+        predictedLost = try container.decodeIfPresent([String].self, forKey: .predictedLost)
+        predictedLostKeys = try container.decodeIfPresent([String].self, forKey: .predictedLostKeys)
+        photosDestination = try container.decodeIfPresent(PhotosDestination.self, forKey: .photosDestination)
+        photosFileName = try container.decodeIfPresent(String.self, forKey: .photosFileName)
+    }
+
+    public func spec(for inventory: MetadataInventory, byteSize: Int64) -> DownscaleSpec {
+        spec(for: SourceProfile(inventory: inventory, byteSize: byteSize))
+    }
+
+    func spec(for profile: SourceProfile) -> DownscaleSpec {
+        switch kind {
+        case .shrink: custom ?? preset.spec(for: profile)
+        case .compress(let compressPreset): compressPreset.spec(for: profile)
+        }
     }
 }
 

@@ -41,6 +41,13 @@
         @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {
             let model = model
             if hasInspector(for: destination) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Compress…", systemImage: "rectangle.compress.vertical") {
+                        model.presentCompress()
+                    }
+                    .disabled(!model.canAddSelectionToQueue)
+                    .help("Compress the selected videos without changing resolution")
+                }
                 // The inspector's main action sits in the toolbar, as Xcode and Photos put theirs. ⌘⏎ belongs to the
                 // Queue menu's item of the same name.
                 ToolbarItem(placement: .primaryAction) {
@@ -205,6 +212,9 @@
                     Button("OK") {}
                 } message: { alert in
                     Text(alert.message)
+                }
+                .sheet(isPresented: $model.isCompressPresented) {
+                    CompressSheet(model: model)
                 }
                 .sheet(isPresented: lossReviewShown) {
                     if let review = model.lossReview {

@@ -6,6 +6,7 @@ import Foundation
 public enum AppSettings {
     public enum Keys {
         public static let preset = "downscale.preset"
+        public static let compressPreset = "compress.preset"
         public static let autoStartQueue = SettingsStore.Keys.autoStartQueue
         /// `SpeedSetting` raw value: quiet, balanced or fastest.
         public static let speed = SettingsStore.Keys.speed

@@ -4,14 +4,15 @@ import MediaTestSupport
 import Synchronization
 import XCTest
 
-/// Times and memory of a 4K to 1080p downscale on a generated clip (no personal media is ever used).
+/// Times and memory of 4K downscale and 4K compression on a generated clip (no personal media is ever used).
 ///
 /// Off unless `RUN_PERF_TESTS=1`: a stable timing needs a quiet machine and several encodes, so it doesn't belong in
 /// the everyday run. The CI job `performance` sets it. `RECORD_PERF_BASELINE=1` writes this machine's numbers into
 /// `Baselines/baselines.json` instead of comparing (do it on a quiet Mac, in a Release-like state, and commit the
 /// file). Without a baseline for the machine the test measures and passes, saying what it saw.
 final class DownscalePerformanceTests: XCTestCase {
-    private static let benchmark = "downscale4K"
+    private static let downscaleBenchmark = "downscale4K"
+    private static let compressBenchmark = "compress4K"
     private static let iterations = 5
 
     private var enabled: Bool { ProcessInfo.processInfo.environment["RUN_PERF_TESTS"] == "1" }
@@ -31,11 +32,22 @@ final class DownscalePerformanceTests: XCTestCase {
     }
 
     func testDownscale4KTo1080ClockAndMemory() throws {
+        try runBenchmark(
+            name: Self.downscaleBenchmark,
+            spec: DownscaleSpec(targetShortSide: 1080, averageBitRate: 12_000_000))
+    }
+
+    func testCompress4KClockAndMemory() throws {
+        try runBenchmark(
+            name: Self.compressBenchmark,
+            spec: DownscaleSpec(targetShortSide: nil, averageBitRate: 16_000_000, maxBitRate: 32_000_000))
+    }
+
+    private func runBenchmark(name: String, spec: DownscaleSpec) throws {
         try XCTSkipUnless(enabled, "Set RUN_PERF_TESTS=1 to run the performance tests")
         let source = try makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 12_000_000)
 
         // What each run of the block saw. The time kept is the fastest run: load from other work on the machine only
         // ever adds to a run, while a real slowdown moves every run.
@@ -52,7 +64,7 @@ final class DownscalePerformanceTests: XCTestCase {
                     try await VideoDownscaler().downscale(source: source, output: output, spec: spec) { _ in }
                 }
             } catch {
-                XCTFail("downscale failed: \(error)")
+                XCTFail("\(name) failed: \(error)")
             }
             let elapsed = started.duration(to: .now)
             let rise = sampler.stop()
@@ -65,31 +77,32 @@ final class DownscalePerformanceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(all.count, Self.iterations)
         let measured = PerformanceSample(
             seconds: all.map(\.seconds).min() ?? 0, peakMemoryMB: Self.median(all.map(\.peakMemoryMB)))
-        try judge(measured)
+        try judge(measured, benchmark: name)
     }
 
-    private func judge(_ measured: PerformanceSample) throws {
+    private func judge(_ measured: PerformanceSample, benchmark: String) throws {
         let machine = MachineKey.current
         var stored = PerformanceBaselines.load()
         let summary =
-            "\(Self.benchmark) on \(machine): \(String(format: "%.2f", measured.seconds)) s, "
+            "\(benchmark) on \(machine): \(String(format: "%.2f", measured.seconds)) s, "
             + "\(String(format: "%.0f", measured.peakMemoryMB)) MB"
 
         // `PERF_REPORT_PATH`: also write what was measured as JSON, for CI to upload.
         if let path = ProcessInfo.processInfo.environment["PERF_REPORT_PATH"] {
-            var report = PerformanceBaselines()
-            report.record(measured, as: Self.benchmark, machine: machine)
-            try report.save(to: URL(filePath: path))
+            let url = URL(filePath: path)
+            var report = PerformanceBaselines.load(from: url)
+            report.record(measured, as: benchmark, machine: machine)
+            try report.save(to: url)
         }
 
         if recording {
-            stored.record(measured, as: Self.benchmark, machine: machine)
+            stored.record(measured, as: benchmark, machine: machine)
             try stored.save()
             print("Recorded baseline: \(summary)")
             return
         }
         switch PerformanceBaselines.verdict(
-            measured: measured, baseline: stored.baseline(Self.benchmark, machine: machine))
+            measured: measured, baseline: stored.baseline(benchmark, machine: machine))
         {
         case .noBaseline:
             print(
@@ -98,7 +111,7 @@ final class DownscalePerformanceTests: XCTestCase {
         case .withinTolerance:
             print("Within 20 % of the baseline: \(summary)")
         case .regressed(let problems):
-            XCTFail("\(Self.benchmark) regressed by more than 20 %: " + problems.joined(separator: "; "))
+            XCTFail("\(benchmark) regressed by more than 20 %: " + problems.joined(separator: "; "))
         }
     }
 
