@@ -107,6 +107,25 @@
                 captureDate: Date(), badges: badges, isAvailable: true, inventory: MetadataInventory(items: items))
         }
 
+        /// A made-up frame: bands of colour, sharp or with its stripes softened.
+        private static func frame(softened: Bool) -> CGImage? {
+            let context = CGContext(
+                data: nil, width: 1280, height: 720, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            guard let context else { return nil }
+            let colors: [(CGFloat, CGFloat, CGFloat)] = [
+                (0.1, 0.4, 0.8), (0.9, 0.5, 0.2), (0.2, 0.7, 0.4), (0.8, 0.2, 0.5), (0.95, 0.85, 0.3),
+            ]
+            for (index, color) in colors.enumerated() {
+                let mix: CGFloat = softened ? 0.35 : 0
+                context.setFillColor(
+                    red: color.0 * (1 - mix) + 0.5 * mix, green: color.1 * (1 - mix) + 0.5 * mix,
+                    blue: color.2 * (1 - mix) + 0.5 * mix, alpha: 1)
+                context.fill(CGRect(x: index * 256, y: 0, width: 256, height: 720))
+            }
+            return context.makeImage()
+        }
+
         @Test func rendersThePages() throws {
             guard let path = ProcessInfo.processInfo.environment["AARIK_MAC_SHOTS"] else { return }
             let folder = URL(filePath: path, directoryHint: .isDirectory)
@@ -162,6 +181,11 @@
             timeline.observe([queued[0]], now: Date())
             let selected = library[0]
             for dark in [false, true] {
+                if let sharp = Self.frame(softened: false), let soft = Self.frame(softened: true) {
+                    try Self.write(
+                        BeforeAfterSlider(before: sharp, after: soft).padding(16),
+                        name: "compare", size: CGSize(width: 720, height: 440), dark: dark, folder: folder)
+                }
                 try Self.write(
                     VStack(spacing: 0) {
                         SavingsHeader(couldFree: 4_100_000_000, totalBytes: 6_600_000_000, availableCount: 6) {

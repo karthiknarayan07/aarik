@@ -13,6 +13,7 @@
     struct CompletedView: View {
         let model: ConvertModel
         @State private var selection = Set<UUID>()
+        @State private var compareTarget: CompareTarget?
 
         var body: some View {
             let rows = model.completedJobs
@@ -30,7 +31,10 @@
                                     ForEach(day.rows, id: \.job.id) { row in
                                         CompletedRow(
                                             job: row.job, outcome: row.outcome,
-                                            thumbnails: model.thumbnailSource.cache, assistant: model.assistant)
+                                            thumbnails: model.thumbnailSource.cache, assistant: model.assistant
+                                        ) {
+                                            compareTarget = CompareTarget(job: row.job, outcome: row.outcome)
+                                        }
                                     }
                                 } header: {
                                     LedgerDayHeader(
@@ -40,9 +44,17 @@
                             }
                         }
                         .jobListActions(model: model, kind: .completed, selection: selection)
+                        // Space compares the selected video, as it previews one in Finder.
+                        .onKeyPress(.space) {
+                            guard selection.count == 1, let row = rows.first(where: { selection.contains($0.job.id) })
+                            else { return .ignored }
+                            compareTarget = CompareTarget(job: row.job, outcome: row.outcome)
+                            return .handled
+                        }
                     }
                 }
             }
+            .sheet(item: $compareTarget) { CompareSheet(target: $0) }
             .navigationTitle("Completed")
             .navigationSubtitle(
                 JobListActions.subtitle(
@@ -128,7 +140,20 @@
         let outcome: JobOutcome
         let thumbnails: ThumbnailCache
         let assistant: AssistantServices
+        /// Opens the before/after compare; nil leaves the button out.
+        var onCompare: (() -> Void)?
         @State private var isWhyShown = false
+
+        init(
+            job: Job, outcome: JobOutcome, thumbnails: ThumbnailCache, assistant: AssistantServices,
+            onCompare: (() -> Void)? = nil
+        ) {
+            self.job = job
+            self.outcome = outcome
+            self.thumbnails = thumbnails
+            self.assistant = assistant
+            self.onCompare = onCompare
+        }
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
@@ -159,6 +184,12 @@
                     }
                     Spacer()
                     SavingsBadge(before: outcome.bytesBefore, after: outcome.bytesAfter)
+                    if let onCompare, outcome.output.isFileURL {
+                        Button("Compare", systemImage: "square.split.2x1", action: onCompare)
+                            .buttonStyle(.borderless)
+                            .help("Drag a divider across the original and the converted video (Space)")
+                            .accessibilityLabel("Compare \(outcome.output.lastPathComponent) with the original")
+                    }
                     InlineWhyToggle(assistant: assistant, isShown: $isWhyShown)
                     ReportBadge(outcome: outcome)
                 }
