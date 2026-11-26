@@ -13,4 +13,11 @@ public enum AppInfo {
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? ProcessInfo.processInfo.processName
     }
+
+    /// The App Group identifier configured in `bundle`'s `AppGroupIdentifier` Info.plist key, if set.
+    public static func appGroupIdentifier(in bundle: Bundle = .main) -> String? {
+        guard let raw = bundle.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
