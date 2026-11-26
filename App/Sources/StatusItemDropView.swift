@@ -24,8 +24,9 @@ final class StatusItemDropView: NSView {
         StatusItemHitTest.passesThrough(NSApp.currentEvent?.type) ? nil : super.hitTest(point)
     }
 
-    /// Whether the drag in progress looks like it holds a movie. Worked out from the file names once per drag, so
-    /// the many updates while the pointer moves over the icon never touch the disk.
+    /// Whether the drag in progress looks like it holds a movie. Worked out once per drag, so the many updates while
+    /// the pointer moves over the icon don't repeat it: from the file names, and for a file with no usable name
+    /// (no extension) from its content type, a few lookups at most.
     private func accepts(_ sender: any NSDraggingInfo) -> Bool {
         verdicts.verdict(forSession: sender.draggingSequenceNumber) {
             MovieDropFilter.mightContainMovie(MovieDropFilter.fileURLs(on: sender.draggingPasteboard))
@@ -54,9 +55,8 @@ final class StatusItemDropView: NSView {
     /// Accepts on the names alone; the files themselves are checked off the main thread before the run starts.
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         button?.isHighlighted = false
-        let urls = MovieDropFilter.fileURLs(on: sender.draggingPasteboard)
-        guard MovieDropFilter.mightContainMovie(urls) else { return false }
-        onDrop(urls)
+        guard accepts(sender) else { return false }
+        onDrop(MovieDropFilter.fileURLs(on: sender.draggingPasteboard))
         return true
     }
 }

@@ -31,6 +31,12 @@ struct MenuBarPanel: View {
                 }
             }
             .font(.headline)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(AppModel.displayName)
+            .accessibilityValue(
+                StatusIconState(model.activity, isPaused: model.queuePause.isPaused).accessibilityStatus
+            )
+            .accessibilityAddTraits(.isHeader)
             currentJob
             runStatus
             Divider()
@@ -43,37 +49,50 @@ struct MenuBarPanel: View {
                     close()
                     model.showMainWindow()
                 }
+                .accessibilityHint("Shows the main window")
             }
             dropZone
         }
         .padding(16)
         .frame(width: 300, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(AppModel.displayName) menu bar")
         .dropDestination(for: URL.self) { urls, _ in
-            // Names only here; the files are checked off the main thread before the run starts.
-            guard MovieDropFilter.mightContainMovie(urls) else { return false }
-            model.runFromMenuBar(urls)
+            // Any file goes to the check, which runs off the main thread: a drop with no video says so, and
+            // anything that isn't one is counted as skipped.
+            let files = urls.filter(\.isFileURL)
+            guard !files.isEmpty else { return false }
+            model.runFromMenuBar(files)
             return true
         } isTargeted: {
             isDropTargeted = $0
         }
     }
 
-    /// The run started from the menu bar: what it is doing, then how it ended, with its skipped files one click away.
+    /// The runs started from the menu bar: what they are doing, then how they ended in one tally, with the skipped
+    /// files one click away. A drop with nothing to shrink says so for a few seconds.
     @ViewBuilder private var runStatus: some View {
-        if let status = model.quickRunStatus {
+        let board = model.menuBarRuns
+        if !board.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    if case .checking = status.phase { ProgressView().controlSize(.small) }
-                    Text(status.text)
+                ForEach(Array(board.lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
                 }
-                if status.skippedCount > 0, let runID = status.runID {
+                if let notice = board.notice {
+                    Text(notice.text)
+                        .foregroundStyle(.secondary)
+                }
+                if !board.reviewRunIDs.isEmpty {
                     Button("Show Skipped…") {
                         close()
-                        Task { await model.reviewQuickRun(runID) }
+                        let runs = board.reviewRunIDs
+                        Task { await model.reviewQuickRuns(runs) }
                     }
                     .accessibilityHint("Opens the main window with the skipped videos selected")
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Quick run status")
         }
     }
 
@@ -125,11 +144,13 @@ struct MenuBarPanel: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button("Choose Videos…", action: chooseVideos)
+                    .accessibilityHint("Opens a window to choose videos to convert, instead of dropping them here")
             }
             .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Drop videos here to convert them")
+        .accessibilityHint("Drag video files onto this area, or use Choose Videos")
     }
 
     /// The keyboard and VoiceOver way to do what the drop does.

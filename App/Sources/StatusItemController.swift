@@ -35,7 +35,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         reconcile()
     }
 
-    func popoverDidShow(_ notification: Notification) { model.isStatusPopoverVisible = true }
+    func popoverWillShow(_ notification: Notification) { model.menuBarPopoverWillOpen() }
     func popoverDidClose(_ notification: Notification) { model.isStatusPopoverVisible = false }
 
     /// Adds or removes the item to match the setting.
@@ -120,8 +120,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             // A click leaves the app in the background, as Apple's menu bar extras do; opened from the keyboard or
-            // VoiceOver, the popover needs the app active to take keystrokes.
-            if PopoverActivation.shouldActivate(openedBy: NSApp.currentEvent?.type) { NSApp.activate() }
+            // with VoiceOver on, the popover needs the app active to take keystrokes and the VoiceOver cursor.
+            if PopoverActivation.shouldActivate(
+                openedBy: NSApp.currentEvent?.type, voiceOverEnabled: NSWorkspace.shared.isVoiceOverEnabled)
+            {
+                NSApp.activate()
+            }
         }
     }
 }

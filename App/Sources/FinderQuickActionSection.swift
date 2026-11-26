@@ -7,12 +7,13 @@ struct FinderQuickActionSection: View {
     static let shortcutsBundleID = "com.apple.shortcuts"
 
     var body: some View {
-        Section {
+        Section("Finder") {
             LabeledContent {
                 Button("Open Shortcuts…") { Self.openShortcuts() }
+                    .accessibilityHint("Opens the Shortcuts app")
             } label: {
                 Text("Add to Finder")
-                Text("Shortcuts › the action › Use as Quick Action › Finder")
+                Text("In Shortcuts, add the Shrink Videos action, then choose Use as Quick Action ▸ Finder.")
             }
         }
     }
