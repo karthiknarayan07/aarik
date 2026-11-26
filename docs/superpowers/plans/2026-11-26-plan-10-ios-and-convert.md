@@ -108,7 +108,23 @@ This task runs after Task 3 and before Tasks 4 to 12.
 - [ ] Remove `ToolModule`, or keep it as a typealias for a single release. Update ADR 0004 so it points to ADR 0006.
 - [ ] Mac behaviour stays unchanged, and the Mac UI checks in the earlier reports still hold. The test count must not fall.
 
-## Phase 3: in parallel after Task 3b
+### Base gate (owner rule, 2026-11-26)
+
+No product feature work (Tasks 5–11) starts until the base is migrated and green. The base is Tasks 2, 3, 3b and 4, plus:
+
+- [ ] All scripts, CI workflows, release and Sparkle scripts, `devtool`, the docs paths (`AGENTS.md`, `RELEASING.md`, `PERFORMANCE.md`, `STABILITY.md`, `README.md`) and the branding assets (app icons and marks, for both apps, from `Branding/`) are migrated to the new layout. No old `App/` folder and no stale paths remain: `grep -rn "App/Sources\|App/App.xcodeproj\|AppModules"` returns nothing outside history docs.
+- [ ] Every menu, shortcut, Settings pane, the status item and Services behave exactly as before. Check this against the Plan 9 and Plan 4 manual checklists, as far as possible without automation approval.
+- [ ] Base verification run:
+  - `swift test` for every package
+  - the package tests on an iOS Simulator destination
+  - the Mac Debug and Release builds from `App.xcworkspace`
+  - the iOS app building against the packages
+  - lint, and the warnings-as-errors build
+  - the test count at least the count before the restructure
+  - two consecutive green full runs
+- [ ] The base is committed, merged into `plan-2-app-shell` and pushed. Only then does Phase 3 fan out, running the Mac and iOS work at the same time.
+
+## Phase 3: in parallel after the base gate
 
 ### Task 4: make Core and Convert iOS-ready
 
