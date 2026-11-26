@@ -47,13 +47,13 @@ Rename each file to the name in the table.
 1. Run the tests (tests whose clip is missing are skipped):
 
    ```
-   cd Packages/AppModules && swift test --filter RealClipGateTests
+   cd Packages/Core && swift test --filter RealClipGateTests
    ```
 
    For the gate run itself, set `REAL_CLIP_GATE=1` so a missing clip fails instead of being skipped:
 
    ```
-   cd Packages/AppModules && REAL_CLIP_GATE=1 swift test --filter RealClipGateTests
+   cd Packages/Core && REAL_CLIP_GATE=1 swift test --filter RealClipGateTests
    ```
 
    Each test prints the path of its output file. Outputs are left in place, in a new `real-clip-gate-…` folder in the
