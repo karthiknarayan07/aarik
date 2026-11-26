@@ -9,8 +9,8 @@
 /* Begin PBXBuildFile section */
 		B20000000000000000000071 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000031 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B20000000000000000000072 /* Widgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000032 /* Widgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		B20000000000000000000112 /* ConvertActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000110 /* ConvertActivityAttributes.swift */; };
-		B20000000000000000000113 /* ConvertActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000110 /* ConvertActivityAttributes.swift */; };
+		B20000000000000000000412 /* ConvertActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000410 /* ConvertActivityAttributes.swift */; };
+		B20000000000000000000413 /* ConvertActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000410 /* ConvertActivityAttributes.swift */; };
 		B20000000000000000000101 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000201 /* AppCore */; };
 		B20000000000000000000102 /* AppServices in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000202 /* AppServices */; };
 		B20000000000000000000103 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000203 /* AppUI */; };
@@ -19,6 +19,8 @@
 		B20000000000000000000106 /* Assistant in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000206 /* Assistant */; };
 		B20000000000000000000107 /* Convert in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000207 /* Convert */; };
 		B20000000000000000000108 /* ConvertUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000208 /* ConvertUI */; };
+		B20000000000000000000109 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000209 /* AppCore */; };
+		B20000000000000000000110 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000210 /* AppCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,7 +71,7 @@
 		B20000000000000000000013 /* Brand.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Brand.xcconfig; sourceTree = "<group>"; };
 		B20000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B20000000000000000000011 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
-		B20000000000000000000110 /* ConvertActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvertActivityAttributes.swift; sourceTree = "<group>"; };
+		B20000000000000000000410 /* ConvertActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvertActivityAttributes.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -145,6 +147,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000110 /* AppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +155,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000109 /* AppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -184,7 +188,7 @@
 		B20000000000000000000111 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
-				B20000000000000000000110 /* ConvertActivityAttributes.swift */,
+				B20000000000000000000410 /* ConvertActivityAttributes.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -264,6 +268,7 @@
 			);
 			name = ShareExtension;
 			packageProductDependencies = (
+				B20000000000000000000210 /* AppCore */,
 			);
 			productName = ShareExtension;
 			productReference = B20000000000000000000031 /* ShareExtension.appex */;
@@ -286,6 +291,7 @@
 			);
 			name = Widgets;
 			packageProductDependencies = (
+				B20000000000000000000209 /* AppCore */,
 			);
 			productName = Widgets;
 			productReference = B20000000000000000000032 /* Widgets.appex */;
@@ -401,7 +407,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B20000000000000000000112 /* ConvertActivityAttributes.swift in Sources */,
+				B20000000000000000000412 /* ConvertActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -416,7 +422,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B20000000000000000000113 /* ConvertActivityAttributes.swift in Sources */,
+				B20000000000000000000413 /* ConvertActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -677,6 +683,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B20000000000000000000302 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
 			productName = ConvertUI;
+		};
+		B20000000000000000000209 /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppCore;
+		};
+		B20000000000000000000210 /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000301 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
+			productName = AppCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

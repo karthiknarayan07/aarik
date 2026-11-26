@@ -19,6 +19,8 @@ final class IOSShell {
     let tools: [any Tool]
     private let backgroundRun: BackgroundRunCoordinator
     private let liveActivity: LiveActivityController
+    /// Writes the widget snapshot and pause flag to the App Group when they change, and applies the control's toggle.
+    private let widgetSync = WidgetSync()
 
     init(
         directory: URL = IOSShell.supportDirectory(),
@@ -57,12 +59,42 @@ final class IOSShell {
     }
 
     func start() async {
+        startWidgetSync()
         // A job left running by a crash or termination goes back to the queue when the queue loads; its partial
         // output lives in the Work folder, which is swept before anything starts.
         await BackgroundRunCoordinator.sweepWorkFolder()
         await convert.start()
         backgroundRun.start()
         liveActivity.start()
+        pickUpStaged()
+    }
+
+    /// The app is the writer of the widget's snapshot: it writes on every queue change and every pause change, and
+    /// the widget reloads only when a value changed. The control's toggle comes back as a pause change.
+    private func startWidgetSync() {
+        let services = services
+        let sync = widgetSync
+        sync.sync(activity: services.activity, isPausedByUser: services.isQueuePaused)
+        services.observeJobs { [weak services] _ in
+            guard let services else { return }
+            sync.sync(activity: services.activity, isPausedByUser: services.isQueuePaused)
+        }
+        trackPause()
+        sync.startObserving { [weak services] paused in
+            services?.isQueuePaused = paused
+        }
+    }
+
+    private func trackPause() {
+        withObservationTracking {
+            _ = services.isQueuePaused
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                widgetSync.sync(activity: services.activity, isPausedByUser: services.isQueuePaused)
+                trackPause()
+            }
+        }
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
@@ -70,6 +102,14 @@ final class IOSShell {
             // Re-check Apple Intelligence availability and Photos access when returning to the foreground.
             convert.assistant.availability.refresh()
             Task { await convert.photos.start() }
+            pickUpStaged()
+        }
+    }
+
+    /// Picks up videos the share extension or the App Intent staged in the App Group, and hands them to Convert.
+    func pickUpStaged() {
+        Task { [services, scene] in
+            await StagedPickup.shared.pickUp(into: scene, services: services)
         }
     }
 

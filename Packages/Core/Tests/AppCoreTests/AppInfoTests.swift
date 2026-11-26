@@ -11,4 +11,8 @@ import Testing
         // A bundle without a name (a test runner, a command line tool) reads as something, never as nothing.
         #expect(!AppInfo.displayName(in: Bundle(for: BundleToken.self)).isEmpty)
     }
+
+    @Test func appGroupIdentifierIsNilWhenAbsent() {
+        #expect(AppInfo.appGroupIdentifier(in: Bundle(for: BundleToken.self)) == nil)
+    }
 }
