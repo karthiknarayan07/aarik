@@ -1,4 +1,4 @@
-import ActivityKit
+@preconcurrency import ActivityKit
 import AppCore
 import AppServices
 import Foundation
@@ -82,7 +82,8 @@ final class LiveActivityController {
                     savedBytes: summary.savedBytes,
                     status: .finished
                 )
-                endActivity(finalState: finalState, dismissalPolicy: .after(.now.addingTimeInterval(Self.finishedDismissDelay)))
+                endActivity(
+                    finalState: finalState, dismissalPolicy: .after(.now.addingTimeInterval(Self.finishedDismissDelay)))
             } else {
                 endActivity(finalState: nil, dismissalPolicy: .immediate)
             }
