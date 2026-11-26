@@ -80,7 +80,9 @@ struct AssistantChatTests {
         let chat = makeChat(client: client)
         chat.send("Hello")
         await chat.waitUntilIdle()
-        #expect(client.requests.last?.instructions == AssistantChat.instructions)
+        let instructions = client.requests.last?.instructions ?? ""
+        #expect(instructions.hasSuffix(AssistantChat.instructions))
+        #expect(instructions.hasPrefix("Today is "))
     }
 
     @Test func aNewChatOrAnotherChatDropsTheContext() async {

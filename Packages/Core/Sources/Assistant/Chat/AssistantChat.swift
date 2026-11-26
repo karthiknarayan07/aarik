@@ -25,10 +25,18 @@ public final class AssistantChat {
     @ObservationIgnored private let client: any LanguageModelClient
     @ObservationIgnored private let store: ChatStore
     @ObservationIgnored private let tools: @MainActor () -> [any AssistantTool]
+    @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var generation: Task<Void, Never>?
     /// Changes whenever another chat is opened, so an answer still finishing for the old one writes nothing.
     @ObservationIgnored private var epoch = 0
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<Bool, Never>] = [:]
+
+    /// The rules, headed by today's date so "last year" and "this year" mean something.
+    static func instructions(today: Date) -> String {
+        let year = Calendar.current.component(.year, from: today)
+        let date = today.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
+        return "Today is \(date). The current year is \(year); last year was \(year - 1).\n" + instructions
+    }
 
     static let instructions = """
         You are the assistant inside a free, offline app that shrinks videos on this device. Help the person \
@@ -36,9 +44,17 @@ public final class AssistantChat {
 
         Rules:
         - Call a tool to look anything up. Never guess sizes, counts, names or savings.
+        - For how many videos there are, or how much space they take, call search_library with no arguments and \
+        answer with the count and total size on its first line, not with the number of items listed.
+        - For how much has been saved, call savings_so_far. For what could be freed, call estimate_savings.
+        - Fill in a tool's arguments only with what the person said. Never add a name, year, size or library of your \
+        own.
         - Answer only from what the tools returned. If a tool found nothing, say so.
-        - When a tool returns a list, name the items in your answer (name and size), up to five, then say how many \
-        more there are. Never answer with only an introduction.
+        - When a tool returns a list, name every item it lists (name and size), then say how many more there are, \
+        using the tool's number. If it says all are listed, there are no others. Never answer with only an \
+        introduction.
+        - If a tool says Photos access is off or not allowed yet, say that, not that the library is empty, and offer \
+        to help turn it on with allow_photos_access.
         - Use only the numbers and names in the tool result. Never add counts, sizes or thresholds of your own.
         - If a tool says no videos were found, say so plainly. Don't list anything.
         - If a tool says the person cancelled, acknowledge it in one short sentence and stop. Don't repeat the \
@@ -72,8 +88,9 @@ public final class AssistantChat {
 
     public init(
         client: any LanguageModelClient, availability: AssistantAvailability, store: ChatStore,
-        tools: @escaping @MainActor () -> [any AssistantTool]
+        tools: @escaping @MainActor () -> [any AssistantTool], now: @escaping @Sendable () -> Date = { .now }
     ) {
+        self.now = now
         self.client = client
         self.availability = availability
         self.store = store
@@ -185,7 +202,7 @@ public final class AssistantChat {
             let simplified = attempt == 1
             let request = ChatRequest(
                 prompt: prompt,
-                instructions: (simplified ? Self.simpleInstructions : Self.instructions)
+                instructions: (simplified ? Self.simpleInstructions : Self.instructions(today: now()))
                     + (context?.instructions ?? ""),
                 history: simplified ? [] : history, tools: tools(),
                 invoke: { [weak self] name, arguments in

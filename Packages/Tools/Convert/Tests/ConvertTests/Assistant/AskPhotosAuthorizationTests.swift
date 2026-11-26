@@ -85,7 +85,8 @@ import Testing
         #expect(rig.model.photos.authorization == state)
         #expect(rig.model.photos.items.isEmpty)
         let result = try await ask(rig)
-        #expect(result.hasPrefix("No videos found. The library is empty"))
+        #expect(result.hasPrefix("Photos access"))
+        #expect(result.contains("allow_photos_access") && !result.contains("is empty"))
         guard case .toolCall(let call) = rig.chat.items[1].content else {
             Issue.record("expected a tool row")
             return
