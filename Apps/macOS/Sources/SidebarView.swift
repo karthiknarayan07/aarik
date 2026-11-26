@@ -2,7 +2,7 @@ import AppCore
 import SwiftUI
 
 /// The sidebar: draws whatever sections the hosted tool module lists, through `ToolSidebarModel`.
-struct SidebarView<Module: ToolModule>: View {
+struct SidebarView<Module: MacToolScene>: View {
     let module: Module
 
     var body: some View {
@@ -25,7 +25,7 @@ struct SidebarView<Module: ToolModule>: View {
     }
 }
 
-private struct SidebarRow<Module: ToolModule>: View {
+private struct SidebarRow<Module: MacToolScene>: View {
     let module: Module
     let row: ToolSidebarModel<Module.Destination>.Row
 
@@ -77,7 +77,7 @@ private struct SidebarRow<Module: ToolModule>: View {
 }
 
 /// The module's context menu for a row, only on the rows that have one.
-private struct RowContextMenu<Module: ToolModule>: ViewModifier {
+private struct RowContextMenu<Module: MacToolScene>: ViewModifier {
     let module: Module
     let destination: Module.Destination
 
@@ -91,7 +91,7 @@ private struct RowContextMenu<Module: ToolModule>: ViewModifier {
 }
 
 /// Files dropped on a row, only on the rows that take them.
-private struct RowFileDrop<Module: ToolModule>: ViewModifier {
+private struct RowFileDrop<Module: MacToolScene>: ViewModifier {
     let module: Module
     let destination: Module.Destination
 

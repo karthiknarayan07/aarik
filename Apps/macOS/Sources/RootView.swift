@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The main window's content. It hosts one tool module (its sidebar, pages, toolbar, inspector and dialogs) and knows
 /// nothing else of the tool; the sidebar's visibility is the window's own.
-struct RootView<Module: ToolModule>: View {
+struct RootView<Module: MacToolScene>: View {
     let module: Module
     @Binding var sidebarVisibility: NavigationSplitViewVisibility
 

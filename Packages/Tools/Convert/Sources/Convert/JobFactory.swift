@@ -8,7 +8,7 @@ public struct JobBatch: Sendable {
     public var skipped: [URL]
 }
 
-/// Turns a selection into Downscale Video jobs.
+/// Turns a selection into Convert jobs.
 public enum JobFactory {
     /// One queued job per file, each carrying `settings` and a bookmark that follows the file if it moves. With
     /// `losses`, each job also records what it is predicted to lose (`losses[url]`, none when absent) for the queue's

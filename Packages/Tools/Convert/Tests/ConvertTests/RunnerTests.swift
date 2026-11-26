@@ -20,7 +20,7 @@ import Testing
 
     @Test func descriptorMatchesTheRuling() {
         #expect(ConvertTool.toolID == "downscale-video")
-        #expect(ConvertTool.descriptor.name == "Downscale Video")
+        #expect(ConvertTool.descriptor.name == "Convert")
         #expect(ConvertTool.descriptor.symbol == "arrow.down.right.and.arrow.up.left")
         #expect(ConvertTool.descriptor.category == .video)
     }

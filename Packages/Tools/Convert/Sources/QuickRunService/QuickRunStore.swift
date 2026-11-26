@@ -63,6 +63,7 @@ public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
 /// a relaunch can still show what was skipped.
 public final class QuickRunStore: Sendable {
     public static let retention: TimeInterval = 7 * 86_400
+    public static let fileName = "quick-runs.json"
 
     private struct State {
         var records: [QuickRunRecord]
@@ -75,7 +76,7 @@ public final class QuickRunStore: Sendable {
         }
     }
 
-    private let fileURL: URL
+    public let fileURL: URL
     private let state: Mutex<State>
 
     /// Reads the file (none or unreadable means no runs) and drops runs older than seven days.
@@ -87,6 +88,11 @@ public final class QuickRunStore: Sendable {
         let kept = loaded.filter { now.timeIntervalSince($0.createdAt) <= Self.retention }
         self.state = Mutex(State(kept))
         if kept.count != loaded.count { save(kept) }
+    }
+
+    /// `<directory>/quick-runs.json`.
+    public convenience init(directory: URL, now: Date = Date()) {
+        self.init(fileURL: directory.appending(path: Self.fileName, directoryHint: .notDirectory), now: now)
     }
 
     public var runs: [QuickRunRecord] { state.withLock { $0.records } }
