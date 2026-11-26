@@ -10,7 +10,10 @@ import os
 /// runs nothing, enqueued or restored, until `resume()`.
 public actor JobQueue {
     private let store: JobStore
-    private let runners: [String: any JobRunner]
+    /// The runner for each tool, by the `toolID` its jobs carry. Tools register theirs when the app is composed;
+    /// a job whose tool has none (a tool this build doesn't have) fails when it would run, stays in the saved queue
+    /// with its settings untouched, and runs once a runner for it is registered and it is retried.
+    private let runners: Mutex<[String: any JobRunner]>
     private var items: [Job]
     private var paused = false
     /// The queue stopped itself (hot Mac, low battery). Separate from `paused`: `resume()` never clears it, and
@@ -52,7 +55,7 @@ public actor JobQueue {
         progressInterval: Duration
     ) {
         self.store = store
-        self.runners = runners
+        self.runners = Mutex(runners)
         self.paused = startPaused
         self.concurrency = max(1, concurrency)
         self.progressInterval = progressInterval
@@ -79,6 +82,17 @@ public actor JobQueue {
     }
 
     public var jobs: [Job] { items }
+
+    /// Registers the runner for the jobs of one tool, replacing any earlier one. Callable from any context, so the
+    /// app can compose its tools before the queue starts. Jobs already saved for the tool then run with it.
+    public nonisolated func register(_ runner: any JobRunner, forToolID toolID: String) {
+        runners.withLock { $0[toolID] = runner }
+    }
+
+    /// The tool ids that have a runner.
+    public nonisolated var registeredToolIDs: Set<String> {
+        runners.withLock { Set($0.keys) }
+    }
 
     /// Whether the user paused the queue.
     public func isPaused() -> Bool { paused }
@@ -309,7 +323,7 @@ public actor JobQueue {
     }
 
     private func execute(_ job: Job) async -> Disposition {
-        guard let runner = runners[job.toolID] else {
+        guard let runner = runners.withLock({ $0[job.toolID] }) else {
             return .finished(.failed(reason: Self.noToolReason, code: .noToolForJob))
         }
         let id = job.id

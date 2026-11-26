@@ -22,7 +22,7 @@ public struct InspectorSource: Sendable {
     var savings: SavingsCalculator.Source { (byteSize: byteSize, inventory: inventory) }
 }
 
-/// The Downscale Video part of the inspector, as `Form` sections: quality, Advanced, metadata and Save to.
+/// The Convert part of the inspector, as `Form` sections: quality, Advanced, metadata and Save to.
 /// It takes sizes and inventories only, so it knows nothing about where the videos come from.
 ///
 /// `preset` is the selection's preset: the one its videos share, nil when they differ ("Mixed"). Choosing one

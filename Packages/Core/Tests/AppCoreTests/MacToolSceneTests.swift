@@ -3,13 +3,19 @@ import Testing
 
 @testable import AppCore
 
+#if os(macOS)
+
 @MainActor
-private final class FakeModule: ToolModule {
+private final class FakeModule: MacToolScene {
     enum Page: Hashable, Sendable { case first, second, third }
 
-    let id = "fake"
-    let title = "Fake"
-    let systemImage = "star"
+    struct FakeTool: Tool {
+        var id: String { "fake" }
+        var title: String { "Fake" }
+        var systemImage: String { "star" }
+    }
+
+    let tool: any Tool = FakeTool()
     var selection: Page? = .first
     var isInspectorPresented = true
 
@@ -43,7 +49,7 @@ private final class FakeModule: ToolModule {
 }
 
 @MainActor
-@Suite struct ToolModuleTests {
+@Suite struct MacToolSceneTests {
     /// What the shell's sidebar draws for a module: `SidebarView` iterates exactly these sections and rows.
     private func shellModel(_ module: FakeModule) -> ToolSidebarModel<FakeModule.Page> {
         ToolSidebarModel(module.sidebar)
@@ -96,6 +102,7 @@ private final class FakeModule: ToolModule {
     @Test func aModuleWithoutCommandsGetsTheEmptyDefault() {
         let module = FakeModule()
         _ = module.commands
-        #expect(module.id == "fake")
+        #expect(module.tool.id == "fake")
     }
 }
+#endif

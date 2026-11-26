@@ -15,7 +15,7 @@ import Testing
         let sections = VideoSidebar.sections(state())
         #expect(sections.map(\.title) == ["Library", "Tools", "Activity"])
         #expect(sections[0].items.map(\.title) == ["Overview", "Videos", "Local Files"])
-        #expect(sections[1].items.map(\.title) == ["Downscale Video", "Convert Image", "PDF Tools"])
+        #expect(sections[1].items.map(\.title) == ["Convert", "Convert Image", "PDF Tools"])
         #expect(sections[2].items.map(\.title) == ["Queue", "Completed", "Kept as Is", "Failed"])
     }
 

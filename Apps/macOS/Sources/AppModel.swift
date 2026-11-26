@@ -89,6 +89,7 @@ final class AppModel {
     /// Whether the menu bar popover is open; a run started there reports itself, so its banner is skipped then.
     @ObservationIgnored var isStatusPopoverVisible = false
 
+    let tool: ConvertTool
     let library: LocalLibrary
     /// Grouping, sort, search, filter and selection for the grid, with cached sections and savings.
     let browser: LibraryBrowser
@@ -164,20 +165,21 @@ final class AppModel {
         self.photoStore = photoStore
         // The runner asks for the backup folder at each Replace, so the setting applies without rebuilding the queue.
         let backupProvider = AppSettings.originalsBackupProvider(defaults)
-        let runner = ConvertRunner(originalsBackup: backupProvider)
         let pendingDeletions = PendingDeletions(directory: directory)
         self.pendingDeletions = pendingDeletions
         self.pendingOriginals = pendingDeletions.all
-        // Photos jobs fetch into the Work folder, which the launch sweep clears before the queue starts.
-        let photosRunner = PhotosConvertRunner(
-            store: photoStore, workFolder: .standard(), pendingDeletions: pendingDeletions,
-            originalsBackup: backupProvider)
+        let tool = ConvertTool(
+            photoStore: photoStore, pendingDeletions: pendingDeletions, originalsBackup: backupProvider)
+        self.tool = tool
         // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause.
         let autoStart = AppSettings.autoStartQueue(defaults)
         self.isQueuePaused = !autoStart
         self.queue = JobQueue(
             store: JobStore(directory: directory),
-            runners: [ConvertTool.toolID: runner, ConvertTool.photosToolID: photosRunner],
+            runners: Dictionary(
+                uniqueKeysWithValues: tool.jobKinds.compactMap { kind in
+                    tool.runner(for: kind).map { (kind.toolID, $0) }
+                }),
             startPaused: !autoStart)
     }
 

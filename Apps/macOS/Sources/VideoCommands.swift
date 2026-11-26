@@ -3,7 +3,7 @@ import LocalLibrary
 import SwiftUI
 
 /// The video tool's menu commands: View → Group By and Sort By, the Go menu, File → Add Videos…, Edit → Remove from
-/// Library and the Queue menu. They ride on the app's scene through `ToolModule.commands`.
+/// Library and the Queue menu. They ride on the app's scene through `MacToolScene.commands`.
 struct VideoCommands: Commands {
     let model: AppModel
 

@@ -56,8 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         self.model = model
         module = ConvertModule(model: model)
         assert(
-            !ToolRegistry.modules(for: .macOS, from: [module]).isEmpty,
-            "The Mac app hosts a module that is not for macOS")
+            !ToolRegistry.tools(for: .macOS, from: [module.tool]).isEmpty,
+            "The Mac app hosts a tool that is not for macOS")
         updater = Updater(relaunchGate: model.relaunchGate)
         super.init()
         model.intentRunHandler = { [weak self] in _ = self?.intentRuns.receive([true]) }

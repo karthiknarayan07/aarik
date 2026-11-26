@@ -6,17 +6,14 @@ import UniformTypeIdentifiers
 
 /// The video tool as the shell hosts it: its sidebar, pages, toolbar, inspector, dialogs, drops and menu commands.
 @MainActor
-final class ConvertModule: ToolModule {
+final class ConvertModule: MacToolScene {
     private let model: AppModel
 
     init(model: AppModel) {
         self.model = model
     }
 
-    var id: String { ConvertTool.descriptor.id }
-    var title: String { ConvertTool.descriptor.name }
-    var systemImage: String { ConvertTool.descriptor.symbol }
-    var platforms: ToolPlatforms { [.macOS, .iOS] }
+    var tool: any Tool { model.tool }
 
     var selection: VideoPage? {
         get { model.selection }
