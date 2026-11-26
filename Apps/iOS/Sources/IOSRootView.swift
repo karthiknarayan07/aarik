@@ -70,7 +70,12 @@ struct IOSRootView: View {
         }
         .animation(.smooth, value: hasOnboarded)
         .modifier(SheetsModifier(scenes: shell.scenes))
-        .task { restore() }
+        .task {
+            restore()
+            routePending()
+        }
+        .onChange(of: shell.pendingRoute) { routePending() }
+        .onChange(of: hasOnboarded) { routePending() }
         .onChange(of: tab) { storedTab = tab.rawValue }
         .onChange(of: shell.convert.assistant.isAvailable) {
             // The selection moves only when the tab it is on disappears.
@@ -84,6 +89,14 @@ struct IOSRootView: View {
         let home = ToolRoute(toolID: route.toolID)
         toolsPath = route.page == nil ? [home] : [home, route]
         tab = .browse
+    }
+
+    /// Brings a staged hand-off to Convert's Queue (Browse tab, Convert pushed, Queue on top). It waits for the
+    /// onboarding to finish and for the restored tab and stack, which would otherwise replace it on a cold launch.
+    private func routePending() {
+        guard hasOnboarded, hasRestored, let route = shell.pendingRoute else { return }
+        shell.pendingRoute = nil
+        open(route)
     }
 
     private func restore() {
