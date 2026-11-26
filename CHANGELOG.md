@@ -9,12 +9,15 @@ First public release.
 
 ### Added
 
-- **iPhone and iPad navigation:** the app opens on a Tools list, and each tool owns its pages. Convert shows Overview,
-  Photos, Files, Queue and Completed: a stack on iPhone and a folded Duo, three columns on iPad and an open Duo, with
-  your place kept across size and posture changes and after a relaunch. The Overview leads with a savings ring and a
-  headline, pinned cards with small charts, and trends charts that VoiceOver can read. Tapping a video opens its page
-  with a zoom; Select turns on multi-selection. Previews on long press, swipe actions, haptics and sheets with detents
-  follow the system's own apps.
+- **iPhone navigation:** the app opens on a Tools list, and each tool owns its interface. Convert has a floating tab
+  bar (Overview, Library, Queue and Search) that folds away as you scroll, with Photos and Files inside Library and
+  Completed inside Queue; a bar above the tabs shows the video converting now. The Overview leads with a savings ring
+  and a headline such as "You've Freed 12.4 GB This Month", pinned cards with small charts, and trends charts that
+  VoiceOver can read. Tapping a video opens its page with a zoom. Select works like Photos: tap or swipe across tiles,
+  then "Convert 3 Videos · Save 1.2 GB". Haptics mark selecting, a finished conversion and a pause for battery or heat.
+  Previews on long press, swipe actions and sheets with detents follow the system's own apps.
+- **First launch:** three short screens say your videos stay on the device, ask for Photos access and explain the
+  battery and heat rules. They show once and can be skipped.
 - **Overview charts:** a savings ring with a one-line insight, summary cards with small charts, and trend charts
   (before and after, savings by group, space saved over time, queue throughput) with VoiceOver summaries. The numbers
   are kept between launches, so the page draws at once and refreshes in the background.

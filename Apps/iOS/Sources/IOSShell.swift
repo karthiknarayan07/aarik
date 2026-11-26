@@ -113,6 +113,11 @@ final class IOSShell {
         }
     }
 
+    /// Asks for Photos access (the onboarding's Photos screen); the system sheet shows only the first time.
+    func requestPhotosAccess() async {
+        await convert.photos.requestAccess()
+    }
+
     func handleScenePhase(_ phase: ScenePhase) {
         if phase == .active {
             // Re-check Apple Intelligence availability and Photos access when returning to the foreground.

@@ -83,4 +83,25 @@ import Testing
         #expect(charts.throughput.map(\.day) == charts.savedOverTime.map(\.day))
         #expect(charts.hasHistory)
     }
+
+    @Test func savedThisMonthCountsOnlyTheMonthHoldingNow() {
+        let october = Self.calendar.date(from: DateComponents(year: 2026, month: 10, day: 30, hour: 12))!
+        let finished: [(addedOn: Date, outcome: JobOutcome)] = [
+            (october, Self.outcome(before: 9_000, after: 1_000)),
+            (Self.date(2), Self.outcome(before: 1_000, after: 400)),
+            (Self.date(20), Self.outcome(before: 500, after: 300)),
+        ]
+        let charts = OverviewCharts(
+            summary: OverviewSummary(photos: [], files: [], preset: .balanced), buckets: [], finished: finished,
+            calendar: Self.calendar)
+        #expect(charts.savedThisMonth(calendar: Self.calendar, now: Self.date(26)) == 800)
+        #expect(charts.savedThisMonth(calendar: Self.calendar, now: october) == 8_000)
+    }
+
+    @Test func selectionTitleNamesTheCountAndTheSaving() {
+        #expect(QueueButtonTitle.selectionTitle(count: 1, saved: nil) == "Convert 1 Video")
+        #expect(QueueButtonTitle.selectionTitle(count: 3, saved: nil) == "Convert 3 Videos")
+        #expect(
+            QueueButtonTitle.selectionTitle(count: 2, saved: "1.5 GB") == "Convert 2 Videos · Save 1.5 GB")
+    }
 }

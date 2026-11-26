@@ -74,6 +74,9 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     @State private var frames = TileFrames<Item.ID>()
     @State private var headerFrames = TileFrames<String>()
     @State private var marquee = MarqueeState<Item.ID>()
+    #if os(iOS)
+        @State private var sweep = TouchSweep()
+    #endif
     @FocusState private var isFocused: Bool
     #if os(macOS)
         @Environment(\.controlActiveState) private var controlActiveState
@@ -153,6 +156,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                         state.selected = []
                         selection = []
                     }
+                    .simultaneousGesture(sweepGesture)
                 #endif
             }
             .onGeometryChange(for: CGSize.self) {
@@ -193,6 +197,38 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
             .accessibilityAction { click(id, count: 1, modifiers: []) }
             .accessibilityAction(named: "Open") { actions.open([id]) }
     }
+
+    // MARK: Touch
+
+    #if os(iOS)
+        /// While selecting, a sideways swipe across the tiles selects (or, starting on a selected tile, deselects) each
+        /// tile it crosses, like Photos. A vertical drag still scrolls.
+        private var sweepGesture: some Gesture {
+            DragGesture(minimumDistance: 12, coordinateSpace: .named(mediaGridSpace))
+                .onChanged { value in
+                    guard !opensOnTap else { return }
+                    if sweep.isActive == nil {
+                        sweep.isActive = abs(value.translation.width) > abs(value.translation.height)
+                        let start = Self.tile(at: value.startLocation, in: frames.values)
+                        sweep.adds = start.map { !selection.contains($0) } ?? true
+                    }
+                    guard sweep.isActive == true,
+                        let id = Self.tile(at: value.location, in: frames.values)
+                    else { return }
+                    if sweep.adds, !selection.contains(id) {
+                        selection.insert(id)
+                    } else if !sweep.adds, selection.contains(id) {
+                        selection.remove(id)
+                    }
+                    state.selected = selection
+                }
+                .onEnded { _ in sweep.isActive = nil }
+        }
+
+        private static func tile(at point: CGPoint, in frames: [Item.ID: CGRect]) -> Item.ID? {
+            frames.first { $0.value.contains(point) }?.key
+        }
+    #endif
 
     // MARK: Mouse
 
@@ -420,6 +456,17 @@ private struct DragOutItem<ID: Hashable & Sendable>: ViewModifier {
         #endif
     }
 }
+
+// MARK: - Touch sweep
+
+#if os(iOS)
+    /// One sideways swipe across tiles: whether it selects or deselects, and whether it counts as sideways at all.
+    @MainActor
+    private final class TouchSweep {
+        var isActive: Bool?
+        var adds = true
+    }
+#endif
 
 // MARK: - Marquee state
 

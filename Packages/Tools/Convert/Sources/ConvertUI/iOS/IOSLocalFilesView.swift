@@ -10,6 +10,8 @@
     /// users pick videos to queue (outputs saved to Documents or a chosen folder; Replace disabled).
     struct IOSLocalFilesView: View {
         @Bindable var model: ConvertModel
+        /// A video the Search tab asked to open.
+        @Binding var incoming: UUID?
         @State private var opened: UUID?
         @State private var isSelecting = false
         @Namespace private var zoom
@@ -48,6 +50,17 @@
             )
             .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
             .sensoryFeedback(.selection, trigger: browser.selection)
+            .safeAreaInset(edge: .bottom) {
+                IOSSelectionBar(
+                    model: model, count: model.selectedItems.count, isSelecting: $isSelecting,
+                    clear: { browser.selection = [] })
+            }
+            .animation(.smooth, value: isSelecting)
+            .onChange(of: incoming, initial: true) {
+                guard let id = incoming else { return }
+                incoming = nil
+                opened = id
+            }
             .navigationDestination(item: $opened) { id in
                 IOSVideoDetailView(model: model, id: id)
                     .navigationTransition(.zoom(sourceID: id, in: zoom))

@@ -31,6 +31,8 @@
     /// natively, and presents the Photos grid with Apple Intelligence search tokens.
     struct IOSPhotosView: View {
         @Bindable var model: ConvertModel
+        /// A video the Search tab asked to open.
+        @Binding var incoming: UUID?
 
         var body: some View {
             let photos = model.photos
@@ -46,7 +48,7 @@
                             isRestricted: photos.authorization == .restricted,
                             openSettings: model.openPhotosAccessSettings)
                     case .limited, .authorized:
-                        IOSPhotosGridView(model: model)
+                        IOSPhotosGridView(model: model, incoming: $incoming)
                     }
                 }
             }
@@ -113,6 +115,7 @@
 
     private struct IOSPhotosGridView: View {
         @Bindable var model: ConvertModel
+        @Binding var incoming: UUID?
         @State private var opened: UUID?
         @State private var isSelecting = false
         @Namespace private var zoom
@@ -148,6 +151,17 @@
             .navigationSubtitle(subtitle)
             .toolbar { IOSGridToolbar(browser: browser, shareURLs: nil, isSelecting: $isSelecting) }
             .sensoryFeedback(.selection, trigger: browser.selection)
+            .safeAreaInset(edge: .bottom) {
+                IOSSelectionBar(
+                    model: model, count: model.selectedPhotoItems.count, isSelecting: $isSelecting,
+                    clear: { browser.selection = [] })
+            }
+            .animation(.smooth, value: isSelecting)
+            .onChange(of: incoming, initial: true) {
+                guard let id = incoming else { return }
+                incoming = nil
+                opened = id
+            }
             .navigationDestination(item: $opened) { id in
                 IOSVideoDetailView(model: model, id: id)
                     .navigationTransition(.zoom(sourceID: id, in: zoom))

@@ -41,6 +41,8 @@
                     Text(headline)
                         .font(.title.bold())
                         .multilineTextAlignment(.center)
+                        .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : .smooth, value: headline)
                         .accessibilityAddTraits(.isHeader)
                     Text(detail)
                         .font(.body)
@@ -88,6 +90,8 @@
 
         private var headline: String {
             guard let snapshot else { return "Looking at Your Videos" }
+            let month = snapshot.savedThisMonth()
+            if month > 0 { return "You've Freed \(ByteFormat.string(month)) This Month" }
             if snapshot.savedBytes > 0 { return "You've Saved \(ByteFormat.string(snapshot.savedBytes))" }
             if snapshot.couldFree > 0 { return "About \(ByteFormat.string(snapshot.couldFree)) Could Be Freed" }
             return "Nothing to Shrink Yet"

@@ -52,6 +52,12 @@ public struct OverviewCharts: Sendable, Equatable {
     public var hasSizes: Bool { sizes.contains { $0.now > 0 } }
     public var hasHistory: Bool { !throughput.isEmpty }
 
+    /// What the conversions of the calendar month holding `now` freed.
+    public func savedThisMonth(calendar: Calendar = .current, now: Date = Date()) -> Int64 {
+        throughput.filter { calendar.isDate($0.day, equalTo: now, toGranularity: .month) }
+            .reduce(0) { $0 + $1.savedBytes }
+    }
+
     /// The share of the library that would be left after converting, 0 to 1.
     public var afterFraction: Double {
         totalBytes > 0 ? Double(max(0, totalBytes - couldFree)) / Double(totalBytes) : 1

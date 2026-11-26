@@ -16,7 +16,7 @@ Aarik now ships on macOS and iOS, and more tools will follow (photo conversion, 
    - It is a deep module that tests cover through `swift test`.
 2. **Per-platform presentation lives in each tool's UI package.**
    - The Mac uses `MacToolScene`, which takes over today's `ToolModule` members: sidebar, detail, toolbar, inspector, commands, dialogs, row menus and drops.
-   - iOS uses `IOSToolScene`, which covers the tool's own pages, detail, toolbar, sheets and the intent and share hand-off. The shell owns only the Tools list and the `NavigationSplitView` that hosts `[Tools] | [pages] | [detail]`: three columns on iPad and an open Duo, a stack on iPhone and a folded Duo. The shell holds each tool's scene as `AnyIOSToolScene` and stores `ToolNavigationState` (tool, page, column) in `SceneStorage`.
+   - iOS uses `IOSToolScene`, which covers the tool's whole interface (`root()`), its sheets and the intent and share hand-off. The shell owns only the Tools list and the `NavigationStack` that pushes the chosen tool's `root()`; the tool brings its own tab bar and its own way back through the `toolExit` environment action. The shell holds each tool's scene as `AnyIOSToolScene` and keeps the open tool in `SceneStorage`; a tool keeps its own tab the same way.
    - Each protocol lives in Core, behind `#if os`. A tool's UI target supplies one adapter per platform it supports.
    - A shell knows only `Tool` and its own scene protocol.
 3. **`AppServices` (Core) is the shared toolbox, and every tool has its own model.**

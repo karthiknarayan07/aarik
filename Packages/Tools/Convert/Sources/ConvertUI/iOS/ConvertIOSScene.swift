@@ -5,18 +5,25 @@
     import SwiftUI
     import UniformTypeIdentifiers
 
-    /// The video tool as the iOS shell hosts it (ADR 0006): the tool owns its pages (Overview, Photos, Files, Queue,
-    /// Completed) and the detail of each. The shell lists the tools and hosts the columns, so the same scene serves
-    /// a stack on iPhone and a folded Duo and three columns on iPad and an open Duo.
+    /// The video tool as the iOS shell hosts it (ADR 0006): the tool owns its tab bar (Overview, Library, Queue and
+    /// Search) and everything inside it. The shell lists the tools and pushes `root()`.
     @MainActor
     @Observable
     public final class ConvertIOSScene: IOSToolScene {
         private let model: ConvertModel
         public var isSettingsPresented = false
-        /// Whether a page was tapped in the page list; only a collapsed stack needs it (see `IOSPagesView`).
-        var hasOpenedPage = false
-        /// On compact widths (iPhone, folded Duo) the inspector opens on demand as a sheet rather than popping up empty.
-        public var isCompactInspectorPresented = false
+
+        /// The tabs of the tool's floating tab bar.
+        public enum Tab: String, Hashable, Sendable {
+            case overview, library, queue, search
+        }
+
+        public var tab = Tab.overview
+        /// Which list the Library tab shows (Photos or Files) and which the Queue tab shows (Queue or Completed).
+        var library = IOSPage.photos
+        var activity = IOSPage.queue
+        /// A video the Search tab asked the Library tab to open.
+        var pendingOpen: UUID?
 
         public init(model: ConvertModel) {
             self.model = model
@@ -26,47 +33,41 @@
 
         public var tool: any Tool { model.tool }
 
-        public var selection: IOSPage? {
-            get { IOSPage(model.selection) }
-            set {
-                // A pop in a collapsed stack clears the list's selection; the page itself stays where it was.
-                guard let newValue else { return }
-                if IOSPage(model.selection) != newValue { model.selection = newValue.videoPage }
+        /// The page the tab bar shows, or nil on Search.
+        var currentPage: IOSPage? {
+            switch tab {
+            case .overview: .overview
+            case .library: library
+            case .queue: activity
+            case .search: nil
             }
         }
 
-        public func hasInspector(for destination: IOSPage?) -> Bool {
-            destination == .files || destination == .photos
+        /// Follows a change the model made (an Overview card opening a page, an intent).
+        func follow(_ selection: VideoPage?) {
+            guard let page = IOSPage(selection), page != currentPage else { return }
+            switch page {
+            case .overview:
+                tab = .overview
+            case .photos, .files:
+                library = page
+                tab = .library
+            case .queue, .completed:
+                activity = page
+                tab = .queue
+            }
         }
 
-        @ViewBuilder public func pages() -> some View {
+        /// Tells the model which page the tabs show, so its selection and queueing follow what's on screen.
+        func publish(to model: ConvertModel) {
+            guard let page = currentPage, IOSPage(model.selection) != page else { return }
+            model.selection = page.videoPage
+        }
+
+        @ViewBuilder public func root() -> some View {
             let model = model
             ForegroundObserver(model: model) {
-                IOSPagesView(scene: self, model: model)
-            }
-        }
-
-        @ViewBuilder public func detail(for destination: IOSPage?) -> some View {
-            IOSVideoDetail(scene: self, model: model, destination: destination)
-        }
-
-        @ToolbarContentBuilder public func toolbar(for destination: IOSPage?) -> some ToolbarContent {
-            let model = model
-            if hasInspector(for: destination) {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        model.requestAddSelectionToQueue()
-                    } label: {
-                        Label(model.toolbarAddToQueueTitle, systemImage: "plus")
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(!model.canAddSelectionToQueue)
-                    .accessibilityIdentifier("addToQueue")
-                    .accessibilityLabel(model.toolbarAddToQueueTitle)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    IOSInspectorToggle(scene: self, model: model)
-                }
+                IOSConvertTabs(scene: self, model: model)
             }
         }
 
@@ -90,105 +91,7 @@
         }
     }
 
-    /// The detail column's content for a page, with the inspector, which is a sheet on compact widths.
-    private struct IOSVideoDetail: View {
-        @Bindable var scene: ConvertIOSScene
-        @Bindable var model: ConvertModel
-        let destination: IOSPage?
-        @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-        private var isCompact: Bool { horizontalSizeClass == .compact }
-
-        private var inspectorShown: Binding<Bool> {
-            Binding {
-                guard scene.hasInspector(for: destination) else { return false }
-                return isCompact ? scene.isCompactInspectorPresented : model.isInspectorPresented
-            } set: { isPresented in
-                guard scene.hasInspector(for: destination) else { return }
-                if isCompact {
-                    scene.isCompactInspectorPresented = isPresented
-                } else {
-                    model.isInspectorPresented = isPresented
-                }
-            }
-        }
-
-        private var inspector: some View {
-            IOSLibraryInspector(
-                model: model, isCompact: isCompact,
-                dismiss: {
-                    if isCompact {
-                        scene.isCompactInspectorPresented = false
-                    } else {
-                        model.isInspectorPresented = false
-                    }
-                })
-        }
-
-        var body: some View {
-            let content =
-                page
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .safeAreaBar(edge: .bottom) {
-                    IOSPendingDeletionBar(model: model)
-                }
-            // A sheet with detents on compact widths, a trailing column on regular ones.
-            if isCompact {
-                content.sheet(isPresented: inspectorShown) {
-                    inspector.presentationDetents([.medium, .large])
-                }
-            } else {
-                content.inspector(isPresented: inspectorShown) {
-                    inspector.inspectorColumnWidth(min: 280, ideal: 320, max: 400)
-                }
-            }
-        }
-
-        @ViewBuilder private var page: some View {
-            switch destination {
-            case .overview: IOSOverviewView(model: model)
-            case .photos: IOSPhotosView(model: model)
-            case .files: IOSLocalFilesView(model: model)
-            case .queue: IOSQueueView(model: model)
-            case .completed: IOSCompletedView(model: model)
-            case nil:
-                ContentUnavailableView(
-                    "Choose a Page", systemImage: "sidebar.left",
-                    description: Text("Pick Overview, Photos, Files, Queue or Completed."))
-            }
-        }
-    }
-
-    private struct IOSInspectorToggle: View {
-        @Bindable var scene: ConvertIOSScene
-        @Bindable var model: ConvertModel
-        @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-        private var isCompact: Bool { horizontalSizeClass == .compact }
-
-        private var isPresented: Bool {
-            isCompact ? scene.isCompactInspectorPresented : model.isInspectorPresented
-        }
-
-        var body: some View {
-            Button {
-                if isCompact {
-                    scene.isCompactInspectorPresented.toggle()
-                } else {
-                    model.isInspectorPresented.toggle()
-                }
-            } label: {
-                Label(
-                    isCompact ? "Options…" : "Inspector",
-                    systemImage: isCompact ? "slider.horizontal.3" : "sidebar.trailing")
-            }
-            .accessibilityIdentifier("inspectorToggle")
-            .accessibilityLabel(isPresented ? "Hide Inspector" : "Show Inspector")
-        }
-    }
-
-    /// The iOS scene's importers, sheets and alerts, kept around the whole root so posture or size-class changes
-    /// never dismiss them.
+    /// The iOS scene's importers, sheets and alerts, kept around the whole root so a tab change never dismisses them.
     public struct VideoIOSSheets: ViewModifier {
         @Bindable var scene: ConvertIOSScene
         @Bindable var model: ConvertModel
