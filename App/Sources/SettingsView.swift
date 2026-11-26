@@ -53,7 +53,7 @@ private struct GeneralSettings: View {
             Section("Updates") {
                 if updater.isConfigured {
                     Toggle("Check for Updates Automatically", isOn: $updater.automaticallyChecksForUpdates)
-                    LabeledContent("Look for a new version now") {
+                    LabeledContent("Look for a New Version Now") {
                         Button("Check Now") { updater.checkForUpdates() }
                             .disabled(!updater.canCheckForUpdates)
                     }
@@ -118,7 +118,7 @@ private struct OutputSettings: View {
             }
             Section {
                 Toggle(isOn: $keepOriginals) {
-                    Text("Keep a copy of originals")
+                    Text("Keep a Copy of Originals")
                     Text(
                         "Before Replace moves an original to the Trash, a copy is saved here. Nothing in the folder is "
                             + "overwritten.")

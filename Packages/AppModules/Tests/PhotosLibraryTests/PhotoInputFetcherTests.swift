@@ -119,6 +119,20 @@ private actor Latch {
         #expect(names(in: dir).isEmpty)
     }
 
+    @Test func deniedAccessKeepsItsOwnCodeFromTheRealThrowSite() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let asset = Samples.asset()
+        let store = FakePhotoStore(assets: [asset])
+        store.inputError = .notAuthorized
+        let error = await #expect(throws: PhotoFetchError.self) {
+            try await PhotoInputFetcher(store: store).fetch(id: asset.id, into: dir)
+        }
+        #expect(error == .notAuthorized)
+        #expect(error?.outcomeCode == .photosAccessDenied)
+        #expect(names(in: dir).isEmpty)
+    }
+
     @Test func otherFailureIsNotCalledADownloadProblem() async throws {
         let dir = try folder()
         defer { try? FileManager.default.removeItem(at: dir) }
