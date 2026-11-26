@@ -30,7 +30,7 @@ First public release.
 - **Long batches survive sleep, heat and low battery:** the Mac stays awake while videos convert (the display may
   still sleep). A hot Mac converts one video at a time, then pauses ("Paused while your Mac cools down") and resumes
   by itself. On battery, conversion pauses at 20 % ("Paused: battery low") and resumes when you plug in or it is above
-  25 %. A **Conversion Speed** setting (Quiet, Balanced, Fastest) trades speed for heat and noise.
+  25 %. A **Conversion Speed** setting (Quiet, Balanced, Fastest) sets how many videos convert at once, trading speed for heat and noise.
 - **Quit asks first while converting:** "Stop converting and quit?" The video in progress and the rest of the queue
   continue the next time you open the app.
 - **Shrink Videos action:** in Shortcuts, as a Finder Quick Action, by Siri and in Spotlight. It shrinks the videos you
@@ -61,7 +61,7 @@ First public release.
   (SDR, HDR, Dolby Vision); each option shows how many videos match and how much space they take.
 - **Presets with estimates:** choose a preset and see the estimated size and space saved for the selection before
   converting. Advanced options are there when you want them.
-- **Queue:** conversions run one at a time in the background, can be paused and resumed, and pick up again after the
+- **Queue:** conversions run in the background (several at once on Balanced and Fastest, one on Quiet; iCloud downloads one at a time), can be paused and resumed, and pick up again after the
   app is quit. Activity shows what finished, what was skipped and how much space was saved.
 - **Replace:** swap an original for its converted version. The original goes to the Trash, never straight to deletion,
   and can optionally be copied to an originals folder first.

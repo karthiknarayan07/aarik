@@ -21,7 +21,11 @@ extension AppModel {
     /// The Mac got hotter or cooler, the battery crossed a threshold, or the speed changed.
     private func applyPressure(_ effect: PressureEffect) {
         let held = effect.automaticPause != nil
-        send { queue in await queue.setAutomaticHold(held) }
+        let limit = effect.concurrencyLimit
+        send { queue in
+            await queue.setAutomaticHold(held)
+            await queue.setConcurrency(limit)
+        }
         let previous = lastThrottle
         lastThrottle = Task {
             await previous?.value

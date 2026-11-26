@@ -9,16 +9,22 @@ public struct ActivitySummary: Sendable, Equatable {
     public var failed = 0
     /// Bytes freed by completed jobs.
     public var savedBytes: Int64 = 0
-    /// The running job's progress, from 0 to 1; nil when nothing runs.
+    /// The running jobs' progress, from 0 to 1 (the mean when several run); nil when nothing runs.
     public var runningProgress: Double?
 
     public init(jobs: [Job]) {
+        var runningProgresses: [Double] = []
+        defer {
+            if !runningProgresses.isEmpty {
+                runningProgress = runningProgresses.reduce(0, +) / Double(runningProgresses.count)
+            }
+        }
         for job in jobs {
             switch job.state {
             case .queued: queue += 1
             case .running(let progress):
                 queue += 1
-                runningProgress = progress
+                runningProgresses.append(progress)
             case .completed(let outcome):
                 completed += 1
                 savedBytes += outcome.savedBytes
