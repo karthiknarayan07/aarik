@@ -17,6 +17,8 @@ final class IOSShell {
     let convert: ConvertModel
     let scene: ConvertIOSScene
     let tools: [any Tool]
+    /// Writes the widget snapshot and pause flag to the App Group when they change, and applies the control's toggle.
+    private let widgetSync = WidgetSync()
 
     init(
         directory: URL = IOSShell.supportDirectory(),
@@ -53,8 +55,37 @@ final class IOSShell {
     }
 
     func start() async {
+        startWidgetSync()
         await convert.start()
         pickUpStaged()
+    }
+
+    /// The app is the writer of the widget's snapshot: it writes on every queue change and every pause change, and
+    /// the widget reloads only when a value changed. The control's toggle comes back as a pause change.
+    private func startWidgetSync() {
+        let services = services
+        let sync = widgetSync
+        sync.sync(activity: services.activity, isPausedByUser: services.isQueuePaused)
+        services.observeJobs { [weak services] _ in
+            guard let services else { return }
+            sync.sync(activity: services.activity, isPausedByUser: services.isQueuePaused)
+        }
+        trackPause()
+        sync.startObserving { [weak services] paused in
+            services?.isQueuePaused = paused
+        }
+    }
+
+    private func trackPause() {
+        withObservationTracking {
+            _ = services.isQueuePaused
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                widgetSync.sync(activity: services.activity, isPausedByUser: services.isQueuePaused)
+                trackPause()
+            }
+        }
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
