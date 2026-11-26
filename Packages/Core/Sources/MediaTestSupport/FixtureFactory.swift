@@ -50,6 +50,9 @@ public struct ClipOptions: Sendable, Hashable {
     public var lumaStripes: [Double]?
     /// Average encode bit rate in bits per second; nil uses 2 bits per pixel per second.
     public var videoBitRate: Int?
+    /// Asks the encoder for its highest quality, which it needs to reach a high bit rate on easy content such as the
+    /// gradient (the hardware HEVC encoder otherwise settles far below `videoBitRate`).
+    public var maximumQuality = false
     public var finderTags: [String] = []
     public var extendedAttributes: [String: Data] = [:]
     /// The container: `.mov` (default), `.mp4` or `.m4v`; the file gets the matching extension.
@@ -161,6 +164,7 @@ public enum FixtureFactory {
             (kVTCompressionPropertyKey_ContentLightLevelInfo, options.contentLightLevel),
         ]
         for case let (key, data?) in staticHDR { compression[key as String] = data }
+        if options.maximumQuality { compression[kVTCompressionPropertyKey_Quality as String] = 1.0 }
 
         // Video
         let videoInput = AVAssetWriterInput(
