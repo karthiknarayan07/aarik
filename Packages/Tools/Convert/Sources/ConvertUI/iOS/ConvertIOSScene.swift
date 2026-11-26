@@ -27,6 +27,8 @@
             Text(destination?.title ?? model.tool.title)
         }
 
-        @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {}
+        @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {
+            ToolbarItemGroup {}
+        }
     }
 #endif
