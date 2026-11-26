@@ -21,11 +21,17 @@ public struct QuickRunOverrides: Sendable, Equatable {
     public var saveLocation: SaveLocation?
     /// The format to write; nil keeps the preset's own (HEVC).
     public var codec: VideoCodec?
+    /// Which Convert operation to run; nil uses `.shrink`.
+    public var kind: ConvertJobKind?
 
-    public init(preset: Preset? = nil, saveLocation: SaveLocation? = nil, codec: VideoCodec? = nil) {
+    public init(
+        preset: Preset? = nil, saveLocation: SaveLocation? = nil, codec: VideoCodec? = nil,
+        kind: ConvertJobKind? = nil
+    ) {
         self.preset = preset
         self.saveLocation = saveLocation
         self.codec = codec
+        self.kind = kind
     }
 }
 

@@ -651,4 +651,53 @@ private enum Calendars {
         #expect(receipt.skipped.map(\.url) == [urls[1]])
         #expect(outcome.message == "Queued 1 video. A notification says when they're done. 1 skipped.")
     }
+
+    // MARK: - Compress mode
+
+    @Test func defaultRequestModeIsShrink() throws {
+        let request = ShrinkVideosRequest()
+        #expect(request.mode == .shrink)
+        #expect(try request.overrides().kind == nil)
+    }
+
+    @Test(arguments: [
+        (nil, CompressPreset.balanced),
+        (ShrinkQuality.smaller, .smaller),
+        (.balanced, .balanced),
+        (.high, .bestQuality),
+    ])
+    func compressModeMapsQualityToCompressPreset(quality: ShrinkQuality?, expected: CompressPreset) throws {
+        let overrides = try ShrinkVideosRequest(mode: .compress, quality: quality).overrides()
+        #expect(overrides.kind == .compress(expected))
+        #expect(overrides.codec == nil)
+    }
+
+    @Test func h264IsRefusedForCompressMode() {
+        #expect(throws: ShrinkVideosError.h264NotForCompress) {
+            try ShrinkVideosRequest(mode: .compress, format: .h264).overrides()
+        }
+    }
+
+    @Test func compressModeQueuesCompressJobsForFilesAndPhotos() async throws {
+        var fileURL: URL!
+        let harness = try Harness(
+            local: { fixture in
+                let item = try Self.fileItem(fixture, "a.mov")
+                fileURL = item.fileURL
+                return [item]
+            },
+            photos: [Self.photoItem("A/L0/001", captured: Calendars.date(2026, 10, 3))])
+        defer { harness.fixture.remove() }
+
+        _ = await harness.shrink.perform(
+            ShrinkVideosRequest(files: [fileURL], mode: .compress, quality: .smaller, waitForCompletion: false))
+        _ = await harness.shrink.perform(
+            ShrinkVideosRequest(
+                mode: .compress, quality: .high, dateRange: .lastMonth, source: .photos, waitForCompletion: false))
+
+        let jobs = await harness.queue.jobs
+        #expect(jobs.count == 2)
+        #expect(try settings(of: jobs[0]).kind == .compress(.smaller))
+        #expect(try settings(of: jobs[1]).kind == .compress(.bestQuality))
+    }
 }

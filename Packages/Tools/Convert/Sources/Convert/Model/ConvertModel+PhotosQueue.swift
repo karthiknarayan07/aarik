@@ -72,10 +72,10 @@ extension ConvertModel {
 
     /// Adds the selected Photos videos. Nothing is downloaded now: each video is fetched when its turn comes.
     /// Videos Photos says will lose something (Cinematic depth data) are listed for the user first.
-    public func addPhotosSelectionToQueue() {
+    public func addPhotosSelectionToQueue(kind: ConvertJobKind = .shrink) {
         guard let destination = photosSaveLocation.destination else { return }
         // The Advanced options are not offered for Photos videos yet, so a hidden custom spec never applies.
-        let settings = ConvertJobSettings(preset: preset, saveTo: .nextToOriginal)
+        let settings = ConvertJobSettings(kind: kind, preset: preset, saveTo: .nextToOriginal)
         let items = selectedPhotoItems
         let presets = Dictionary(uniqueKeysWithValues: items.map { ($0.id, effectivePreset(for: $0)) })
         var lost: [String: [String]] = [:]
@@ -105,6 +105,12 @@ extension ConvertModel {
     public func addPhotosToQueue(clicked item: LibraryItem) {
         if !selectedPhotoItems.contains(where: { $0.id == item.id }) { photosBrowser.selection = [item.id] }
         requestAddSelectionToQueue()
+    }
+
+    /// Context menu: Compress…, for the selection or the clicked tile.
+    public func compressPhotosClicked(_ item: LibraryItem) {
+        if !selectedPhotoItems.contains(where: { $0.id == item.id }) { photosBrowser.selection = [item.id] }
+        presentCompress()
     }
 
     public func enqueuePhotos(

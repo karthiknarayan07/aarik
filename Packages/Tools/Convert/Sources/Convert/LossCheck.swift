@@ -22,11 +22,11 @@ public enum LossCheck {
     /// The names of what converting with `preset` (or `custom`) would lose; empty when nothing would be lost or
     /// the video would be kept as is. `fallsBackToQuickTime` counts what leaving MPEG-4 for QuickTime loses.
     public static func lostNames(
-        byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil,
-        fallsBackToQuickTime: Bool = false
+        byteSize: Int64, inventory: MetadataInventory, preset: Preset, kind: ConvertJobKind = .shrink,
+        custom: DownscaleSpec? = nil, fallsBackToQuickTime: Bool = false
     ) -> [String] {
         let decision = SavingsCalculator.decision(
-            byteSize: byteSize, inventory: inventory, preset: preset, custom: custom,
+            byteSize: byteSize, inventory: inventory, kind: kind, preset: preset, custom: custom,
             fallsBackToQuickTime: fallsBackToQuickTime)
         guard case .convert(_, _, let predicted) = decision else { return [] }
         return names(of: predicted.lost)
@@ -35,11 +35,11 @@ public enum LossCheck {
     /// The items converting would lose (`lostNames` before naming); empty when nothing would be lost or the video
     /// would be kept as is.
     static func lostItems(
-        byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec?,
-        fallsBackToQuickTime: Bool
+        byteSize: Int64, inventory: MetadataInventory, preset: Preset, kind: ConvertJobKind = .shrink,
+        custom: DownscaleSpec?, fallsBackToQuickTime: Bool
     ) -> [MetadataItem] {
         let decision = SavingsCalculator.decision(
-            byteSize: byteSize, inventory: inventory, preset: preset, custom: custom,
+            byteSize: byteSize, inventory: inventory, kind: kind, preset: preset, custom: custom,
             fallsBackToQuickTime: fallsBackToQuickTime)
         guard case .convert(_, _, let predicted) = decision else { return [] }
         return predicted.lost
@@ -48,22 +48,22 @@ public enum LossCheck {
     /// The videos that would lose something, in the order given; videos that lose nothing are left out. The ones
     /// in `quickTimeFallbacks` (from `quickTimeFallbacks(among:)`) also lose what QuickTime can't keep.
     public static func losses<ID: Hashable & Sendable>(
-        for sources: [(id: ID, source: SavingsCalculator.Source)], preset: Preset, custom: DownscaleSpec? = nil,
-        quickTimeFallbacks: Set<ID> = []
+        for sources: [(id: ID, source: SavingsCalculator.Source)], preset: Preset, kind: ConvertJobKind = .shrink,
+        custom: DownscaleSpec? = nil, quickTimeFallbacks: Set<ID> = []
     ) -> [PredictedLoss<ID>] {
         losses(
-            for: sources.map { (id: $0.id, source: $0.source, preset: preset) }, custom: custom,
+            for: sources.map { (id: $0.id, source: $0.source, preset: preset) }, kind: kind, custom: custom,
             quickTimeFallbacks: quickTimeFallbacks)
     }
 
     /// `losses(for:preset:custom:quickTimeFallbacks:)` with a preset per video (`custom`, when given, wins).
     public static func losses<ID: Hashable & Sendable>(
-        for sources: [(id: ID, source: SavingsCalculator.Source, preset: Preset)], custom: DownscaleSpec? = nil,
-        quickTimeFallbacks: Set<ID> = []
+        for sources: [(id: ID, source: SavingsCalculator.Source, preset: Preset)], kind: ConvertJobKind = .shrink,
+        custom: DownscaleSpec? = nil, quickTimeFallbacks: Set<ID> = []
     ) -> [PredictedLoss<ID>] {
         sources.compactMap { entry in
             let lost = lostItems(
-                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: entry.preset,
+                byteSize: entry.source.byteSize, inventory: entry.source.inventory, preset: entry.preset, kind: kind,
                 custom: custom, fallsBackToQuickTime: quickTimeFallbacks.contains(entry.id))
             return lost.isEmpty ? nil : PredictedLoss(id: entry.id, lost: names(of: lost), keys: lost.map(\.key))
         }
@@ -79,6 +79,8 @@ public enum LossCheck {
     {
         var result = Set<ID>()
         for file in files {
+            let scoped = file.url.startAccessingSecurityScopedResource()
+            defer { if scoped { file.url.stopAccessingSecurityScopedResource() } }
             // `decide` answers a QuickTime source from its name alone.
             let fallsBack =
                 (try? await OutputContainer.decide(for: file.url))?.fallsBackToQuickTime

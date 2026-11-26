@@ -1,8 +1,9 @@
+import AppCore
 import Convert
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Next to original, a chosen folder, or replace the original.
+/// Next to original (macOS) or Documents (iOS), a chosen folder, or replace the original (macOS only).
 struct SaveDestinationPicker: View {
     @Binding var location: SaveLocation
     @State private var isChoosingFolder = false
@@ -21,7 +22,7 @@ struct SaveDestinationPicker: View {
 
     var body: some View {
         Picker("Save To", selection: choice) {
-            ForEach(SaveLocation.Choice.allCases) { Text($0.title).tag($0) }
+            ForEach(SaveLocation.availableChoices()) { Text($0.title).tag($0) }
         }
         .labelsHidden()
         .accessibilityLabel("Save To")
@@ -41,6 +42,13 @@ struct SaveDestinationPicker: View {
                 Button("Change…") { isChoosingFolder = true }
                     .accessibilityLabel("Change the output folder")
             }
+        }
+        if location.choice == .documents {
+            Text(
+                "Saved in Files under \(DeviceCopy.filesAppLocation). Replacing Files originals isn't available on iOS."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         if location.choice == .replace {
             Text("The original goes to the Trash after the smaller copy is verified.")

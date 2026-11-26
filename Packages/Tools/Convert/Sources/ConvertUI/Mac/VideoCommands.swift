@@ -96,6 +96,8 @@ private struct LibraryCommands: Commands {
         }
         CommandMenu("Queue") {
             CommandButton(model: model, id: .addToQueue)
+            Button("Compress…") { model.presentCompress() }
+                .disabled(!model.commandContext.canAddToQueue)
             CommandButton(model: model, id: .pauseOrResumeQueue)
             Divider()
             CommandButton(model: model, id: .retryAllFailed)

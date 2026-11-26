@@ -440,7 +440,7 @@ public struct PhotosConvertRunner: JobRunner {
         let profile = SourceProfile(
             width: Int(asset.pixelSize.width), height: Int(asset.pixelSize.height), durationSeconds: asset.duration,
             byteSize: size)
-        let spec = settings.custom ?? settings.preset.spec(for: profile)
+        let spec = settings.spec(for: profile)
         let output = min(Estimator.estimatedBytes(source: profile, spec: spec), size)
         let work = workFolder.url(for: jobID)
 

@@ -66,6 +66,10 @@ public final class ConvertModel {
     public var preset: Preset {
         didSet { services.defaults.set(preset.rawValue, forKey: AppSettings.Keys.preset) }
     }
+    public var compressPreset: CompressPreset {
+        didSet { services.defaults.set(compressPreset.rawValue, forKey: AppSettings.Keys.compressPreset) }
+    }
+    public var isCompressPresented = false
     /// Presets chosen in the inspector for single videos; the header's `preset` is everyone else's (spec 8.2).
     /// Kept for the session.
     public var presetOverrides = PresetOverrides<UUID>()
@@ -76,6 +80,8 @@ public final class ConvertModel {
 
     // MARK: Replace, loss review and messages
     public var isConfirmingReplace = false
+    /// Which job kind triggered the Replace confirmation, so confirming starts the same operation.
+    @ObservationIgnored var pendingReplaceKind: ConvertJobKind = .shrink
     /// The first Replace in a session asks for confirmation; later ones don't, once videos were added with it.
     @ObservationIgnored public var replaceConsent = ReplaceConsent()
     /// Videos that would lose metadata, waiting for the user's decision before they are added (spec 8.4).
@@ -104,6 +110,16 @@ public final class ConvertModel {
     public var isMovingOriginals = false
     /// Originals pending when the user declined the confirmation; a run that adds none doesn't ask again.
     @ObservationIgnored var declinedOriginals: Set<String> = []
+    /// Whether the app is currently in the foreground. Originals deletion is foreground-only because Photos requires
+    /// a foreground system confirmation; iOS scenes update this from `scenePhase`.
+    public var isForeground = true {
+        didSet {
+            if isForeground {
+                let latest = services.pendingDeletions.all
+                if pendingOriginals != latest { pendingOriginals = latest }
+            }
+        }
+    }
     /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
@@ -112,6 +128,9 @@ public final class ConvertModel {
         self.services = services
         let defaults = services.defaults
         self.preset = defaults.string(forKey: AppSettings.Keys.preset).flatMap(Preset.init(rawValue:)) ?? .balanced
+        self.compressPreset =
+            defaults.string(forKey: AppSettings.Keys.compressPreset).flatMap(CompressPreset.init(rawValue:))
+            ?? .balanced
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         let library = services.library.local

@@ -80,6 +80,7 @@ final class DownscaleJob {
             encoder = try VideoEncoder(
                 .init(
                     width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
+                    maxBitRate: spec.maxBitRate,
                     isTenBit: isTenBit, expectedFrameRate: expectedFrameRate,
                     colorPrimaries: color(kCMFormatDescriptionExtension_ColorPrimaries),
                     transferFunction: color(kCMFormatDescriptionExtension_TransferFunction),
