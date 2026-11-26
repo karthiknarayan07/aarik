@@ -25,9 +25,10 @@ final class PassthroughTrack {
 
     /// Appends samples while the input is ready and the next sample starts at or before `limit`.
     /// Marks the input finished when the reader runs out. Returns whether anything was appended.
-    func pump(until limit: CMTime?) throws -> Bool {
+    /// `forceNotReady` is a test seam: the input never takes a sample.
+    func pump(until limit: CMTime?, forceNotReady: Bool = false) throws -> Bool {
         var appended = false
-        while !isFinished, input.isReadyForMoreMediaData {
+        while !isFinished, !forceNotReady, input.isReadyForMoreMediaData {
             guard let sample = next ?? output.copyNextSampleBuffer() else {
                 input.markAsFinished()
                 isFinished = true

@@ -16,6 +16,7 @@ enum OriginalsBackupError: Error, Equatable {
     case folderUnavailable
     case copyFailed
     case sizeMismatch
+    case notEnoughSpace
 
     /// Completes "The original was kept because …".
     var keptBecause: String {
@@ -23,6 +24,7 @@ enum OriginalsBackupError: Error, Equatable {
         case .folderUnavailable: "the originals folder is missing or the drive isn't connected"
         case .copyFailed: "it couldn't be copied to the originals folder"
         case .sizeMismatch: "its copy in the originals folder didn't match"
+        case .notEnoughSpace: "there isn't enough free space for its copy in the originals folder"
         }
     }
 }
@@ -36,6 +38,12 @@ extension DownscaleRunner {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue
         else { throw .folderUnavailable }
+        // The copy is as big as the original; check before writing any of it.
+        do {
+            try diskSpace.verify([SpaceNeed(url: folder, bytes: byteSize)])
+        } catch {
+            throw .notEnoughSpace
+        }
         // A crash or power loss mid-copy leaves `.<name>.partial-*` behind; clear this source's leftovers first.
         Self.removeStalePartials(of: folder.appending(path: source.lastPathComponent))
         let partial = folder.appending(path: ".\(source.lastPathComponent).partial-\(UUID().uuidString)")

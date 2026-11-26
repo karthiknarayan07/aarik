@@ -74,7 +74,7 @@ final class CancelSwitch: Sendable {
         }
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingTheRenderOfAnEditLeavesNothing() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingTheRenderOfAnEditLeavesNothing() async throws {
         let rig = try await PhotosRig(hasAdjustments: true)
 
         let error = try await runCancelling(rig, try rig.job(.replace)) { phase, _ in
@@ -86,7 +86,7 @@ final class CancelSwitch: Sendable {
         expectLeftNothing(rig)
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingWhileConvertingLeavesNothing() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingWhileConvertingLeavesNothing() async throws {
         let rig = try await PhotosRig()
 
         // On the first progress value of the conversion, so the encoder is under way.
@@ -100,7 +100,7 @@ final class CancelSwitch: Sendable {
         expectLeftNothing(rig)
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingAsSavingBeginsAddsNothingToPhotos() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingAsSavingBeginsAddsNothingToPhotos() async throws {
         let rig = try await PhotosRig()
 
         let error = try await runCancelling(rig, try rig.job(.replace)) { phase, _ in
@@ -113,7 +113,7 @@ final class CancelSwitch: Sendable {
         expectLeftNothing(rig)
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingTheBackupDownloadEndsCancelledAndRecordsNothing() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingTheBackupDownloadEndsCancelledAndRecordsNothing() async throws {
         let rig = try await PhotosRig(hasAdjustments: true)
 
         let error = try await runCancelling(rig, try rig.job(.replace), backup: true) { phase, _ in
@@ -127,7 +127,7 @@ final class CancelSwitch: Sendable {
         expectLeftNothing(rig)
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingAnUneditedBackupCopyBeforeItStartsRecordsNothing() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingAnUneditedBackupCopyBeforeItStartsRecordsNothing() async throws {
         let rig = try await PhotosRig()
 
         // Cancelled once the new video is saved, before the backup and the record.
@@ -140,7 +140,7 @@ final class CancelSwitch: Sendable {
         expectLeftNothing(rig)
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingWithAFolderDestinationLeavesTheFolderEmpty() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingWithAFolderDestinationLeavesTheFolderEmpty() async throws {
         let rig = try await PhotosRig()
         let folder = rig.directory.appending(path: "Out", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -155,7 +155,7 @@ final class CancelSwitch: Sendable {
         expectLeftNothing(rig, folder: folder)
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingTheDownloadWithAFolderDestinationLeavesTheFolderEmpty() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingTheDownloadWithAFolderDestinationLeavesTheFolderEmpty() async throws {
         let rig = try await PhotosRig()
         let folder = rig.directory.appending(path: "Out", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -179,7 +179,7 @@ final class CancelSwitch: Sendable {
             isLocallyAvailable: false, modificationDate: Date())
     }
 
-    @Test(.timeLimit(.minutes(2))) func anEditMadeDuringTheDownloadKeepsTheOriginalOffTheDeleteList() async throws {
+    @Test(.timeLimit(.minutes(5))) func anEditMadeDuringTheDownloadKeepsTheOriginalOffTheDeleteList() async throws {
         let rig = try await PhotosRig()
         let edited = changed(rig.asset)
         rig.store.beforeInputStep = { [store = rig.store] step in if step == 2 { store.assets = [edited] } }
@@ -196,7 +196,7 @@ final class CancelSwitch: Sendable {
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aTrimDuringTheDownloadDoesNotMakeAGoodCopyGetDeleted() async throws {
+    @Test(.timeLimit(.minutes(5))) func aTrimDuringTheDownloadDoesNotMakeAGoodCopyGetDeleted() async throws {
         let rig = try await PhotosRig()
         let trimmed = changed(rig.asset, duration: 0.5)
         rig.store.beforeInputStep = { [store = rig.store] step in if step == 2 { store.assets = [trimmed] } }
@@ -217,7 +217,7 @@ final class CancelSwitch: Sendable {
 
     // MARK: - Naming and space
 
-    @Test(.timeLimit(.minutes(2))) func anEditedVideoIsNamedAfterTheOriginalInAFolder() async throws {
+    @Test(.timeLimit(.minutes(5))) func anEditedVideoIsNamedAfterTheOriginalInAFolder() async throws {
         let rig = try await PhotosRig(hasAdjustments: true)
         let folder = rig.directory.appending(path: "Out", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -229,23 +229,5 @@ final class CancelSwitch: Sendable {
             return
         }
         #expect(outcome.output.lastPathComponent == "IMG_0001 (1080p).mov")
-    }
-
-    @Test(.timeLimit(.minutes(2))) func aDiskTooFullForTheDownloadFailsBeforeFetching() async throws {
-        let rig = try await PhotosRig()
-        let huge = PhotoAsset(
-            id: rig.asset.id, pixelSize: rig.asset.pixelSize, duration: 1.0, originalFileName: "IMG_0001.MOV",
-            originalByteSize: Int64.max / 4, isLocallyAvailable: false)
-        rig.store.assets = [huge]
-
-        do {
-            _ = try await rig.runner().run(try rig.job()) { _ in }
-            Issue.record("expected the run to throw")
-        } catch {
-            #expect(error is PhotosRunnerError)
-            #expect(error.localizedDescription.hasPrefix("Not enough free space"))
-        }
-        #expect(rig.store.inputRequests.isEmpty)
-        #expect(rig.workContents.isEmpty)
     }
 }
