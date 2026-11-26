@@ -21,54 +21,55 @@ extension AppModel {
     }
 
     /// Converts `urls` in the background: no questions, no window. Skipped files and the result come in one
-    /// notification. A run from the menu bar also reports itself in the popover (`quickRunStatus`).
-    func runQuickly(_ urls: [URL], overrides: QuickRunOverrides? = nil, origin: QuickRunOrigin = .background) {
+    /// notification. A run from the menu bar also reports itself in the popover (`menuBarRuns`); `statusEntry` names
+    /// its line there.
+    func runQuickly(
+        _ urls: [URL], overrides: QuickRunOverrides? = nil, origin: QuickRunOrigin = .background,
+        statusEntry: UUID? = nil
+    ) {
         notifier.requestAuthorizationOnce()
-        if origin == .statusItem { quickRunStatus = QuickRunStatus(phase: .checking(files: urls.count)) }
+        var entry = statusEntry
+        if origin == .statusItem, entry == nil { entry = menuBarRuns.begin(files: urls.count) }
         Task {
             let receipt = await quickRun.run(urls: urls, overrides: overrides, origin: origin)
-            if origin == .statusItem { show(receipt) }
+            if let entry {
+                menuBarRuns.queued(
+                    entry, runID: receipt.runID, jobIDs: receipt.queuedJobIDs, skipped: receipt.skipped.count,
+                    now: Date(), popoverVisible: isStatusPopoverVisible)
+            }
             if !receipt.queuedJobIDs.isEmpty, AppSettings.autoStartQueue(defaults) { isQueuePaused = false }
         }
     }
 
     /// Files dropped on the menu bar item or its popover. Only their names were looked at so far; the files are
-    /// checked here, off the main thread, before the run starts.
+    /// checked here, off the main thread, before the run starts. What turns out not to be a video (a folder named
+    /// like one, an unreadable file) is counted as skipped, and a drop with no video at all says "Nothing to shrink"
+    /// briefly without touching the runs that are going.
     func runFromMenuBar(_ urls: [URL]) {
-        quickRunStatus = QuickRunStatus(phase: .checking(files: urls.count))
+        let entry = menuBarRuns.begin(files: urls.count)
         Task {
-            let movies = await Task.detached(priority: .userInitiated) { MovieDropFilter.movies(in: urls) }.value
-            guard !movies.isEmpty else {
-                quickRunStatus = QuickRunStatus(phase: .finished(QuickRunTally(converted: 0, skipped: 0, failed: 0)))
+            let split = await Task.detached(priority: .userInitiated) { MovieDropFilter.partition(urls) }.value
+            menuBarRuns.checked(entry, movies: split.movies.count, rejected: split.others.count, now: Date())
+            guard !split.movies.isEmpty else {
+                expireMenuBarNotice()
                 return
             }
-            runQuickly(movies, origin: .statusItem)
+            runQuickly(split.movies, origin: .statusItem, statusEntry: entry)
         }
     }
 
-    /// What the popover says once the run's files are sorted into queued and skipped. A finished run may already
-    /// have said so (every file skipped), and a newer run's status is left alone.
-    private func show(_ receipt: QuickRunReceipt) {
-        if let current = quickRunStatus {
-            if let id = current.runID, id != receipt.runID { return }
-            if current.runID == receipt.runID, !current.isActive { return }
-        }
-        if receipt.queuedJobIDs.isEmpty {
-            quickRunStatus = QuickRunStatus(
-                runID: receipt.runID,
-                phase: .finished(QuickRunTally(converted: 0, skipped: receipt.skipped.count, failed: 0)))
-        } else {
-            quickRunStatus = QuickRunStatus(
-                runID: receipt.runID, phase: .running(videos: receipt.queuedJobIDs.count),
-                jobIDs: Set(receipt.queuedJobIDs))
+    /// Takes the brief message off once its time is up.
+    private func expireMenuBarNotice() {
+        Task {
+            try? await Task.sleep(for: .seconds(MenuBarRunBoard.noticeLifetime + 0.1))
+            menuBarRuns.prune(now: Date())
         }
     }
 
-    /// A run whose jobs were all removed by hand never gets a notice; its status would say "Shrinking" forever.
-    func clearStaleQuickRunStatus(jobs: [Job]) {
-        guard let status = quickRunStatus, status.isActive, !status.jobIDs.isEmpty else { return }
-        let present = Set(jobs.map(\.id))
-        if status.jobIDs.isDisjoint(with: present) { quickRunStatus = nil }
+    /// The popover is about to open: results already seen go, and the rest count as seen.
+    func menuBarPopoverWillOpen() {
+        isStatusPopoverVisible = true
+        menuBarRuns.popoverOpened(now: Date())
     }
 
     /// Dock drop and Open With: with the window on screen the files join Local Files and nothing is queued;
@@ -83,7 +84,13 @@ extension AppModel {
     /// A quick run's notification was clicked: shows the window with the run's skipped files in Local Files,
     /// selected.
     func reviewQuickRun(_ runID: UUID) async {
-        let urls = await quickRun.skippedURLs(runID: runID)
+        await reviewQuickRuns([runID])
+    }
+
+    /// The same for several runs at once (the popover's "Show Skipped…" when more than one run is listed).
+    func reviewQuickRuns(_ runIDs: [UUID]) async {
+        var urls: [URL] = []
+        for runID in runIDs { urls += await quickRun.skippedURLs(runID: runID) }
         showMainWindow()
         guard !urls.isEmpty else { return }
         addFiles(urls)
@@ -108,8 +115,12 @@ struct QuickRunNotifier: QuickRunNotifying {
 
 extension AppModel {
     func postQuickRunNotice(_ notice: QuickRunNotice) {
-        if notice.origin == .statusItem, quickRunStatus == nil || quickRunStatus?.runID == notice.runID {
-            quickRunStatus = QuickRunStatus(runID: notice.runID, phase: .finished(notice.tally))
+        // The popover lists every menu-bar run's result, however the others stand; the banner below follows the policy
+        // for each run on its own. The result is kept even if it arrives before the run's entry is attached.
+        if notice.origin == .statusItem {
+            menuBarRuns.finished(
+                runID: notice.runID, tally: notice.tally, now: Date(), popoverVisible: isStatusPopoverVisible)
+            announce(MenuBarRunBoard.doneText(notice.tally))
         }
         guard
             NotificationPolicy.shouldPost(
@@ -119,5 +130,18 @@ extension AppModel {
         notifier.post(
             title: notice.title, body: notice.body, category: QuickRunNotice.category,
             userInfo: [QuickRunNotice.runIDKey: notice.runID.uuidString])
+    }
+}
+
+extension AppModel {
+    /// Says `text` to VoiceOver, so a person who dropped videos hears the result without going back to the popover.
+    func announce(_ text: String) {
+        guard NSWorkspace.shared.isVoiceOverEnabled else { return }
+        NSAccessibility.post(
+            element: NSApp as Any, notification: .announcementRequested,
+            userInfo: [
+                .announcement: text,
+                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            ])
     }
 }

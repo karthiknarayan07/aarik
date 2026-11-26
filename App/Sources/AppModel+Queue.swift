@@ -70,7 +70,7 @@ extension AppModel {
                     }.map(\.id)))
         }
         pendingOriginals = pendingDeletions.all
-        clearStaleQuickRunStatus(jobs: jobs)
+        menuBarRuns.dropStale(presentJobs: Set(jobs.map(\.id)))
         // A quick run announces itself; the generic "Queue finished" is for the window's jobs.
         let quickRunJobs = quickRunStore.jobIDs
         let windowJobs = quickRunJobs.isEmpty ? jobs : jobs.filter { !quickRunJobs.contains($0.id) }
