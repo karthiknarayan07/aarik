@@ -18,8 +18,10 @@ public final class WidgetSync {
     private var activeTask: Task<Void, Never>?
     private var onPauseChange: (@MainActor (Bool) -> Void)?
     private var lastKnownSharedPause: Bool?
+    let reconciler: LaunchPauseReconciler
 
-    public init(
+    init(
+        reconciler: LaunchPauseReconciler = LaunchPauseReconciler(),
         snapshotStore: WidgetSnapshotStore? = WidgetSnapshotStore(),
         flagStore: SharedPauseFlagStore? = SharedPauseFlagStore(),
         notificationName: String? = AppGroup.pauseNotificationName(),
@@ -28,6 +30,7 @@ public final class WidgetSync {
             ControlCenter.shared.reloadControls(ofKind: WidgetKinds.pauseControl)
         }
     ) {
+        self.reconciler = reconciler
         self.snapshotStore = snapshotStore
         self.flagStore = flagStore
         self.notificationName = notificationName
@@ -48,6 +51,12 @@ public final class WidgetSync {
         flagStore?.load()?.isPaused
     }
 
+    /// The pause state to start with: the shared flag wins over the app's own value when the control changed it while
+    /// the app wasn't running. Call before the first `sync`, which would otherwise overwrite the flag.
+    public func launchPauseState(appPaused: Bool) -> Bool {
+        reconciler.resolve(appPaused: appPaused, shared: currentSharedPauseFlag())
+    }
+
     /// Writes the latest queue activity and pause state to the App Group and reloads WidgetKit only on change.
     public func sync(activity: ActivitySummary, isPausedByUser: Bool) {
         let snapshot = WidgetSnapshot(activity: activity, isPaused: isPausedByUser)
@@ -59,6 +68,7 @@ public final class WidgetSync {
         if (try? snapshotStore?.saveIfChanged(snapshot)) == true {
             reloadTimelines()
         }
+        if flagStore != nil { reconciler.recordWritten(snapshot.isPaused) }
         if (try? flagStore?.setPaused(snapshot.isPaused, notify: false)) == true {
             lastKnownSharedPause = snapshot.isPaused
             reloadControls()
