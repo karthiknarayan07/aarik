@@ -219,8 +219,12 @@ struct QueuePauseTests {
     }
 
     @Test func automaticPausesSayWhy() {
-        #expect(
-            QueuePause(isPausedByUser: false, automatic: .thermal).statusText == "Paused while your Mac cools down")
+        #if os(iOS)
+            let cooling = "Paused while your device cools down"
+        #else
+            let cooling = "Paused while your Mac cools down"
+        #endif
+        #expect(QueuePause(isPausedByUser: false, automatic: .thermal).statusText == cooling)
         #expect(QueuePause(isPausedByUser: false, automatic: .batteryLow).statusText == "Paused: battery low")
     }
 
