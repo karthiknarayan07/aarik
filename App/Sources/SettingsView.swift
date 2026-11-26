@@ -53,7 +53,7 @@ private struct GeneralSettings: View {
             }
             Section("Updates") {
                 if updater.isConfigured {
-                    Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
+                    Toggle("Check for Updates Automatically", isOn: $updater.automaticallyChecksForUpdates)
                     Button("Check for Updates…") { updater.checkForUpdates() }
                         .disabled(!updater.canCheckForUpdates)
                 } else {

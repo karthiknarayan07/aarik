@@ -31,6 +31,8 @@ public struct KeyChord: Hashable, Sendable {
     }
 }
 
+/// ⌘⏎ belongs to Add to Queue alone: no toolbar button or other control may bind it.
+///
 /// The commands the app's own menus add (File, Edit and Queue).
 public enum AppCommandID: String, CaseIterable, Sendable {
     case addVideos
@@ -74,10 +76,9 @@ public enum AppCommands {
         case .addVideos:
             AppCommand(id: id, title: "Add Videos…", shortcut: .command("o"), isEnabled: true)
         case .removeFromLibrary:
-            // ⌘⌫ as Finder's Move to Trash; plain ⌫ in the grid does the same.
-            AppCommand(
-                id: id, title: "Remove from Library", shortcut: KeyChord(.delete, .command),
-                isEnabled: context.canRemoveFromLibrary)
+            // No key equivalent: ⌘⌫ would take "delete to start of line" from the search field. Plain ⌫ in the grid
+            // does the same.
+            AppCommand(id: id, title: "Remove from Library", shortcut: nil, isEnabled: context.canRemoveFromLibrary)
         case .addToQueue:
             AppCommand(
                 id: id, title: "Add to Queue", shortcut: KeyChord(.return, .command), isEnabled: context.canAddToQueue)

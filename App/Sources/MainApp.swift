@@ -133,7 +133,7 @@ private struct GoCommands: Commands {
     }
 }
 
-/// File → Add Videos… (⌘O); Edit → Remove from Library (⌘⌫); Queue → Add to Queue (⌘⏎), Pause or Resume Queue
+/// File → Add Videos… (⌘O); Edit → Remove from Library (no shortcut; ⌫ in the grid); Queue → Add to Queue (⌘⏎), Pause or Resume Queue
 /// (⌥⌘P) and Retry All Failed.
 private struct LibraryCommands: Commands {
     let model: AppModel

@@ -28,8 +28,8 @@ import Testing
         #expect(AppCommands.command(.addVideos, in: idle).isEnabled)
     }
 
-    @Test func removeFromLibraryShowsCommandDeleteLikeFinder() {
-        #expect(AppCommands.command(.removeFromLibrary, in: idle).shortcut == KeyChord(.delete, .command))
+    @Test func removeFromLibraryHasNoChordSoTextFieldsKeepCommandDelete() {
+        #expect(AppCommands.command(.removeFromLibrary, in: idle).shortcut == nil)
         #expect(AppCommands.command(.addToQueue, in: idle).shortcut == KeyChord(.return, .command))
         #expect(AppCommands.command(.addVideos, in: idle).shortcut == .command("o"))
     }
