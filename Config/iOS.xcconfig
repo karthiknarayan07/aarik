@@ -1,0 +1,59 @@
+// Build settings for every iOS target: the app, the Share extension, the widget extension and the UI tests.
+// Brand values come from Brand.xcconfig; nothing here names the product. Per-target values (product name suffix,
+// bundle ID, Info.plist, entitlements) are set on each target in the project and use the variables below.
+
+#include "Brand.xcconfig"
+// Signing lives in the untracked Config/Signing.local.xcconfig: DEVELOPMENT_TEAM, CODE_SIGN_STYLE, CODE_SIGN_IDENTITY.
+// Simulator builds need none of it.
+#include? "Signing.local.xcconfig"
+
+// Identity. The Mac app is $(APP_BUNDLE_ID_PREFIX).app; iOS is that plus ".ios", extensions are sub-IDs of it,
+// and the App Group is the Mac ID with the "group." prefix.
+APP_IOS_BUNDLE_ID = $(APP_BUNDLE_ID_PREFIX).app.ios
+APP_IOS_SHARE_BUNDLE_ID = $(APP_IOS_BUNDLE_ID).share
+APP_IOS_WIDGETS_BUNDLE_ID = $(APP_IOS_BUNDLE_ID).widgets
+APP_GROUP_ID = group.$(APP_BUNDLE_ID_PREFIX).app
+PRODUCT_NAME = $(APP_PRODUCT_NAME)
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// Platform: iOS 26+, iPhone and iPad (the iPhone Duo is a Simulator posture of the iPhone family)
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+TARGETED_DEVICE_FAMILY = 1,2
+
+// Swift 6, complete strict concurrency
+SWIFT_VERSION = 6.0
+SWIFT_STRICT_CONCURRENCY = complete
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+SWIFT_EMIT_LOC_STRINGS = YES
+LOCALIZATION_PREFERS_STRING_CATALOGS = YES
+
+// Signing default: ad-hoc, which is all the Simulator needs. Signing.local.xcconfig overrides it for a device.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+// Resources and linking
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+ENABLE_PREVIEWS = YES
+ALWAYS_SEARCH_USER_PATHS = NO
+
+// Debug / Release pair
+ONLY_ACTIVE_ARCH[config=Debug] = YES
+ONLY_ACTIVE_ARCH[config=Release] = NO
+DEBUG_INFORMATION_FORMAT[config=Debug] = dwarf
+DEBUG_INFORMATION_FORMAT[config=Release] = dwarf-with-dsym
+ENABLE_TESTABILITY[config=Debug] = YES
+ENABLE_TESTABILITY[config=Release] = NO
+SWIFT_OPTIMIZATION_LEVEL[config=Debug] = -Onone
+SWIFT_OPTIMIZATION_LEVEL[config=Release] = -O
+SWIFT_COMPILATION_MODE[config=Debug] = singlefile
+SWIFT_COMPILATION_MODE[config=Release] = wholemodule
+SWIFT_ACTIVE_COMPILATION_CONDITIONS[config=Debug] = DEBUG $(inherited)
+GCC_OPTIMIZATION_LEVEL[config=Debug] = 0
+GCC_PREPROCESSOR_DEFINITIONS[config=Debug] = DEBUG=1 $(inherited)
+ENABLE_NS_ASSERTIONS[config=Release] = NO
