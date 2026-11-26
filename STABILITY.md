@@ -90,7 +90,7 @@ not exist yet. Change a rule only together with its test.
 - Heavy work is bounded: the queue's concurrency (the speed setting) and `WorkSlots` limit concurrent downscales;
   blocking reads run on a dedicated executor, never the shared pool. Photos downloads run one at a time
   (`DownloadGate`), whatever the concurrency; each job still has its own `Work/<job id>/` folder.
-- **Disk space preflight** (`AppCore/Safety/DiskSpace.swift`, B1). Before a job writes anything, every volume it
+- **Disk space preflight** (`AppCore/Safety/DiskSpace.swift`, B1). With several jobs at once, each running job reserves its needs in a shared `SpaceLedger` (replaced by its exact estimate, released when the job ends however it ends) and the check counts the other jobs' reservations as taken, with the 1 GB margin kept once per volume. Before a job writes anything, every volume it
   will write to must have `volumeAvailableCapacityForImportantUsage` of at least what goes there plus a 1 GB margin
   (`DiskSpaceCheck.margin`). Needs on one volume add up.
   - A file job: the planner's estimated output on the output folder's volume, plus, for a Replace with an originals

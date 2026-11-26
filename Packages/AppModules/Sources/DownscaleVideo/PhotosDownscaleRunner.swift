@@ -123,6 +123,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     ) async throws -> JobState {
         let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
         guard let id = PhotoAssetURL.identifier(from: job.source) else { throw PhotosRunnerError.notAPhotosJob }
+        defer { core.diskSpace.release(owner: job.id) }
         let destination = settings.photosDestination ?? .newAsset
         let fetcher = PhotoInputFetcher(store: store)
 
@@ -163,7 +164,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         let result = try await core.convert(
             source: input.url, byteSize: input.bytes, inventory: inventory, settings: settings,
             nameAfter: URL(filePath: PhotoInputFetcher.fileName(for: current, isEdited: false)),
-            requireLossShown: true,
+            requireLossShown: true, reservingFor: job.id,
             outputFolder: {
                 if case .folder(let bookmark) = destination {
                     return try DownscaleRunner.outputFolder(for: .folder(bookmark: bookmark), source: input.url)
@@ -447,7 +448,7 @@ public struct PhotosDownscaleRunner: JobRunner {
             needs.append(SpaceNeed(url: backup.folder, bytes: size))
             if asset.hasAdjustments { needs.append(SpaceNeed(url: work, bytes: size)) }
         }
-        try core.diskSpace.verify(needs)
+        try core.diskSpace.verify(needs, reservingFor: jobID)
     }
 
     static func keptBecause(_ reason: String) -> String {
