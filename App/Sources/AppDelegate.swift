@@ -11,6 +11,8 @@ import UserNotifications
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     let model: AppModel
     let updater: Updater
+    /// The one tool the window hosts; its menu commands ride on the scene (`MainApp`).
+    let module: VideoShrinkerModule
     private var isTerminating = false
     /// Clears Photos input left behind by a crash or quit. It starts as soon as launch begins, overlapping the
     /// window and menu construction; the queue waits for it.
@@ -52,13 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     override init() {
         let model = AppModel.shared
         self.model = model
+        module = VideoShrinkerModule(model: model)
         updater = Updater(relaunchGate: model.relaunchGate)
         super.init()
         model.intentRunHandler = { [weak self] in _ = self?.intentRuns.receive([true]) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        windowController = MainWindowController(model: model)
+        windowController = MainWindowController(model: model, module: module)
         menuFixups.sweep()
         let statusItem = StatusItemController(model: model)
         statusItem.start()

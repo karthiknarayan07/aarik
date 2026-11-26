@@ -126,24 +126,25 @@ private struct PhotosGridView: View {
                     }
                 }
             } else {
-                VStack(spacing: 0) {
-                    PhotosHeader(totalBytes: browser.snapshot.totalBytes, count: browser.snapshot.items.count)
-                    PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
-                    Divider()
-                    QualityFilterBar(browser: browser)
-                    Divider()
-                    grid(browser)
-                    Divider()
-                    LibraryStatusLine(
-                        browser: browser, isScanning: photos.isScanning, scanningLabel: "Reading…",
-                        error: photos.loadError)
-                }
+                grid(browser)
+                    // The header and the notes sit in the system's bar, so the grid scrolls under them.
+                    .safeAreaBar(edge: .top) {
+                        VStack(spacing: 0) {
+                            PhotosHeader(totalBytes: browser.snapshot.totalBytes, count: browser.snapshot.items.count)
+                            PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
+                        }
+                    }
+                    .safeAreaBar(edge: .bottom) {
+                        if let error = photos.loadError { LibraryProblemNote(text: error) }
+                    }
             }
         }
-        .navigationSubtitle(filteredSummary)
+        .navigationSubtitle(subtitle)
         .toolbar { GridToolbar(browser: browser) }
         .assistantSearchable(
-            search: model.assistant.photosSearch, browser: browser, sidebarBadge: nil, shrunkIDs: nil)
+            search: model.assistant.photosSearch, browser: browser, sidebarBadge: nil, shrunkIDs: nil
+        )
+        .quickLookPreview($model.quickLookURL)
     }
 
     @ViewBuilder private func grid(_ browser: LibraryBrowser) -> some View {
@@ -165,8 +166,11 @@ private struct PhotosGridView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            MediaGrid(sections: sections, selection: $browser.selection, onSpace: {}) { item, isSelected in
-                LibraryTile(item: item, isSelected: isSelected, thumbnails: model.thumbnailSource)
+            MediaGrid(
+                sections: sections, selection: $browser.selection, name: \.name,
+                actions: MediaGridActions(open: model.showInPhotos, quickLook: model.quickLookPhotoPoster)
+            ) { item, state in
+                LibraryTile(item: item, state: state, thumbnails: model.thumbnailSource)
                     .contextMenu { PhotoTileMenu(model: model, item: item) }
             }
             .accessibilityElement(children: .contain)
@@ -174,12 +178,12 @@ private struct PhotosGridView: View {
         }
     }
 
-    /// What the quality filters leave, for example "218 videos · 29.8 GB"; empty when none is set.
-    private var filteredSummary: String {
-        let browser = model.photosBrowser
-        guard browser.quality.isActive, !model.photos.items.isEmpty else { return "" }
-        let snapshot = browser.snapshot
-        return VideoCount.summary(count: snapshot.items.count, bytes: snapshot.totalBytes)
+    /// "218 of 1,203 videos · 29.8 GB · 3 selected, 1.2 GB"; what is still being read goes at the end.
+    private var subtitle: String {
+        guard !model.photos.items.isEmpty else { return "" }
+        return model.subtitle(
+            for: model.photosBrowser, total: model.photos.items.count, selected: model.selectedPhotoItems,
+            activity: model.photos.isScanning ? "Reading…" : nil)
     }
 }
 
@@ -216,7 +220,7 @@ private struct PhotosHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(totalBytes > 0 ? "\(ByteFormat.string(totalBytes)) in videos" : "Your Photos videos")
-                .font(.title2.weight(.semibold))
+                .font(.title3)
                 .accessibilityAddTraits(.isHeader)
             Text(
                 "\(count == 1 ? "1 video" : "\(count) videos") · Nothing in Photos changes until you convert a video"
@@ -225,8 +229,8 @@ private struct PhotosHeader: View {
             .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal)
+        .padding(.vertical, 10)
         .accessibilityElement(children: .combine)
     }
 }
@@ -278,6 +282,10 @@ private struct PhotoTileMenu: View {
 
     var body: some View {
         Button("Add to Queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }
+        Divider()
+        Button("Show in Photos", systemImage: "photo.on.rectangle") { model.showInPhotos(item) }
+        // The poster frame: the video stays in Photos, so nothing is downloaded or exported.
+        Button("Quick Look", systemImage: "eye") { model.quickLookPhotoPoster(of: item) }
     }
 }
 

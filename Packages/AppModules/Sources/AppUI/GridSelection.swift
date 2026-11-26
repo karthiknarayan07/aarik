@@ -7,6 +7,16 @@ struct GridClickModifiers: OptionSet {
     static let extend = GridClickModifiers(rawValue: 2)
 }
 
+/// What a click on a tile means: a double-click with no modifier opens, as in Finder and Photos; anything else selects.
+enum GridClickIntent: Equatable {
+    case select(GridClickModifiers)
+    case open
+
+    static func resolve(clickCount: Int, modifiers: GridClickModifiers) -> GridClickIntent {
+        clickCount >= 2 && modifiers.isEmpty ? .open : .select(modifiers)
+    }
+}
+
 enum GridDirection { case left, right, up, down }
 
 /// Which grid items are selected, with Finder-like click and arrow-key rules.
@@ -43,55 +53,88 @@ struct GridSelection<ID: Hashable> {
         if anchor == nil { anchor = first }
     }
 
+    /// Selects one item and makes it the focus and anchor (type-select, and arrows without ⇧).
+    mutating func select(_ id: ID) {
+        selected = [id]
+        focus = id
+        anchor = id
+    }
+
     /// Moves a single selection one tile. Up and down keep the column, crossing into the next or previous section.
     mutating func move(_ direction: GridDirection, sections: [[ID]], columns: Int) {
         let sections = sections.filter { !$0.isEmpty }
         guard let first = sections.first?.first else { return }
-        guard let current = focus ?? selected.first, let position = Self.position(of: current, in: sections) else {
+        guard let current = focus ?? selected.first,
+            let target = Self.target(direction, from: current, sections, columns)
+        else {
             select(first)
             return
-        }
-        let columns = max(1, columns)
-        let (section, index) = position
-        let items = sections[section]
-        var target = current
-        switch direction {
-        case .left:
-            if index > 0 {
-                target = items[index - 1]
-            } else if section > 0, let last = sections[section - 1].last {
-                target = last
-            }
-        case .right:
-            if index + 1 < items.count {
-                target = items[index + 1]
-            } else if section + 1 < sections.count {
-                target = sections[section + 1][0]
-            }
-        case .down:
-            let rowStart = (index / columns + 1) * columns
-            if rowStart < items.count {
-                target = items[min(index + columns, items.count - 1)]
-            } else if section + 1 < sections.count {
-                let next = sections[section + 1]
-                target = next[min(index % columns, next.count - 1)]
-            }
-        case .up:
-            if index >= columns {
-                target = items[index - columns]
-            } else if section > 0 {
-                let previous = sections[section - 1]
-                let lastRowStart = (previous.count - 1) / columns * columns
-                target = previous[min(lastRowStart + index % columns, previous.count - 1)]
-            }
         }
         select(target)
     }
 
-    private mutating func select(_ id: ID) {
-        selected = [id]
-        focus = id
-        anchor = id
+    /// ⇧-arrow: moves the focus and selects the range from the anchor to it.
+    mutating func extend(_ direction: GridDirection, sections: [[ID]], columns: Int) {
+        let sections = sections.filter { !$0.isEmpty }
+        guard let first = sections.first?.first else { return }
+        guard let current = focus ?? selected.first,
+            let target = Self.target(direction, from: current, sections, columns)
+        else {
+            select(first)
+            return
+        }
+        extend(to: target, current: current, sections: sections)
+    }
+
+    /// Home and End: the first or last item. With ⇧ the range from the anchor reaches it.
+    mutating func jump(toEnd: Bool, extend shouldExtend: Bool, sections: [[ID]]) {
+        let flat = sections.flatMap { $0 }
+        guard let target = toEnd ? flat.last : flat.first else { return }
+        if shouldExtend, let current = focus ?? selected.first {
+            extend(to: target, current: current, sections: sections)
+        } else {
+            select(target)
+        }
+    }
+
+    private mutating func extend(to target: ID, current: ID, sections: [[ID]]) {
+        let origin = anchor ?? current
+        anchor = origin
+        focus = target
+        if let range = Self.range(from: origin, to: target, in: sections) { selected = Set(range) }
+    }
+
+    /// The item an arrow key reaches from `current`; `current` itself at an edge, nil when it isn't in the grid.
+    static func target(_ direction: GridDirection, from current: ID, _ sections: [[ID]], _ columns: Int) -> ID? {
+        let sections = sections.filter { !$0.isEmpty }
+        guard let (section, index) = position(of: current, in: sections) else { return nil }
+        let columns = max(1, columns)
+        let items = sections[section]
+        switch direction {
+        case .left:
+            if index > 0 { return items[index - 1] }
+            if section > 0, let last = sections[section - 1].last { return last }
+        case .right:
+            if index + 1 < items.count { return items[index + 1] }
+            if section + 1 < sections.count { return sections[section + 1][0] }
+        case .down:
+            let rowStart = (index / columns + 1) * columns
+            if rowStart < items.count {
+                return items[min(index + columns, items.count - 1)]
+            } else if section + 1 < sections.count {
+                let next = sections[section + 1]
+                return next[min(index % columns, next.count - 1)]
+            }
+        case .up:
+            if index >= columns {
+                return items[index - columns]
+            } else if section > 0 {
+                let previous = sections[section - 1]
+                let lastRowStart = (previous.count - 1) / columns * columns
+                return previous[min(lastRowStart + index % columns, previous.count - 1)]
+            }
+        }
+        return current
     }
 
     private static func position(of id: ID, in sections: [[ID]]) -> (Int, Int)? {

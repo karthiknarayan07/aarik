@@ -1,100 +1,67 @@
-import LocalLibrary
+import AppCore
 import SwiftUI
 
-struct SidebarView: View {
-    @Bindable var model: AppModel
+/// The sidebar: draws whatever sections the hosted tool module lists, through `ToolSidebarModel`.
+struct SidebarView<Module: ToolModule>: View {
+    let module: Module
 
     var body: some View {
-        let activity = model.activity
-        let badgeCounts = model.library.badgeCounts
-        List(selection: $model.selection) {
-            Section("Library") {
-                DestinationRow(destination: .overview)
-                DestinationRow(
-                    destination: .photosVideos, count: model.photos.hasLoaded ? model.photos.items.count : nil)
-                DestinationRow(destination: .localFiles, count: model.library.items.count)
-                    .contextMenu {
-                        Button("Add Videos…") { model.perform(.addVideos) }
-                    }
-                    // Dropping videos on the row adds them, with the row as the target.
-                    .dropDestination(for: URL.self) { urls, _ in
-                        model.addFiles(urls)
-                        return !urls.isEmpty
-                    }
-            }
-            if !badgeCounts.isEmpty {
-                Section("Media Types") {
-                    ForEach(MediaBadge.allCases.filter { badgeCounts[$0] != nil }, id: \.self) { badge in
-                        DestinationRow(destination: .mediaType(badge), count: badgeCounts[badge] ?? 0)
+        let sidebar = ToolSidebarModel(module.sidebar)
+        let selection = Binding<Module.Destination?> {
+            module.selection
+        } set: { newValue in
+            if sidebar.accepts(newValue) { module.selection = newValue }
+        }
+        List(selection: selection) {
+            ForEach(sidebar.sections) { section in
+                Section(section.title) {
+                    ForEach(section.rows) { row in
+                        SidebarRow(module: module, row: row)
                     }
                 }
-            }
-            Section("Tools") {
-                ForEach(model.tools) { tool in
-                    DestinationRow(destination: .tool(tool.id))
-                }
-                ForEach(model.comingSoonTools) { tool in
-                    ComingSoonRow(tool: tool)
-                }
-            }
-            Section("Activity") {
-                DestinationRow(destination: .queue, count: activity.queue, progress: activity.runningProgress)
-                    .contextMenu {
-                        Button(model.isQueuePaused ? "Resume Queue" : "Pause Queue") {
-                            model.perform(.pauseOrResumeQueue)
-                        }
-                    }
-                DestinationRow(destination: .completed, count: activity.completed)
-                DestinationRow(destination: .keptAsIs, count: activity.keptAsIs)
-                DestinationRow(destination: .failed, count: activity.failed)
-                    .contextMenu {
-                        Button("Retry All Failed") { model.perform(.retryAllFailed) }
-                            .disabled(activity.failed == 0)
-                    }
             }
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 220)
     }
 }
 
-private struct DestinationRow: View {
-    let destination: SidebarDestination
-    var count: Int?
-    /// A running job's progress: shows a small ring.
-    var progress: Double?
+private struct SidebarRow<Module: ToolModule>: View {
+    let module: Module
+    let row: ToolSidebarModel<Module.Destination>.Row
 
     var body: some View {
-        HStack {
-            Label(destination.title, systemImage: destination.systemImage)
-            if let progress {
+        if row.isSelectable, let destination = row.item.destination {
+            available(destination)
+        } else {
+            unavailable
+        }
+    }
+
+    private func available(_ destination: Module.Destination) -> some View {
+        let item = row.item
+        return HStack {
+            Label(item.title, systemImage: item.systemImage)
+            if let progress = item.progress {
                 Spacer()
                 ProgressView(value: progress)
                     .progressViewStyle(.circular)
                     .controlSize(.mini)
             }
         }
-        .badge(count ?? 0)
+        .badge(item.count ?? 0)
         .tag(destination)
         // The row reads as its title; the count and the running progress are its value.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(destination.title)
-        .accessibilityValue(accessibilityValue)
+        .accessibilityLabel(item.accessibilityLabel)
+        .accessibilityValue(item.accessibilityValue)
+        .modifier(RowContextMenu(module: module, destination: destination))
+        .modifier(RowFileDrop(module: module, destination: destination))
     }
 
-    private var accessibilityValue: String {
-        var parts: [String] = []
-        if let count { parts.append("\(count)") }
-        if let progress { parts.append("converting \(Int((progress * 100).rounded()))%") }
-        return parts.joined(separator: ", ")
-    }
-}
-
-private struct ComingSoonRow: View {
-    let tool: ToolEntry
-
-    var body: some View {
-        HStack {
-            Label(tool.title, systemImage: tool.systemImage)
+    private var unavailable: some View {
+        let item = row.item
+        return HStack {
+            Label(item.title, systemImage: item.systemImage)
             Spacer()
             Text("Soon")
                 .font(.caption)
@@ -104,6 +71,38 @@ private struct ComingSoonRow: View {
         .disabled(true)
         .selectionDisabled()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tool.title), coming soon")
+        .accessibilityLabel(item.accessibilityLabel)
+        .accessibilityValue(item.accessibilityValue)
+    }
+}
+
+/// The module's context menu for a row, only on the rows that have one.
+private struct RowContextMenu<Module: ToolModule>: ViewModifier {
+    let module: Module
+    let destination: Module.Destination
+
+    func body(content: Content) -> some View {
+        if module.hasContextMenu(for: destination) {
+            content.contextMenu { module.contextMenu(for: destination) }
+        } else {
+            content
+        }
+    }
+}
+
+/// Files dropped on a row, only on the rows that take them.
+private struct RowFileDrop<Module: ToolModule>: ViewModifier {
+    let module: Module
+    let destination: Module.Destination
+
+    func body(content: Content) -> some View {
+        if module.acceptsFileDrop(on: destination) {
+            content.dropDestination(for: URL.self) { urls, _ in
+                let urls = ImportDropGuard.importable(urls, isInternalDragActive: InternalDrag.isActive)
+                return !urls.isEmpty && module.dropFiles(urls, on: destination)
+            }
+        } else {
+            content
+        }
     }
 }
