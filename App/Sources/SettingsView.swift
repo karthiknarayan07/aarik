@@ -1,4 +1,5 @@
 import AppCore
+import AppKit
 import AppUI
 import DownscaleVideo
 import SwiftUI
@@ -53,14 +54,23 @@ private struct GeneralSettings: View {
             Section("Updates") {
                 if updater.isConfigured {
                     Toggle("Check for Updates Automatically", isOn: $updater.automaticallyChecksForUpdates)
-                    LabeledContent("Look for a New Version Now") {
-                        Button("Check Now") { updater.checkForUpdates() }
-                            .disabled(!updater.canCheckForUpdates)
-                    }
+                    Button("Check for Updates…") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheckForUpdates)
                 } else {
                     Text("Updates are off in development builds.")
                         .foregroundStyle(.secondary)
                 }
+            }
+            Section {
+                Button("Open System Settings…") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text("Choose how the app tells you when the queue finishes.")
             }
             FinderQuickActionSection()
             QuickRunSettingsSections()
@@ -128,11 +138,9 @@ private struct OutputSettings: View {
                         chooseFolder(for: .originals)
                     }
                     if !FileManager.default.fileExists(atPath: originalsFolder.path) {
-                        Label(
+                        StatusLabel(
                             "The folder is missing. Replace keeps originals until it's back.",
-                            systemImage: "exclamationmark.triangle"
-                        )
-                        .foregroundStyle(.orange)
+                            systemImage: "exclamationmark.triangle", tint: .orange)
                     }
                 }
             }
@@ -170,14 +178,16 @@ private struct FolderRow: View {
     let change: () -> Void
 
     var body: some View {
-        HStack {
-            Label(folder.lastPathComponent, systemImage: "folder")
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(folder.path)
-            Spacer()
-            Button("Change…", action: change)
-                .accessibilityLabel("Change the \(accessibilityName)")
+        LabeledContent("Folder") {
+            HStack {
+                Text(folder.lastPathComponent)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+                    .help(folder.path)
+                Button("Choose…", action: change)
+                    .accessibilityLabel("Choose the \(accessibilityName)")
+            }
         }
     }
 }

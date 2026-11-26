@@ -53,6 +53,7 @@ import Testing
         (PhotoFetchError.notInLibrary, .originalUnavailable),
         (PhotoFetchError.downloadFailed(underlying: "x"), .iCloudDownloadFailed),
         (PhotoFetchError.cancelled, .cancelled),
+        (PhotoFetchError.notAuthorized, .photosAccessDenied),
         (PhotoFetchError.failed("x"), .originalUnavailable),
         (PhotoStoreError.notAuthorized, .photosAccessDenied),
         (PhotoStoreError.notInLibrary("x"), .originalUnavailable),

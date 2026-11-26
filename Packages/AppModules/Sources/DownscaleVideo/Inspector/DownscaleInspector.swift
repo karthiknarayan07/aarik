@@ -120,6 +120,11 @@ public enum QueueButtonTitle {
         default: "Add \(count) to queue"
         }
     }
+
+    /// The toolbar button's title: short, in Title Case. "Add to Queue", or "Add 3 to Queue" for several.
+    public static func toolbarTitle(count: Int) -> String {
+        count > 1 ? "Add \(count) to Queue" : "Add to Queue"
+    }
 }
 
 /// Totals for a multi-selection, over the files that can be converted now (as the queue button counts them), each
@@ -140,20 +145,15 @@ private struct SelectionTotals: View {
         let missing = sources.count - available.count
         LabeledContent(available.count == 1 ? "1 video" : "\(available.count) videos", value: ByteFormat.string(total))
         LabeledContent("Could free about", value: ByteFormat.string(freed))
-            .foregroundStyle(.green)
         if losing > 0 {
-            Label(
+            StatusLabel(
                 losing == 1 ? "1 video will lose metadata" : "\(losing) videos will lose metadata",
-                systemImage: "exclamationmark.triangle"
-            )
-            .foregroundStyle(.orange)
+                systemImage: "exclamationmark.triangle", tint: .orange)
         }
         if missing > 0 {
-            Label(
+            StatusLabel(
                 missing == 1 ? "1 missing file is skipped" : "\(missing) missing files are skipped",
-                systemImage: "exclamationmark.circle"
-            )
-            .foregroundStyle(.orange)
+                systemImage: "exclamationmark.circle", tint: .orange)
         }
     }
 }

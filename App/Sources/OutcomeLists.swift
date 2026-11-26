@@ -4,9 +4,11 @@ import Assistant
 import LocalLibrary
 import SwiftUI
 
-/// Finished conversions with what they saved, the report badge, and Show in Finder.
+/// Finished conversions with what they saved and the report badge. Select rows for the context menu (Show in
+/// Finder, Remove from List); double-click or Return shows the file in Finder.
 struct CompletedView: View {
     let model: AppModel
+    @State private var selection = Set<UUID>()
 
     var body: some View {
         let rows = model.completedJobs
@@ -14,21 +16,20 @@ struct CompletedView: View {
             if rows.isEmpty {
                 SidebarDestination.completed.emptyState
             } else {
-                List {
-                    Section {
-                        ForEach(rows, id: \.job.id) { row in
-                            CompletedRow(
-                                job: row.job, outcome: row.outcome, thumbnails: model.thumbnails,
-                                assistant: model.assistant)
-                        }
-                    } header: {
-                        Text("Saved \(ByteFormat.string(model.activity.savedBytes)) in total")
-                            .font(.headline)
+                List(selection: $selection) {
+                    ForEach(rows, id: \.job.id) { row in
+                        CompletedRow(
+                            job: row.job, outcome: row.outcome, thumbnails: model.thumbnails,
+                            assistant: model.assistant)
                     }
                 }
+                .jobListActions(model: model, kind: .completed, selection: selection)
             }
         }
         .navigationTitle("Completed")
+        .navigationSubtitle(
+            JobListActions.subtitle(
+                kind: .completed, count: rows.count, savedBytes: model.activity.savedBytes, pauseText: nil))
     }
 }
 
@@ -69,8 +70,6 @@ private struct CompletedRow: View {
             ReportBadge(outcome: outcome) {
                 if !outcome.isVerified { WhyInline(assistant: assistant, job: job, outcome: outcome) }
             }
-            // A new video in Photos has no file to reveal.
-            if outcome.output.isFileURL { ShowInFinderButton(url: outcome.output) }
         }
         .padding(.vertical, 2)
     }
@@ -79,6 +78,7 @@ private struct CompletedRow: View {
 /// Videos left untouched, with the reason.
 struct KeptAsIsView: View {
     let model: AppModel
+    @State private var selection = Set<UUID>()
 
     var body: some View {
         let rows = model.keptAsIsJobs
@@ -86,19 +86,26 @@ struct KeptAsIsView: View {
             if rows.isEmpty {
                 SidebarDestination.keptAsIs.emptyState
             } else {
-                List(rows, id: \.job.id) { row in
-                    ReasonRow(
-                        job: row.job, reason: row.reason, thumbnails: model.thumbnails, assistant: model.assistant)
+                List(selection: $selection) {
+                    ForEach(rows, id: \.job.id) { row in
+                        ReasonRow(
+                            job: row.job, reason: row.reason, thumbnails: model.thumbnails,
+                            assistant: model.assistant)
+                    }
                 }
+                .jobListActions(model: model, kind: .keptAsIs, selection: selection)
             }
         }
         .navigationTitle("Kept as Is")
+        .navigationSubtitle(
+            JobListActions.subtitle(kind: .keptAsIs, count: rows.count, savedBytes: 0, pauseText: nil))
     }
 }
 
 /// Conversions that couldn't finish, with Retry and Retry all.
 struct FailedView: View {
     let model: AppModel
+    @State private var selection = Set<UUID>()
 
     var body: some View {
         let rows = model.failedJobs
@@ -106,17 +113,24 @@ struct FailedView: View {
             if rows.isEmpty {
                 SidebarDestination.failed.emptyState
             } else {
-                List(rows, id: \.job.id) { row in
-                    ReasonRow(
-                        job: row.job, reason: row.reason, thumbnails: model.thumbnails, assistant: model.assistant
-                    ) {
-                        Button("Retry") { model.retry(row.job) }
-                            .accessibilityLabel("Retry \(row.job.displayName)")
+                List(selection: $selection) {
+                    ForEach(rows, id: \.job.id) { row in
+                        ReasonRow(
+                            job: row.job, reason: row.reason, thumbnails: model.thumbnails,
+                            assistant: model.assistant
+                        ) {
+                            Button("Retry") { model.retry(row.job) }
+                                .accessibilityLabel("Retry \(row.job.displayName)")
+                        }
                     }
                 }
+                .jobListActions(model: model, kind: .failed, selection: selection)
             }
         }
         .navigationTitle("Failed")
+        .navigationSubtitle(
+            JobListActions.subtitle(kind: .failed, count: rows.count, savedBytes: 0, pauseText: nil)
+        )
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Retry All", systemImage: "arrow.clockwise") { model.retryAllFailed() }
@@ -148,7 +162,6 @@ private struct ReasonRow<Actions: View>: View {
             Spacer()
             WhyButton(assistant: assistant, job: job, outcome: nil)
             actions
-            if job.source.isFileURL { ShowInFinderButton(url: job.source) }
         }
         .padding(.vertical, 2)
     }
