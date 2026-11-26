@@ -74,6 +74,14 @@ final class IOSShell {
     private func startWidgetSync() {
         let services = services
         let sync = widgetSync
+        // The control may have toggled the shared flag while the app wasn't running: it wins over the app's own
+        // value, and must be read before the first sync writes the app's value over it.
+        let launchPaused = sync.launchPauseState(appPaused: services.isQueuePaused)
+        if launchPaused != services.isQueuePaused {
+            services.isQueuePaused = launchPaused
+            // `start()` resumes the queue only when it isn't paused; a pause has to reach the queue itself.
+            if launchPaused { services.send { await $0.pause() } }
+        }
         sync.sync(activity: services.activity, isPausedByUser: services.isQueuePaused)
         services.observeJobs { [weak services] _ in
             guard let services else { return }
@@ -81,7 +89,11 @@ final class IOSShell {
         }
         trackPause()
         sync.startObserving { [weak services] paused in
-            services?.isQueuePaused = paused
+            guard let services, services.isQueuePaused != paused else { return }
+            services.isQueuePaused = paused
+            services.send { queue in
+                if paused { await queue.pause() } else { await queue.resume() }
+            }
         }
     }
 
