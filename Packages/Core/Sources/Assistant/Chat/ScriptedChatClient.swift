@@ -17,6 +17,7 @@ public final class ScriptedChatClient: LanguageModelClient {
         var reason: AssistantUnavailableReason?
         var requests: [ChatRequest] = []
         var toolResults: [String] = []
+        var failures: [AssistantError] = []
     }
 
     private let state: Mutex<State>
@@ -48,6 +49,9 @@ public final class ScriptedChatClient: LanguageModelClient {
         }
     }
 
+    /// The next chat requests fail with these errors, one each, before the script is followed again.
+    public func failNext(_ errors: AssistantError...) { state.withLock { $0.failures += errors } }
+
     /// The chat requests received, oldest first.
     public var requests: [ChatRequest] { state.withLock { $0.requests } }
     /// What each tool call came back with, in order.
@@ -63,10 +67,17 @@ public final class ScriptedChatClient: LanguageModelClient {
     }
 
     public func streamChat(_ request: ChatRequest) -> AsyncThrowingStream<String, any Error> {
-        state.withLock { $0.requests.append(request) }
+        let failure: AssistantError? = state.withLock {
+            $0.requests.append(request)
+            return $0.failures.isEmpty ? nil : $0.failures.removeFirst()
+        }
         let steps = script(request.prompt)
         return AsyncThrowingStream { continuation in
             let task = Task {
+                if let failure {
+                    continuation.finish(throwing: failure)
+                    return
+                }
                 guard isAvailable else {
                     continuation.finish(throwing: AssistantError.unavailable)
                     return

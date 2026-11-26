@@ -135,6 +135,14 @@ public final class ChatStore {
         save()
     }
 
+    /// Removes messages (a reply being regenerated); the chat itself stays.
+    public func remove(_ ids: [UUID], in id: UUID) {
+        guard let conversation = conversation(id) else { return }
+        let doomed = Set(ids)
+        for record in conversation.messages where doomed.contains(record.id) { context.delete(record) }
+        save()
+    }
+
     // MARK: Encoding
 
     private func conversation(_ id: UUID) -> ConversationRecord? {

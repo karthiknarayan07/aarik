@@ -86,6 +86,7 @@ import Testing
         let result = try #require(rig.client.toolResults.first)
         #expect(result.hasPrefix("2 videos, 1.5 GB in all."))
         #expect(result.contains("Beach 1.MOV") && !result.contains("Party"))
+        #expect(result.contains("\n1. Beach") && result.contains("\n2. Beach"))
         guard case .toolCall(let call) = rig.chat.items[1].content else {
             Issue.record("expected a tool row")
             return
@@ -100,7 +101,7 @@ import Testing
         defer { rig.cleanUp() }
         await ask(rig)
         #expect(rig.client.toolResults.count == 2)
-        #expect(rig.client.toolResults[0].hasPrefix("1 videos"))
+        #expect(rig.client.toolResults[0].hasPrefix("1 video, "))
         #expect(rig.client.toolResults[1] == "No videos match.")
     }
 
