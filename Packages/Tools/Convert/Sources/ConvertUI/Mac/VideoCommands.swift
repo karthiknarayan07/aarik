@@ -64,13 +64,13 @@ private struct GroupSortMenus: View {
     }
 }
 
-/// Go → the sections of the sidebar, ⌘1 to ⌘7 in its order.
+/// Go → the sections of the sidebar, ⌘1 to ⌘7 in its order, and Ask as ⌘8 while the assistant is available.
 private struct GoCommands: Commands {
     let model: ConvertModel
 
     var body: some Commands {
         CommandMenu("Go") {
-            ForEach(Array(ConvertModel.goDestinations.enumerated()), id: \.offset) { index, destination in
+            ForEach(Array(model.goDestinations().enumerated()), id: \.offset) { index, destination in
                 Button(destination.title) {
                     model.host.showMainWindow()
                     model.selection = destination
@@ -81,7 +81,7 @@ private struct GoCommands: Commands {
     }
 }
 
-/// File → Add Videos… (⌘O); Edit → Remove from Library (no shortcut; ⌫ in the grid); Queue → Add to Queue (⌘⏎), Pause or Resume Queue
+/// File → Add Videos… (⌘O) and New Chat (⌘N, on the Ask page); Edit → Remove from Library (no shortcut; ⌫ in the grid); Queue → Add to Queue (⌘⏎), Pause or Resume Queue
 /// (⌥⌘P) and Retry All Failed.
 private struct LibraryCommands: Commands {
     let model: ConvertModel
@@ -89,6 +89,8 @@ private struct LibraryCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
             CommandButton(model: model, id: .addVideos)
+            // Only with Apple Intelligence; enabled on the Ask page (⌘N).
+            if model.isAskAvailable { CommandButton(model: model, id: .newChat) }
         }
         CommandGroup(after: .pasteboard) {
             // Only the library entries go; Delete in the grid does the same. Edit → Undo brings them back.

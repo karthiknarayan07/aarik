@@ -49,10 +49,45 @@ public enum AssistantEmptyContent {
     public static let subtitle =
         "Search your library, estimate savings and explain results. It all runs on this device."
 
+    /// Shown instead of the title when the chat is about one video.
+    public static let contextTitle = "Ask About This Video"
+
+    /// The starting questions for a chat about one video.
+    public static let contextSuggestions: [String] = [
+        "Why Is This So Big?", "How Much Would I Save?", "Should I Convert This?",
+    ]
+
     /// Title Case chips; tapping one asks it as written.
     public static let suggestions: [String] = [
         "Find My Biggest Videos", "How Much Can I Save?", "Why Was This Kept?",
     ]
+}
+
+/// What a key press in the Mac composer does: Return sends, Shift-Return (or Option-Return) adds a line, Escape stops
+/// an answer being written. Kept apart from the view so the rules are tested.
+public enum ComposerKey {
+    public enum Action: Equatable, Sendable {
+        /// Send the draft.
+        case send
+        /// Let the text field insert its own newline.
+        case newline
+        /// Return with nothing to send: the key is swallowed so it doesn't add a blank line.
+        case ignoreReturn
+        case stop
+        /// Not ours.
+        case passThrough
+    }
+
+    public static func `return`(
+        shift: Bool, option: Bool, hasText: Bool, isGenerating: Bool, isComposing: Bool = false
+    ) -> Action {
+        // A marked-text composition (an input method's candidate) owns Return.
+        if isComposing { return .passThrough }
+        if shift || option { return .newline }
+        return hasText && !isGenerating ? .send : .ignoreReturn
+    }
+
+    public static func escape(isGenerating: Bool) -> Action { isGenerating ? .stop : .passThrough }
 }
 
 /// "Searched Library · 42 Results" and its VoiceOver reading.
@@ -70,6 +105,19 @@ public enum ToolCallText {
             case .failed: "Didn't finish"
             }
         return [title(call), state].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
+/// The plain text Copy puts on the pasteboard for one message of the transcript.
+public enum ChatCopyText {
+    public static func string(for content: ChatItem.Content) -> String {
+        switch content {
+        case .user(let text), .assistant(let text), .notice(let text): text
+        case .toolCall(let call): ([ToolCallText.title(call)] + call.lines).joined(separator: "\n")
+        case .confirmation(let confirmation):
+            [confirmation.card.title, confirmation.card.message, ConfirmationText.status(confirmation)]
+                .compactMap { $0 }.joined(separator: "\n")
+        }
     }
 }
 

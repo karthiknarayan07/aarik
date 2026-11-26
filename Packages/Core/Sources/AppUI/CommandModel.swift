@@ -36,6 +36,7 @@ public struct KeyChord: Hashable, Sendable {
 /// The commands the app's own menus add (File, Edit and Queue).
 public enum AppCommandID: String, CaseIterable, Sendable {
     case addVideos
+    case newChat
     case removeFromLibrary
     case addToQueue
     case pauseOrResumeQueue
@@ -45,15 +46,19 @@ public enum AppCommandID: String, CaseIterable, Sendable {
 /// What the commands need to know about the window to decide their titles and whether they are enabled.
 public struct AppCommandContext: Equatable, Sendable {
     public var canRemoveFromLibrary: Bool
+    /// True while the Ask page is showing: New Chat has nothing to start anywhere else.
+    public var canStartNewChat: Bool
     public var canAddToQueue: Bool
     public var isQueuePaused: Bool
     public var failedJobCount: Int
 
     public init(
-        canRemoveFromLibrary: Bool = false, canAddToQueue: Bool = false, isQueuePaused: Bool = false,
+        canRemoveFromLibrary: Bool = false, canStartNewChat: Bool = false, canAddToQueue: Bool = false,
+        isQueuePaused: Bool = false,
         failedJobCount: Int = 0
     ) {
         self.canRemoveFromLibrary = canRemoveFromLibrary
+        self.canStartNewChat = canStartNewChat
         self.canAddToQueue = canAddToQueue
         self.isQueuePaused = isQueuePaused
         self.failedJobCount = failedJobCount
@@ -75,6 +80,9 @@ public enum AppCommands {
         switch id {
         case .addVideos:
             AppCommand(id: id, title: "Add Videos…", shortcut: .command("o"), isEnabled: true)
+        case .newChat:
+            // ⌘N is free (the app has no New Window) and is what Messages and Notes use for a new conversation.
+            AppCommand(id: id, title: "New Chat", shortcut: .command("n"), isEnabled: context.canStartNewChat)
         case .removeFromLibrary:
             // No key equivalent: ⌘⌫ would take "delete to start of line" from the search field. Plain ⌫ in the grid
             // does the same.

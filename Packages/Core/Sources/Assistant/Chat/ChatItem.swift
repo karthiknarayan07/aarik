@@ -64,6 +64,24 @@ public struct ChatItem: Identifiable, Sendable, Equatable {
     }
 }
 
+/// The subject of a chat, from "Ask About This…": a short title for the chip above the composer, and the facts the
+/// model is given about it. Nothing here is written to the transcript.
+public struct ChatContext: Sendable, Equatable {
+    public var title: String
+    public var details: String
+
+    public init(title: String, details: String) {
+        self.title = title
+        self.details = details
+    }
+
+    /// Appended to the model's rules while the context is set.
+    var instructions: String {
+        "\n\nThe person is asking about this video unless they say otherwise: \(title). \(details) "
+            + "Use the tools to look up more about it by name."
+    }
+}
+
 /// A chat in the history list.
 public struct ChatConversationSummary: Identifiable, Sendable, Equatable {
     public let id: UUID

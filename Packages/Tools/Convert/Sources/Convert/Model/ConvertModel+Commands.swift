@@ -7,7 +7,8 @@ extension ConvertModel {
     /// What the menus' commands decide from (see `AppCommands`).
     public var commandContext: AppCommandContext {
         AppCommandContext(
-            canRemoveFromLibrary: canRemoveSelectionFromLibrary, canAddToQueue: canAddSelectionToQueue,
+            canRemoveFromLibrary: canRemoveSelectionFromLibrary, canStartNewChat: selection == .ask && isAskAvailable,
+            canAddToQueue: canAddSelectionToQueue,
             isQueuePaused: isQueuePaused, failedJobCount: failedJobs.count)
     }
 
@@ -15,6 +16,11 @@ extension ConvertModel {
     public static let goDestinations: [VideoPage] = [
         .overview, .photosVideos, .localFiles, .queue, .completed, .keptAsIs, .failed,
     ]
+
+    /// The Go menu: the sections above, then Ask (⌘8) while the assistant is available.
+    public func goDestinations() -> [VideoPage] {
+        Self.goDestinations + (isAskAvailable ? [.ask] : [])
+    }
 
     /// The browser the View menu's Group By and Sort By act on: the page that is showing; nil on the Activity pages.
     public var activeBrowser: LibraryBrowser? {
@@ -30,6 +36,7 @@ extension ConvertModel {
     public func perform(_ command: AppCommandID) {
         host.showMainWindow()
         switch command {
+        case .newChat: startNewChat()
         case .addVideos:
             if selection?.showsLibrary != true { selection = .localFiles }
             isImporterPresented = true

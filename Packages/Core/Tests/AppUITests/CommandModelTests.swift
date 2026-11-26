@@ -34,6 +34,36 @@ import Testing
         #expect(AppCommands.command(.addVideos, in: idle).shortcut == .command("o"))
     }
 
+    @Test func newChatIsCommandNOnlyWhileAskShows() {
+        let asking = AppCommandContext(canStartNewChat: true)
+        let command = AppCommands.command(.newChat, in: asking)
+        #expect(command.title == "New Chat")
+        #expect(command.shortcut == .command("n"))
+        #expect(command.isEnabled)
+        #expect(!AppCommands.command(.newChat, in: idle).isEnabled)
+        #expect(!AppCommands.reservedChords.contains(.command("n")))
+        // Every other command keeps its own chord, so ⌘N is used once.
+        let others = AppCommands.all(in: busy).filter { $0.id != .newChat }.compactMap(\.shortcut)
+        #expect(!others.contains(.command("n")))
+    }
+
+    @Test func composerReturnSendsAndShiftReturnAddsALine() {
+        typealias Key = ComposerKey
+        #expect(Key.return(shift: false, option: false, hasText: true, isGenerating: false) == .send)
+        #expect(Key.return(shift: true, option: false, hasText: true, isGenerating: false) == .newline)
+        #expect(Key.return(shift: false, option: true, hasText: true, isGenerating: false) == .newline)
+        #expect(Key.return(shift: false, option: false, hasText: false, isGenerating: false) == .ignoreReturn)
+        #expect(Key.return(shift: false, option: false, hasText: true, isGenerating: true) == .ignoreReturn)
+        #expect(
+            Key.return(shift: false, option: false, hasText: true, isGenerating: false, isComposing: true)
+                == .passThrough)
+    }
+
+    @Test func escapeStopsOnlyWhileAnAnswerIsBeingWritten() {
+        #expect(ComposerKey.escape(isGenerating: true) == .stop)
+        #expect(ComposerKey.escape(isGenerating: false) == .passThrough)
+    }
+
     @Test func everyCommandHasAUniqueShortcutThatTheSystemDoesNotOwn() {
         for context in [idle, busy] {
             let chords = AppCommands.all(in: context).compactMap(\.shortcut)

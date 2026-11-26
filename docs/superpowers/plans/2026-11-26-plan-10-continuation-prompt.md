@@ -35,12 +35,23 @@ You are continuing work on Aarik. Your working directory is `/Users/karthiknaray
 - The on-device AI Assistant: an Ask tab with streaming replies, tool calls, confirmation cards before any action, and SwiftData history. DEBUG `-AssistantDemo` runs it on a fake model.
 - **Confirmed:** the real Apple Intelligence model works in the iOS Simulator. On iPhone Air `F38FA01E-D51C-4314-8A60-6F63B8DBBD27` (iOS 27.2), the Ask tab appears about a minute after boot.
 
-## In flight when this prompt was written (check their branches; resume or redo)
-- `plan-10/final-ui`: make all iPhone UI tests pass on iPhone 17 (`D1013D0D-80AF-4106-A440-2CC70A3B8B0E`), add new tests, and take final screenshots in `.superpowers/.../final-shots/`.
-- `plan-10/final-unit`: run `scripts/verify.sh`, add missing unit tests (the assistant tools, Reduce Motion, the hand-off route, the zero-value chart cache, and the `#expect` main-actor warnings), then get `verify.sh --repeat 2` green twice.
-- `plan-10/real-ai-smoke`: `RealAssistantSmokeTests`, gated by `RUN_REAL_AI=1`. It drives the real model on iPhone Air: streaming, a tool-call row, and Cancel on the confirmation card queueing nothing.
+## Also merged after the first refresh
+- **Final unit pass:** `verify.sh --repeat 2` passed all 13 checks in both runs, with the iOS UI tests skipped via `IOS_SKIP_TESTING=UITests`. It added 24 tests.
+- **Real-model AI smoke test** (`RealAssistantSmokeTests`, gated by `RUN_REAL_AI=1`, run on iPhone Air): 3 of 3 runs pass after the grounding fix. It also fixed two bugs: the composer added a newline instead of sending, and the Home ring crashed inside Swift Charts.
+- **AI polish:**
+  - Answers now list the items found.
+  - A refused reply is retried once.
+  - Send shows while a confirmation card waits.
+  - Copy, Regenerate and a Retry error card were added.
+  - The model is grounded: tool output states counts plainly, and a Cancel is acknowledged.
+- **Mac Ask:** an Ask sidebar item (⌘8), a history inspector, New Chat (⌘N), Ask About This… (`ChatContext`), and Return / Shift-Return / Esc. Return, Shift-Return and Esc have not been tried in the running app.
+
+## In flight
+- `plan-10/final-ui`: makes all iPhone UI tests pass on iPhone 17 (`D1013D0D-...`) and takes the final screenshots. It was still on its full run. Resume it or redo it, then merge.
 
 ## Known gaps
+- **Mac `CompressionFixtureTests`:** failed under load after the Mac Ask merge, a different test each run. Recheck on a quiet Mac.
+- **AI quality:** "biggest videos" sometimes lists only 1 of 2 clips.
 - **Real device:** the `docs/RELEASING.md` checklist (background grant, Live Activity, battery and heat, the share-sheet notification, the widget, Replace originals on test assets).
 - **Mac, by eye:** the Overview chart axis labels, the toolbar, and sidebar colours on a selected row. Mac screenshots can't be captured while the screen is locked; use the `ImageRenderer` tests (env `APP_MAC_SHOTS`).
 - **Mac Convert tests:** the compress4K fixture tests stall under heavy load. Rerun them on a quiet Mac.

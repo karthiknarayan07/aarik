@@ -295,6 +295,10 @@
             Button("Add to Queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }
             Button("Compress…", systemImage: "rectangle.compress.vertical") { model.compressPhotosClicked(item) }
             Divider()
+            if model.isAskAvailable {
+                Button("Ask About This…", systemImage: "sparkles") { model.askAbout(item) }
+                Divider()
+            }
             Button("Show in Photos", systemImage: "photo.on.rectangle") { model.showInPhotos(item) }
             // The poster frame: the video stays in Photos, so nothing is downloaded or exported.
             Button("Quick Look", systemImage: "eye") { model.quickLookPhotoPoster(of: item) }

@@ -11,11 +11,16 @@ import Observation
 public final class AssistantChat {
     /// The transcript of the open chat.
     public private(set) var items: [ChatItem] = []
-    public private(set) var isGenerating = false
+    /// True while an answer is being written. It ends while a confirmation card waits for a tap, so Send shows again.
+    public var isGenerating: Bool { isWorking && !hasPendingConfirmation }
+    private var isWorking = false
     /// The open chat; nil until the first message of a new chat is sent.
     public private(set) var currentID: UUID?
     public private(set) var conversations: [ChatConversationSummary] = []
     public let availability: AssistantAvailability
+    /// What the next questions are about (a video chosen with Ask About This…). The model is told; the transcript
+    /// shows only what the person typed. Cleared by a new chat, opening another chat, or `clearContext()`.
+    public private(set) var context: ChatContext?
 
     @ObservationIgnored private let client: any LanguageModelClient
     @ObservationIgnored private let store: ChatStore
@@ -26,12 +31,43 @@ public final class AssistantChat {
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<Bool, Never>] = [:]
 
     static let instructions = """
-        You are the assistant inside a free, offline app that shrinks videos on this device. Be brief and plain. \
-        Use the tools to look things up; never guess sizes, counts or results. \
-        You can look at the library, estimate savings, explain results and list the queue on your own. \
-        To start conversions, pause or resume the queue, or move originals, call the matching tool: the person is \
-        asked to confirm first, so never say something was done until the tool's result says so. \
-        If the person declines, accept it and don't ask again. Say only what the tools told you.
+        You are the assistant inside a free, offline app that shrinks videos on this device. Help the person \
+        understand their video library and free up space. This is an everyday, harmless task.
+
+        Rules:
+        - Call a tool to look anything up. Never guess sizes, counts, names or savings.
+        - Answer only from what the tools returned. If a tool found nothing, say so.
+        - When a tool returns a list, name the items in your answer (name and size), up to five, then say how many \
+        more there are. Never answer with only an introduction.
+        - Use only the numbers and names in the tool result. Never add counts, sizes or thresholds of your own.
+        - If a tool says no videos were found, say so plainly. Don't list anything.
+        - If a tool says the person cancelled, acknowledge it in one short sentence and stop. Don't repeat the \
+        earlier answer or offer the action again.
+        - Be brief and plain: a short sentence, then the list. No headings.
+        - To start conversions, pause or resume the queue, or move originals, call the matching tool. The person is \
+        asked to confirm first, so never say something was done until the tool's result says so. If the person \
+        declines, accept it and don't ask again.
+
+        Examples:
+        Person: Find my biggest videos.
+        You call search_library, then answer: "Your biggest videos are Beach Day (4.2 GB), Birthday (3.1 GB) and \
+        Road Trip (2.8 GB)." Mention other videos only if the tool says some aren't listed, using its number.
+        Person: How much space could I free?
+        You call estimate_savings, then answer: "Converting could free about 38 GB. The biggest group is B1: 14 \
+        videos from 2024, about 21 GB."
+        Person: What is in the queue?
+        You call list_queue, then answer with how many are waiting and the first few names.
+        """
+
+    /// What the model hears when the person cancels a card.
+    static let cancelledNote =
+        "The user cancelled; nothing changed. Acknowledge in one short sentence. Don't repeat the earlier answer."
+
+    /// The short prompt for the one retry after a refusal: no history, no examples, only the job.
+    static let simpleInstructions = """
+        You help someone manage the video files in their own library on this device. Use the tools to look things \
+        up, then answer briefly in plain words, naming the items and sizes the tools returned. Say only what the \
+        tools told you.
         """
 
     public init(
@@ -61,21 +97,76 @@ public final class AssistantChat {
     public func send(_ text: String) {
         let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty, !isGenerating, availability.isAvailable else { return }
+        // A card still waiting is answered by asking something else: it is cancelled and its answer set aside.
+        if isWorking {
+            stop()
+            epoch += 1
+        }
         let id = ensureConversation(startingWith: prompt)
-        let history = items.compactMap { item -> ChatTurn? in
+        let history = Self.turns(items)
+        append(.user(prompt), in: id)
+        start(prompt: prompt, history: history, in: id)
+    }
+
+    private func start(prompt: String, history: [ChatTurn], in id: UUID) {
+        isWorking = true
+        let epoch = self.epoch
+        generation = Task { [weak self] in
+            await self?.generate(prompt: prompt, history: history, in: id, epoch: epoch)
+        }
+    }
+
+    /// Whether the last reply (or the error that took its place) can be asked for again.
+    public var canRegenerate: Bool {
+        guard !isWorking, availability.isAvailable, let index = items.lastIndex(where: Self.isUser) else {
+            return false
+        }
+        let after = items[(index + 1)...]
+        guard let last = after.last else { return false }
+        switch last.content {
+        case .assistant, .notice: break
+        default: return false
+        }
+        // An action that was confirmed has happened; asking again must not hide or repeat it.
+        return !after.contains {
+            if case .confirmation(let card) = $0.content {
+                card.state == .confirmed || card.state == .failed
+            } else {
+                false
+            }
+        }
+    }
+
+    /// Replaces the last reply with a fresh one for the same message. Also what Retry does after an error.
+    public func regenerate() {
+        guard canRegenerate, let id = currentID, let index = items.lastIndex(where: Self.isUser),
+            case .user(let prompt) = items[index].content
+        else { return }
+        let history = Self.turns(items[..<index])
+        let removed = items[(index + 1)...].map(\.id)
+        items.removeSubrange((index + 1)...)
+        store.remove(removed, in: id)
+        start(prompt: prompt, history: history, in: id)
+    }
+
+    private static func isUser(_ item: ChatItem) -> Bool {
+        if case .user = item.content { true } else { false }
+    }
+
+    private static func turns(_ items: some Sequence<ChatItem>) -> [ChatTurn] {
+        items.compactMap { item -> ChatTurn? in
             switch item.content {
             case .user(let text): ChatTurn(.user, text)
             case .assistant(let text): ChatTurn(.assistant, text)
             default: nil
             }
         }
-        append(.user(prompt), in: id)
-        isGenerating = true
-        let epoch = self.epoch
-        generation = Task { [weak self] in
-            await self?.generate(prompt: prompt, history: history, in: id, epoch: epoch)
-        }
     }
+
+    /// Makes the next questions about this subject. Replaces any earlier one.
+    public func setContext(_ context: ChatContext) { self.context = context }
+
+    public func clearContext() { context = nil }
 
     /// Stops the answer being written. What was written stays; a waiting confirmation is cancelled, so nothing runs.
     public func stop() {
@@ -87,31 +178,42 @@ public final class AssistantChat {
     public func waitUntilIdle() async { await generation?.value }
 
     private func generate(prompt: String, history: [ChatTurn], in id: UUID, epoch: Int) async {
-        let request = ChatRequest(
-            prompt: prompt, instructions: Self.instructions, history: history, tools: tools(),
-            invoke: { [weak self] name, arguments in
-                await self?.handleToolCall(name, arguments, in: id) ?? "The assistant is closed."
-            })
         var replyID: UUID?
-        do {
-            for try await text in client.streamChat(request) {
-                if Task.isCancelled { break }
-                if let existing = replyID {
-                    update(existing) { $0.content = .assistant(text) }
-                } else if !text.isEmpty {
-                    replyID = append(.assistant(text), in: id)
+        var failure: (any Error)?
+        // A refusal is often the model misjudging an ordinary question, so it gets one more try with a plainer prompt.
+        for attempt in 0..<2 {
+            let simplified = attempt == 1
+            let request = ChatRequest(
+                prompt: prompt,
+                instructions: (simplified ? Self.simpleInstructions : Self.instructions)
+                    + (context?.instructions ?? ""),
+                history: simplified ? [] : history, tools: tools(),
+                invoke: { [weak self] name, arguments in
+                    await self?.handleToolCall(name, arguments, in: id) ?? "The assistant is closed."
+                })
+            failure = nil
+            do {
+                for try await text in client.streamChat(request) {
+                    if Task.isCancelled { break }
+                    if let existing = replyID {
+                        update(existing) { $0.content = .assistant(text) }
+                    } else if !text.isEmpty {
+                        replyID = append(.assistant(text), in: id)
+                    }
                 }
+            } catch is CancellationError {
+            } catch {
+                failure = error
             }
-        } catch is CancellationError {
-        } catch {
-            append(.notice(Self.message(for: error)), in: id)
+            guard (failure as? AssistantError) == .guardrail, replyID == nil, !Task.isCancelled else { break }
         }
+        if let failure { append(.notice(Self.message(for: failure)), in: id) }
         // Whatever was written stays; a reply that ended up empty leaves no row.
         if let replyID, let item = items.first(where: { $0.id == replyID }) { persist(item, in: id) }
         guard epoch == self.epoch else { return }
         resolvePending()
         finishRunningRows(in: id)
-        isGenerating = false
+        isWorking = false
         generation = nil
         conversations = store.conversations()
     }
@@ -119,7 +221,7 @@ public final class AssistantChat {
     static func message(for error: any Error) -> String {
         switch error as? AssistantError {
         case .unavailable: "Apple Intelligence isn't available right now."
-        case .guardrail: "I can't help with that. Try asking another way."
+        case .guardrail: "I couldn't answer that one. Try asking it another way."
         case .contextTooLong: "This chat has grown too long. Start a new chat to keep going."
         case .rateLimited: "I'm busy right now. Try again in a moment."
         case .unsupportedLanguage: "I don't support this language yet."
@@ -155,7 +257,7 @@ public final class AssistantChat {
         let cardID = append(
             .confirmation(ChatConfirmation(toolName: name, arguments: arguments, card: card)), in: id)
         let approved = await withCheckedContinuation { decisions[cardID] = $0 }
-        guard approved else { return "The person chose not to go ahead. Nothing was changed." }
+        guard approved else { return Self.cancelledNote }
         do {
             let output = try await tool.run(arguments)
             updateConfirmation(cardID, in: id) { $0.result = output.text }
@@ -267,6 +369,7 @@ public final class AssistantChat {
         leaveChat()
         items = []
         currentID = nil
+        context = nil
     }
 
     public func open(_ id: UUID) {
@@ -274,6 +377,7 @@ public final class AssistantChat {
         leaveChat()
         items = store.items(in: id)
         currentID = id
+        context = nil
     }
 
     public func rename(_ id: UUID, to title: String) {
@@ -293,7 +397,7 @@ public final class AssistantChat {
     private func leaveChat() {
         stop()
         epoch += 1
-        isGenerating = false
+        isWorking = false
         generation = nil
     }
 }
