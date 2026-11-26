@@ -50,8 +50,7 @@ private struct AssistantSearchable: ViewModifier {
                     ToolbarItem {
                         Button("Ask in Plain Words", systemImage: "sparkles") { ask() }
                             .disabled(browser.search.trimmingCharacters(in: .whitespaces).isEmpty || search.isWorking)
-                            .keyboardShortcut(.return, modifiers: .command)
-                            .help("Turn what you typed into filters, on this Mac (\u{2318}\u{21A9})")
+                            .help("Turn what you typed into filters, on this Mac")
                             .accessibilityLabel("Ask in Plain Words")
                             .accessibilityHint(
                                 "Turns what you typed in the search field into filters. Runs on this Mac.")

@@ -167,4 +167,10 @@ import Testing
         #expect(QueueButtonTitle.title(count: 3, preset: .high, isCustom: false) == "Add 3 to queue")
         #expect(QueueButtonTitle.title(count: 0, preset: .high, isCustom: false) == "Nothing to add")
     }
+
+    @Test func theToolbarButtonIsShortAndTitleCase() {
+        #expect(QueueButtonTitle.toolbarTitle(count: 0) == "Add to Queue")
+        #expect(QueueButtonTitle.toolbarTitle(count: 1) == "Add to Queue")
+        #expect(QueueButtonTitle.toolbarTitle(count: 3) == "Add 3 to Queue")
+    }
 }

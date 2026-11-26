@@ -72,8 +72,9 @@ public struct ReportBadge<Footer: View>: View {
         Button {
             isShowingReport.toggle()
         } label: {
-            Label(title, systemImage: outcome.isVerified ? "checkmark.seal" : "exclamationmark.triangle")
-                .foregroundStyle(outcome.isVerified ? .green : .orange)
+            StatusLabel(
+                title, systemImage: outcome.isVerified ? "checkmark.seal" : "exclamationmark.triangle",
+                tint: outcome.isVerified ? .green : .orange)
         }
         .buttonStyle(.borderless)
         .help("Show what was kept, changed and lost")
@@ -99,8 +100,7 @@ private struct ReportPopover<Footer: View>: View {
             if !outcome.warnings.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(outcome.warnings, id: \.self) { warning in
-                        Label(warning, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
+                        StatusLabel(warning, systemImage: "exclamationmark.triangle", tint: .orange)
                     }
                 }
                 .font(.callout)
@@ -119,6 +119,9 @@ private struct ReportPopover<Footer: View>: View {
             footer
         }
         .padding()
-        .frame(width: 340, alignment: .leading)
+        .frame(width: width, alignment: .leading)
     }
+
+    /// Grows with the text size.
+    @ScaledMetric private var width = 340
 }

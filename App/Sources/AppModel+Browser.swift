@@ -77,10 +77,14 @@ extension AppModel {
     func quickLookPhotoPoster(of item: VideoItem) {
         if !selectedPhotoItems.contains(where: { $0.id == item.id }) { photosBrowser.selection = [item.id] }
         let source = thumbnailSource
+        let name = item.name
         Task {
-            guard let image = await source.image(for: item, maxPixel: 1600),
-                let url = PosterFile.write(image, named: item.name)
-            else {
+            guard let image = await source.image(for: item, maxPixel: 1600) else {
+                NSSound.beep()
+                return
+            }
+            let write = Task.detached(priority: .userInitiated) { PosterFile.write(image, named: name) }
+            guard let url = await write.value else {
                 NSSound.beep()
                 return
             }

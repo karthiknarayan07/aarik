@@ -2,16 +2,25 @@ import AppKit
 import QuickRunService
 import SwiftUI
 
+/// The window's content: the shell, with the sidebar's visibility the app model keeps for the View menu.
+private struct MainWindowContent: View {
+    @Bindable var model: AppModel
+    let module: VideoShrinkerModule
+
+    var body: some View {
+        RootView(module: module, sidebarVisibility: $model.sidebarVisibility)
+    }
+}
+
 /// The main window, owned by AppKit: one window for the life of the process. Closing it only orders it out, so
 /// the app can decide at launch whether to show it, and an open event never makes a second one.
 @MainActor
 final class MainWindowController {
     let window: NSWindow
 
-    init(model: AppModel) {
+    init(model: AppModel, module: VideoShrinkerModule) {
         let hosting = NSHostingController(
-            rootView: RootView(model: model, module: VideoShrinkerModule(model: model)).frame(
-                minWidth: 900, minHeight: 600))
+            rootView: MainWindowContent(model: model, module: module).frame(minWidth: 900, minHeight: 600))
         // The window's size is its own (autosaved), not the content's ideal size.
         hosting.sizingOptions = []
         // The SwiftUI toolbar, search field, inspector button and navigation title belong to the real window.

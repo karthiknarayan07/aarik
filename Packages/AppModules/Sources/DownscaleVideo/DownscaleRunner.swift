@@ -63,6 +63,7 @@ public struct DownscaleRunner: JobRunner {
 
     public func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
         let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+        defer { diskSpace.release(owner: job.id) }
         let source = try Self.resolveSource(job)
         // What the original is now; a Replace goes ahead only if it is still the same file at the end.
         let identity = try FileIdentity(of: source)
@@ -70,7 +71,7 @@ public struct DownscaleRunner: JobRunner {
         let inventory = try await MediaInspector().inventory(of: source)
 
         let result = try await convert(
-            source: source, byteSize: byteSize, inventory: inventory, settings: settings,
+            source: source, byteSize: byteSize, inventory: inventory, settings: settings, reservingFor: job.id,
             outputFolder: { try Self.outputFolder(for: settings.saveTo, source: source) }, progress: progress)
         let converted: Conversion
         switch result {
@@ -131,7 +132,8 @@ public struct DownscaleRunner: JobRunner {
     /// `nameAfter` is the file the output is named after, when that isn't `source` (a Photos video's own name).
     func convert(
         source: URL, byteSize: Int64, inventory: MetadataInventory, settings: DownscaleJobSettings,
-        nameAfter: URL? = nil, requireLossShown: Bool = false, outputFolder: () throws -> (url: URL, stop: () -> Void),
+        nameAfter: URL? = nil, requireLossShown: Bool = false, reservingFor owner: UUID? = nil,
+        outputFolder: () throws -> (url: URL, stop: () -> Void),
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> ConversionResult {
         // An MPEG-4 source whose tracks MPEG-4 can't all carry is written as QuickTime; the planner counts what
@@ -177,7 +179,7 @@ public struct DownscaleRunner: JobRunner {
         if settings.saveTo == .replace, let backup = originalsBackup() {
             needs.append(SpaceNeed(url: backup.folder, bytes: byteSize))
         }
-        try diskSpace.verify(needs)
+        try diskSpace.verify(needs, reservingFor: owner)
         let label = Self.label(for: spec, settings: settings)
 
         let output: URL

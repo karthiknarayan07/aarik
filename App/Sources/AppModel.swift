@@ -25,7 +25,11 @@ final class AppModel {
 
     // MARK: Navigation and window
     var selection: SidebarDestination? = .localFiles {
-        didSet { browser.filter = badgeFilter }
+        didSet {
+            browser.filter = badgeFilter
+            // A preview belongs to the page it was opened on.
+            quickLookURL = nil
+        }
     }
     /// The sidebar column; the View menu and the toolbar button both change it.
     var sidebarVisibility = NavigationSplitViewVisibility.automatic

@@ -2,7 +2,8 @@ import Foundation
 import Synchronization
 import os
 
-/// Runs jobs one at a time, in order, persisting after every state change.
+/// Runs jobs in order, up to `concurrency` at a time (one unless `setConcurrency` says otherwise), persisting after
+/// every state change. Jobs start in queue order; a job that finishes lets the next waiting one start.
 ///
 /// Nothing runs until the first `enqueue`, `resume` or `retry`; call `resume()` after
 /// creating a queue to continue jobs restored from the store. A queue created with `startPaused`
@@ -16,9 +17,10 @@ public actor JobQueue {
     /// lifting it never clears the user's pause.
     private var heldAutomatically = false
     private var stopped = false
-    private var worker: Task<Void, Never>?
-    /// The job being run and its task, so `cancel` can stop just that job.
-    private var current: (id: UUID, task: Task<JobState, any Error>)?
+    /// How many jobs may run at once. Lowering it never stops a running job: fewer start until enough have finished.
+    private var concurrency: Int
+    /// The jobs being run, each in a task of its own, so `cancel` can stop just that job and `shutdown` all of them.
+    private var running: [UUID: Task<Void, Never>] = [:]
     /// Running jobs the user cancelled: when their run throws they leave the queue instead of failing.
     private var cancelledByUser: Set<UUID> = []
     private var subscribers: [UUID: AsyncStream<[Job]>.Continuation] = [:]
@@ -36,15 +38,23 @@ public actor JobQueue {
     /// sooner and cancels this.
     private var heldProgress: Task<Void, Never>?
 
-    public init(store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false) {
-        self.init(store: store, runners: runners, startPaused: startPaused, progressInterval: .milliseconds(100))
+    public init(
+        store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false, concurrency: Int = 1
+    ) {
+        self.init(
+            store: store, runners: runners, startPaused: startPaused, concurrency: concurrency,
+            progressInterval: .milliseconds(100))
     }
 
     /// `progressInterval`: the shortest time between two updates for progress alone (a test seam).
-    init(store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false, progressInterval: Duration) {
+    init(
+        store: JobStore, runners: [String: any JobRunner], startPaused: Bool = false, concurrency: Int = 1,
+        progressInterval: Duration
+    ) {
         self.store = store
         self.runners = runners
         self.paused = startPaused
+        self.concurrency = max(1, concurrency)
         self.progressInterval = progressInterval
         let result = store.loadReportingProblems()
         savesChanges = !result.mustNotSave
@@ -76,6 +86,16 @@ public actor JobQueue {
     /// Whether the queue holds itself for the system (see `setAutomaticHold`).
     public func isHeldAutomatically() -> Bool { heldAutomatically }
 
+    /// How many jobs may run at once now.
+    public func currentConcurrency() -> Int { concurrency }
+
+    /// Changes how many jobs may run at once (at least one). Raising it starts waiting jobs at once; lowering it never
+    /// stops a running job, it only holds back new ones until enough have finished.
+    public func setConcurrency(_ count: Int) {
+        concurrency = max(1, count)
+        startWorkerIfNeeded()
+    }
+
     /// Appends the jobs and returns the ones actually added. A job whose file already has a queued or running job
     /// for the same tool is skipped, as is a repeat within `newJobs`; finished jobs don't block adding a file again.
     @discardableResult
@@ -89,7 +109,7 @@ public actor JobQueue {
         return added
     }
 
-    /// Lets the running job finish, then stops taking new ones.
+    /// Lets the running jobs finish, then stops taking new ones.
     public func pause() {
         paused = true
     }
@@ -145,22 +165,22 @@ public actor JobQueue {
             items.remove(at: index)
             changed()
         case .running:
-            guard let current, current.id == id else { return }
+            guard let task = running[id] else { return }
             cancelledByUser.insert(id)
-            current.task.cancel()
+            task.cancel()
         case .completed, .keptAsIs, .failed:
             return
         }
     }
 
-    /// Removes every queued job and cancels the running one (see `cancel`). Finished jobs stay.
+    /// Removes every queued job and cancels the running ones (see `cancel`). Finished jobs stay.
     public func cancelAll() {
         let before = items.count
         items.removeAll { $0.state == .queued }
         if items.count != before { changed() }
-        if let current {
-            cancelledByUser.insert(current.id)
-            current.task.cancel()
+        for (id, task) in running {
+            cancelledByUser.insert(id)
+            task.cancel()
         }
     }
 
@@ -201,13 +221,13 @@ public actor JobQueue {
         return stream
     }
 
-    /// Cancels the running job (it goes back to `.queued`), stops processing and
+    /// Cancels the running jobs (they go back to `.queued`), stops processing and
     /// finishes all update streams.
     public func shutdown() async {
         stopped = true
-        let worker = self.worker
-        worker?.cancel()
-        await worker?.value
+        let tasks = Array(running.values)
+        for task in tasks { task.cancel() }
+        for task in tasks { await task.value }
         heldProgress?.cancel()
         heldProgress = nil
         for continuation in subscribers.values { continuation.finish() }
@@ -258,30 +278,25 @@ public actor JobQueue {
         publish()
     }
 
+    /// Starts queued jobs, in order, until `concurrency` are running. Synchronous, so a caller never sees a
+    /// half-started job.
     private func startWorkerIfNeeded() {
-        guard worker == nil, !paused, !heldAutomatically, !stopped,
-            items.contains(where: { $0.state == .queued })
-        else { return }
-        worker = Task { await self.drain() }
-    }
-
-    private func drain() async {
-        while true {
-            // No suspension between this check and clearing `worker`, so a concurrent
-            // enqueue/resume either sees the worker still alive or starts a new one.
-            guard !paused, !heldAutomatically, !stopped,
-                let index = items.firstIndex(where: { $0.state == .queued })
-            else {
-                worker = nil
-                return
-            }
-            let id = items[index].id
+        while !paused, !heldAutomatically, !stopped, running.count < concurrency,
+            let index = items.firstIndex(where: { $0.state == .queued })
+        {
+            let job = items[index]
             items[index].state = .running(progress: 0)
             changed()
-            let job = items[index]
-            let result = await execute(job)
-            apply(result, to: id)
+            running[job.id] = Task { await self.drive(job) }
         }
+    }
+
+    /// Runs one job to its end, then lets the next waiting one start.
+    private func drive(_ job: Job) async {
+        let result = await execute(job)
+        running[job.id] = nil
+        apply(result, to: job.id)
+        startWorkerIfNeeded()
     }
 
     /// What happens to a job once its run ends.
@@ -325,7 +340,6 @@ public actor JobQueue {
                     }
                 })
         }
-        current = (id, task)
         let result = await withTaskCancellationHandler {
             await task.result
         } onCancel: {
@@ -333,7 +347,6 @@ public actor JobQueue {
         }
         progressSink.finish()
         await progressReader.value
-        current = nil
         let cancelled = cancelledByUser.remove(id) != nil
         switch result {
         case .success(let state):

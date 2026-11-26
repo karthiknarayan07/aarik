@@ -143,7 +143,9 @@ extension AppModel {
         quickLookURL = item.fileURL
     }
 
-    private func removeFromLibrary(_ ids: Set<UUID>) {
+    /// `undoable`: Edit → Undo can put the items back (not for the removal an Undo's Redo performs itself).
+    func removeFromLibrary(_ ids: Set<UUID>, undoable: Bool = true) {
+        if undoable { registerUndo(of: LibraryRemoval(items: library.items.filter { ids.contains($0.id) })) }
         library.remove(ids)
         presetOverrides.remove(ids)
         browser.selection.subtract(ids)

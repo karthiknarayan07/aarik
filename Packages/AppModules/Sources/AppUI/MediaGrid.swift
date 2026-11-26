@@ -1,3 +1,4 @@
+import AppCore
 import AppKit
 import CoreTransferable
 import Observation
@@ -330,6 +331,16 @@ private struct DragOutContainer<ID: Hashable & Sendable>: ViewModifier {
             content
                 .dragContainer(for: MediaDragItem<ID>.self) { (dragged: [ID]) in payload(dragged) }
                 .dragContainerSelection(Array(selection))
+                // While a tile is being dragged, the window's own drop must not import it (`ImportDropGuard`).
+                .onDragSessionUpdated { session in
+                    if session.phase == .initial || session.phase == .active {
+                        InternalDrag.isActive = true
+                    } else if session.phase == .dataTransferCompleted {
+                        InternalDrag.isActive = false
+                    } else if case .ended = session.phase {
+                        InternalDrag.isActive = false
+                    }
+                }
         } else {
             content
         }
