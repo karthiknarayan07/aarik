@@ -49,7 +49,7 @@
 
 - [ ] Each target builds for the iOS 26 Simulator with placeholder SwiftUI views. There are no package dependencies yet.
 - [ ] The UI test `testLaunchShowsRoot` launches the app on an iPhone Simulator and finds the root view by accessibility identifier.
-- [ ] Run `xcodebuild -project Apps/iOS/Aarik.xcodeproj -scheme Aarik -destination 'platform=iOS Simulator,name=iPhone 17' build test`. Expected: it succeeds.
+- [ ] Run `xcodebuild -project Apps/iOS/Aarik.xcodeproj -scheme Aarik -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build test`. Expected: it succeeds.
 - [ ] Commit.
 
 ---
@@ -103,7 +103,7 @@
 - [ ] Add a pressure rule, Low Power Mode → 1 slot. Test it as `lowPowerModeLimitsToOneSlot`.
 - [ ] Add iOS implementations: `UIDevice` battery monitoring, `ProcessInfo.thermalState` and `isLowPowerModeEnabled` with their notifications, and an iOS activity token (`beginActivity` is still correct).
 - [ ] The Photos.sqlite fps path is `#if os(macOS)` only. On iOS, fps is `nil` until known; test it as `iosFpsUnknownUntilLocal` with a fake asset source.
-- [ ] Both packages' tests run on an iOS Simulator destination with `xcodebuild test -scheme AarikKit-Package -destination 'platform=iOS Simulator,name=iPhone 17'`, and the same for Convert. Add both to CI.
+- [ ] Both packages' tests run on an iOS Simulator destination with `xcodebuild test -scheme AarikKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`, and the same for Convert. Add both to CI.
 
 ### Task 5: Convert video compression
 
@@ -160,7 +160,7 @@ This task depends on Task 6.
 
 This task runs after Tasks 6–10.
 
-- [ ] Run XCUITests on iPhone 17, an iPad Pro (13-inch) and the iPhone Duo Simulator in folded, half-open and open postures; in light and dark; at Dynamic Type default and AX3. Cover:
+- [ ] Run XCUITests on iPhone 17 Pro, iPad Pro 11-inch and the iPhone Duo Simulator in folded, half-open and open postures; in light and dark; at Dynamic Type default and AX3. Cover:
   - browsing and queueing a fixture video. Load fixture media into the Simulator's Photos with `xcrun simctl addmedia`; the Simulator library is not the owner's library.
   - Files import
   - run to Completed
