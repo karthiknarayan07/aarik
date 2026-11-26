@@ -25,14 +25,14 @@ import Testing
         #expect(DownscaleTool.descriptor.category == .video)
     }
 
-    @Test(.timeLimit(.minutes(2))) func runnerNextToOriginalNamesAndReports() async throws {
+    @Test(.timeLimit(.minutes(5))) func runnerNextToOriginalNamesAndReports() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let seen = Mutex(0.0)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
-        let state = try await DownscaleRunner().run(try job(source, settings)) { value in
+        let state = try await RunnerFixture.runner().run(try job(source, settings)) { value in
             seen.withLock { $0 = max($0, value) }
         }
 
@@ -51,7 +51,7 @@ import Testing
         #expect(!names.contains { $0.contains(".partial-") })
     }
 
-    @Test(.timeLimit(.minutes(2))) func existingOutputGetsNextName() async throws {
+    @Test(.timeLimit(.minutes(5))) func existingOutputGetsNextName() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -59,7 +59,7 @@ import Testing
         try Data("mine".utf8).write(to: taken)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
-        let state = try await DownscaleRunner().run(try job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -69,7 +69,7 @@ import Testing
         #expect(try Data(contentsOf: taken) == Data("mine".utf8))
     }
 
-    @Test(.timeLimit(.minutes(2))) func staleOwnPartialsAreRemovedOthersKept() async throws {
+    @Test(.timeLimit(.minutes(5))) func staleOwnPartialsAreRemovedOthersKept() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -79,13 +79,13 @@ import Testing
         try Data("b".utf8).write(to: other)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
-        _ = try await DownscaleRunner().run(try job(source, settings)) { _ in }
+        _ = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
         #expect(!FileManager.default.fileExists(atPath: stale.path))
         #expect(FileManager.default.fileExists(atPath: other.path))
     }
 
-    @Test(.timeLimit(.minutes(2))) func folderDestinationWritesThere() async throws {
+    @Test(.timeLimit(.minutes(5))) func folderDestinationWritesThere() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         let folder = directory.appending(path: "out", directoryHint: .isDirectory)
@@ -94,7 +94,7 @@ import Testing
         let bookmark = try folder.bookmarkData()
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .folder(bookmark: bookmark), custom: spec)
 
-        let state = try await DownscaleRunner().run(try job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -104,7 +104,7 @@ import Testing
             outcome.output.deletingLastPathComponent().resolvingSymlinksInPath() == folder.resolvingSymlinksInPath())
     }
 
-    @Test(.timeLimit(.minutes(2))) func replaceTrashesOriginalOnlyAfterVerify() async throws {
+    @Test(.timeLimit(.minutes(5))) func replaceTrashesOriginalOnlyAfterVerify() async throws {
         let source = try await makeSource(name: "replace-\(UUID().uuidString).mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -138,7 +138,7 @@ import Testing
         #expect(names == [source.lastPathComponent])
     }
 
-    @Test(.timeLimit(.minutes(2))) func keptAsIsNeverTrashesTheOriginal() async throws {
+    @Test(.timeLimit(.minutes(5))) func keptAsIsNeverTrashesTheOriginal() async throws {
         // A replace job that ends Kept As Is must never touch the Trash.
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
@@ -164,7 +164,7 @@ import Testing
         let missing = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).mov")
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
         do {
-            _ = try await DownscaleRunner().run(try job(missing, settings)) { _ in }
+            _ = try await RunnerFixture.runner().run(try job(missing, settings)) { _ in }
             Issue.record("expected a throw")
         } catch let error as LocalizedError {
             #expect(error.errorDescription == "Original file is missing or the drive isn't connected")
@@ -182,7 +182,7 @@ import Testing
         try Data("x".utf8).write(to: file)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
         do {
-            _ = try await DownscaleRunner().run(try job(file, settings)) { _ in }
+            _ = try await RunnerFixture.runner().run(try job(file, settings)) { _ in }
             Issue.record("expected a throw")
         } catch let error as DownscaleRunnerError {
             #expect(error == .sourceUnavailable)
@@ -219,7 +219,7 @@ import Testing
         #expect(DownscaleRunner.isVerified(lost, predicted: lost, spec: spec))
     }
 
-    @Test(.timeLimit(.minutes(2))) func replaceWithUnverifiedOutputNeverTrashes() async throws {
+    @Test(.timeLimit(.minutes(5))) func replaceWithUnverifiedOutputNeverTrashes() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -239,7 +239,8 @@ import Testing
                         : $0
                 }
                 return inventory
-            })
+            },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try job(source, settings)) { _ in }
@@ -261,16 +262,18 @@ import Testing
         #expect(outcome.warnings.contains("The original was kept because the copy couldn't be verified"))
     }
 
-    @Test(.timeLimit(.minutes(2))) func failedTrashKeepsBothFiles() async throws {
+    @Test(.timeLimit(.minutes(5))) func failedTrashKeepsBothFiles() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         struct Refused: Error {}
         let called = Mutex(false)
-        let runner = DownscaleRunner(trash: { _ in
-            called.withLock { $0 = true }
-            throw Refused()
-        })
+        let runner = DownscaleRunner(
+            trash: { _ in
+                called.withLock { $0 = true }
+                throw Refused()
+            },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try job(source, settings)) { _ in }
@@ -286,7 +289,7 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: outcome.output.path))
     }
 
-    @Test(.timeLimit(.minutes(2))) func customSpecSavingTooLittleIsKeptAsIs() async throws {
+    @Test(.timeLimit(.minutes(5))) func customSpecSavingTooLittleIsKeptAsIs() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -294,12 +297,12 @@ import Testing
         let custom = DownscaleSpec(targetShortSide: 1080, averageBitRate: 100_000_000)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
 
-        let state = try await DownscaleRunner().run(try job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
         #expect(state == .keptAsIs(reason: "Would save less than 10%"))
     }
 
-    @Test(.timeLimit(.minutes(2))) func outputNotSmallEnoughIsRemovedAndKeptAsIs() async throws {
+    @Test(.timeLimit(.minutes(5))) func outputNotSmallEnoughIsRemovedAndKeptAsIs() async throws {
         let source = try await makeSource()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }

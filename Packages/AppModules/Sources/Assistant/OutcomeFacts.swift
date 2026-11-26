@@ -112,6 +112,7 @@ enum OutcomeReason: String, CaseIterable, Sendable {
         (.noToolForJob, ["no tool can run"]),
         (.cancelled, ["cancelled"]),
         (.conversionFailed, ["couldn't be converted"]),
+        (.conversionFailed, ["encoder stopped responding"]),
         (.unexpectedChange, [" changed from "]),
         (.unexpectedLoss, [" is lost"]),
         (.containerChanged, ["can't hold all of its tracks"]),

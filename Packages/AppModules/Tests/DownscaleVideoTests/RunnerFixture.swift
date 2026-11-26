@@ -11,18 +11,27 @@ enum RunnerFixture {
     /// The spec most runner tests encode at: a real downscale at a low bit rate.
     static let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 2_000_000)
 
+    /// A disk with plenty of room, so no runner test depends on how full the machine running it is.
+    static let roomy = DiskSpaceCheck(provider: FakeDiskSpace(available: 100_000_000_000))
+
+    /// The real runner (real Trash) on the roomy fake disk.
+    static func runner(originalsBackup: @escaping DownscaleRunner.BackupProvider = { nil }) -> DownscaleRunner {
+        DownscaleRunner(trash: DownscaleRunner.trashItem, originalsBackup: originalsBackup, diskSpace: roomy)
+    }
+
     /// 2560x1440 so a 1080 short side really shrinks it; small and fast. Lives in its own temporary directory.
     /// `fileType` picks the container (the name's extension is the caller's), `timedMetadata` adds a timed
     /// metadata track, `metadata` file-level QuickTime items (an MPEG-4 writer stores some as ISO user data).
     static func source(
         name: String = "x.mov", fileType: AVFileType = .mov, timedMetadata: Bool = false,
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:], audio: Bool = true
     ) async throws -> URL {
         var options = ClipOptions()
         options.width = 2560
         options.height = 1440
         options.fps = 10
         options.hdr = .sdr
+        options.includeAudio = audio
         // A bit rate well above the 2 Mbps the tests encode at, so the planner sees a saving over 10%.
         options.videoBitRate = 20_000_000
         options.fileType = fileType
@@ -49,7 +58,7 @@ enum RunnerFixture {
     /// 640x360 at a low bit rate: below a 1080 short side, so a 1080p downscale finds it already small.
     static func smallSource(
         name: String = "small.mov", fileType: AVFileType = .mov, timedMetadata: Bool = false,
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:], audio: Bool = true
     ) async throws -> URL {
         var options = ClipOptions()
         options.fileType = fileType
@@ -59,6 +68,7 @@ enum RunnerFixture {
         options.height = 360
         options.fps = 10
         options.hdr = .sdr
+        options.includeAudio = audio
         options.videoBitRate = 300_000
         return try await renamed(FixtureFactory.makeClip(options), to: name)
     }
