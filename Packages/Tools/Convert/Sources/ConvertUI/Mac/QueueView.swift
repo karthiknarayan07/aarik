@@ -122,6 +122,7 @@
         let timeline: ProgressTimeline
         let pauseText: String?
         @Binding var speed: SpeedSetting
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         private var running: [Job] {
             jobs.filter {
@@ -161,6 +162,7 @@
                     Text(timeLeft)
                         .font(.title3.weight(.semibold))
                         .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : .smooth, value: timeLeft)
                     Text("\(ActivityText.videos(jobs.count)) in the queue")
                         .font(.callout)
                         .foregroundStyle(.secondary)

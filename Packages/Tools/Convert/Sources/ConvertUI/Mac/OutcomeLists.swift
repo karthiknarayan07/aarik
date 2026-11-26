@@ -83,6 +83,7 @@
         let days: [LedgerDay<(job: Job, outcome: JobOutcome)>]
         let savedBytes: Int64
         let count: Int
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         private struct Bar: Identifiable {
             let day: Date
@@ -105,6 +106,7 @@
                         .monospacedDigit()
                         .foregroundStyle(.green)
                         .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : .smooth, value: savedBytes)
                     Text("from \(ActivityText.videos(count))")
                         .font(.callout)
                         .foregroundStyle(.secondary)
