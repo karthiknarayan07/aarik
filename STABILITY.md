@@ -47,17 +47,19 @@ not exist yet. Change a rule only together with its test.
 
 - Jobs run in a `Task`; encoding checks cancellation and stops, removing its partial. Cancelling a job removes it
   from the queue; the original is untouched.
-- `JobQueue` runs one job at a time and persists after every state change. A job found `running` at launch
-  (crash, quit) is put back to `queued`.
+- `JobQueue` runs up to the speed's limit of jobs at once (one for Quiet; see PERFORMANCE.md), in queue order, and
+  persists after every state change. Every job found `running` at launch (crash, quit) is put back to `queued`.
+  Cancelling one job stops only that job; Pause and the automatic hold let all running jobs finish and start nothing new;
+  lowering the limit never stops a running job. Duplicate detection counts every queued and running job.
 - `applicationShouldTerminate` first asks "Stop converting and quit?" (a standard `NSAlert`, default button
   "Stop and Quit", `QuitConfirmation`) when work is under way, using `QuitPolicy.needsConfirmation` (the same
   definition of busy as `RelaunchGate`: a job running, or waiting jobs about to start). It does not ask when the queue
   is idle or paused with nothing running, nor while the system is logging out, restarting or shutting down (the quit
   Apple event's `kAEQuitReason`, or a `NSWorkspace.willPowerOffNotification` in the last 30 seconds, cleared when the app
   becomes active again; either signal is enough, `QuitPolicy.isSessionEnding`): then it quits without asking.
-- After the answer, it replies later: pending library saves finish and the running job is returned to the queue
+- After the answer, it replies later: pending library saves finish and every running job is returned to the queue
   (`AppModel.prepareForTermination` -> `JobQueue.shutdown`) before the app exits. The encoder removes its partial
-  file when cancelled, and every job, the interrupted one and the rest, is saved as `queued`
+  file when cancelled, and every job, the interrupted ones and the rest, is saved as `queued`
   (`quittingKeepsTheRunningJobAndTheRestOfTheQueueForNextLaunch`); Photos input in `Work/` is cleared by the next
   launch's sweep. They continue at the next launch (when auto-start is on).
 
@@ -77,8 +79,9 @@ not exist yet. Change a rule only together with its test.
 
 ## Resources
 
-- Heavy work is bounded: `WorkSlots` (half the cores, at least 2) limits concurrent downscales; blocking reads run
-  on a dedicated executor, never the shared pool.
+- Heavy work is bounded: the queue's concurrency (the speed setting) and `WorkSlots` limit concurrent downscales;
+  blocking reads run on a dedicated executor, never the shared pool. Photos downloads run one at a time
+  (`DownloadGate`), whatever the concurrency; each job still has its own `Work/<job id>/` folder.
 - Disk space preflight: **planned** (Plan 6 B1). Until then a full disk surfaces as a failed job, with the partial
   removed.
 

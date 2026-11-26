@@ -16,17 +16,23 @@ Plan 6 Phase B and not in the code yet (signposts and regression tests, B3).
   (`DownscaleThrottle.apply`): Quiet is 1 with the encoder's blocking work at background priority; Balanced is half
   the cores, at least 2; Fastest is the performance cores (`hw.perflevel0.physicalcpu`), never fewer than Balanced and never more than the active cores (M3: 4 and 4, M4: 5 and 5, M4 Pro: 7 and 10). `.serious` heat makes it 1
   and `.critical` pauses the queue (STABILITY.md). Lowering the limit never stops a running downscale: it applies
-  as they finish; raising it admits waiting ones at once. Note that `JobQueue` starts one job at a time, so the
-  limit and the priority matter for concurrent callers (tests, tools); the visible effect today is the priority.
-  **Planned (B2b):** `JobQueue` runs several jobs at once, up to this limit (Photos input stays one at a time), which
-  is what makes Balanced and Fastest differ.
-- **One job at a time in the queue.** `JobQueue` (actor) runs jobs in order and persists after each state change.
+  as they finish; raising it admits waiting ones at once. The same number is the queue's concurrency
+  (`JobQueue.setConcurrency`, sent with the automatic hold): Quiet runs one job at a time, Balanced and Fastest run
+  that many jobs at once. Lowering it never stops a running job; raising it starts waiting jobs at once.
+- **Several jobs at once in the queue.** `JobQueue` (actor) starts queued jobs in order up to its concurrency (1
+  until the app sets it), each in a task of its own, and persists after each state change. A finished job lets the
+  next waiting one start. Pause, cancel (one job or all), quit and the automatic hold act on every running job.
+  Progress from all running jobs shares the one throttle; the queue's progress is their mean.
+- **One download at a time.** Whatever the concurrency, Photos jobs fetch one at a time (`DownloadGate` in
+  `PhotosDownscaleRunner`, also for the backup's fetch of an original): the others show "Waiting for another
+  download…" and can be cancelled while they wait. Converting and saving still overlap with another job's download.
 - **Progress throttle.** Progress alone is published to the UI at most every 100 ms (`progressInterval`); state
   changes go out immediately.
 - **UI.** The grid is lazy, thumbnails come from an async cache (`ThumbnailCache`, `ThumbnailSource`), and
   Photos metadata is read without downloading anything (about 4 ms per asset, see ADR 0002).
-- **Photos input** is fetched into `Work/<job id>/` just before its job and removed right after; at most one such
-  input exists at a time.
+- **Photos input** is fetched into `Work/<job id>/` just before its job and removed right after; at most one fetch is
+  under way at a time, but a fetched input stays until its own job ends, so up to the queue's concurrency of them
+  can exist at once.
 
 ## Budgets (Release build, Apple silicon, this Mac)
 
