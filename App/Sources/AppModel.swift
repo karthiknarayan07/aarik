@@ -64,6 +64,10 @@ final class AppModel {
     var lossReview: LossReview?
     /// A message for the user: something couldn't be added, was already queued, or the saved queue was unreadable.
     var alert: AppAlert?
+    /// The current or most recent quick run started from the menu bar, shown in its popover.
+    var quickRunStatus: QuickRunStatus?
+    /// Whether the menu bar popover is open; a run started there reports itself, so its banner is skipped then.
+    @ObservationIgnored var isStatusPopoverVisible = false
 
     let library: LocalLibrary
     /// Grouping, sort, search, filter and selection for the grid, with cached sections and savings.
