@@ -118,6 +118,11 @@
                 (Self.job(name, .queued), Self.outcome(name, before: Int64(before), after: Int64(after)))
             }
 
+            var timeline = ProgressTimeline()
+            var begun = queued[0]
+            begun.state = .running(progress: 0)
+            timeline.observe([begun], now: Date().addingTimeInterval(-20))
+            timeline.observe([queued[0]], now: Date())
             for dark in [false, true] {
                 try Self.write(
                     OverviewInsights(charts: charts, presetName: "Balanced", isRefreshing: false).padding(24),
@@ -156,13 +161,22 @@
                     },
                     name: "library-header", size: CGSize(width: 860, height: 90), dark: dark, folder: folder)
                 try Self.write(
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(queued) { job in
-                            QueueRow(job: job, pauseText: nil, thumbnails: cache) {}
+                    VStack(alignment: .leading, spacing: 0) {
+                        QueueHeader(
+                            jobs: queued, timeline: timeline, pauseText: nil, speed: .constant(.balanced))
+                        Divider()
+                        ForEach(Array(queued.enumerated()), id: \.element.id) { index, job in
+                            QueueRow(
+                                job: job, pauseText: nil, thumbnails: cache,
+                                sizes: QueueSizes(
+                                    before: 2_400_000_000 - Int64(index) * 700_000_000, after: 900_000_000),
+                                remaining: index == 0 ? 340 : nil
+                            ) {}
+                            .padding(.horizontal, 16).padding(.vertical, 4)
                             Divider()
                         }
-                    }.padding(16),
-                    name: "queue", size: CGSize(width: 760, height: 260), dark: dark, folder: folder)
+                    },
+                    name: "queue", size: CGSize(width: 760, height: 330), dark: dark, folder: folder)
                 try Self.write(
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(finished, id: \.0.id) { job, outcome in
