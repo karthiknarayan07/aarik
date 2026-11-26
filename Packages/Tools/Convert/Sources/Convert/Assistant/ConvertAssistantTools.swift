@@ -108,7 +108,7 @@ final class ConvertAssistantContext {
             ? "Nothing in the library would free space."
             : "Converting everything could free about \(ByteFormat.string(total)) across \(videos.formatted()) videos. "
                 + "Biggest groups, most savings first:\n" + lines.joined(separator: "\n")
-                return AssistantToolOutput(text: text, title: "Estimated Savings", count: analysis.buckets.count, lines: lines)
+        return AssistantToolOutput(text: text, title: "Estimated Savings", count: analysis.buckets.count, lines: lines)
     }
 
     // MARK: Results and queue

@@ -107,7 +107,9 @@ public final class AssistantChat {
 
     /// Whether the last reply (or the error that took its place) can be asked for again.
     public var canRegenerate: Bool {
-        guard !isWorking, availability.isAvailable, let index = items.lastIndex(where: Self.isUser) else { return false }
+        guard !isWorking, availability.isAvailable, let index = items.lastIndex(where: Self.isUser) else {
+            return false
+        }
         let after = items[(index + 1)...]
         guard let last = after.last else { return false }
         switch last.content {
@@ -116,7 +118,11 @@ public final class AssistantChat {
         }
         // An action that was confirmed has happened; asking again must not hide or repeat it.
         return !after.contains {
-            if case .confirmation(let card) = $0.content { card.state == .confirmed || card.state == .failed } else { false }
+            if case .confirmation(let card) = $0.content {
+                card.state == .confirmed || card.state == .failed
+            } else {
+                false
+            }
         }
     }
 
