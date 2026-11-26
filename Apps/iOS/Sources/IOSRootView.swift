@@ -1,4 +1,6 @@
 import AppCore
+import AppServices
+import AppUI
 import Convert
 import SwiftUI
 
@@ -34,9 +36,9 @@ struct IOSRootView: View {
                 }
             }
             // Without Apple Intelligence there is no Ask tab at all; it comes back when the model becomes available.
-            if shell.convert.assistant.isAvailable {
+            if shell.services.assistantAvailability.isAvailable {
                 Tab("Ask", systemImage: "sparkles", value: IOSTab.ask) {
-                    AssistantTabRoot()
+                    AssistantTabRoot(services: shell.services)
                 }
             }
             Tab(value: IOSTab.search, role: .search) {
