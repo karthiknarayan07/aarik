@@ -199,7 +199,7 @@ private enum Calendars {
     }
 
     @Test func resolutionsAreEveryFrameRateOfTheResolution() {
-        #expect(ShrinkResolution.uhd.buckets.count == FrameRateTier.allCases.count)
+        #expect(ShrinkResolution.uhd.buckets.count == FrameRateTier.allCases.count + 1)
         #expect(ShrinkResolution.uhd.buckets.contains(.uhd(.fps60)))
         #expect(!ShrinkResolution.uhd.buckets.contains(.fullHD(.fps30)))
         #expect(ShrinkResolution.fullHD.buckets.contains(.fullHD(.fps24)))

@@ -24,6 +24,15 @@ public struct AdvancedOptions: Sendable, Equatable {
             case .keep: "Keep Original"
             }
         }
+        /// Plain-English description shown under each resolution option on touch screens.
+        public var summary: String {
+            switch self {
+            case .p720: "Smallest files · great for messaging and clips"
+            case .p1080: "Best balance of sharp video and space saved"
+            case .p1440: "Extra detail for iPads, Macs, and TVs"
+            case .keep: "Keeps your original width and height"
+            }
+        }
     }
 
     public enum FrameRate: String, CaseIterable, Sendable, Identifiable {
@@ -48,26 +57,42 @@ public struct AdvancedOptions: Sendable, Equatable {
 
     /// The lowest bit rate the field accepts, in Mbps.
     public static let minimumMbps = 1.0
-    /// The bit rate the field starts at for HEVC, in Mbps.
+    /// Slider bounds on touch UI.
+    public static let minimumSliderMbps = 2.0
+    public static let maximumSliderMbps = 35.0
+    /// The bit rate the field starts at for HEVC at 1080p, in Mbps.
     public static let suggestedHEVCMbps = 10.0
     /// H.264 needs about 1.6x the HEVC bit rate for similar quality.
     public static let h264BitRateFactor = 1.6
 
     public var isEnabled = false
-    public var resolution = Resolution.p1080
+    /// Switching resolution while the bit rate still holds the previous suggestion updates it to match the new
+    /// resolution, leaving a manually adjusted rate untouched.
+    public var resolution = Resolution.p1080 {
+        didSet {
+            if resolution != oldValue, bitRateMbps == Self.suggestedMbps(for: oldValue, codec: codec) {
+                bitRateMbps = Self.suggestedMbps(for: resolution, codec: codec)
+            }
+        }
+    }
     public var bitRateMbps = Self.suggestedHEVCMbps
     public var frameRate = FrameRate.keep
     /// Switching format while the bit rate still holds the old format's suggestion moves it to the new one's, so an
     /// untouched field follows the format and a typed value is left alone.
     public var codec = VideoCodec.hevcKeepHDR {
         didSet {
-            if codec != oldValue, bitRateMbps == Self.suggestedMbps(for: oldValue) {
-                bitRateMbps = Self.suggestedMbps(for: codec)
+            if codec != oldValue, bitRateMbps == Self.suggestedMbps(for: resolution, codec: oldValue) {
+                bitRateMbps = Self.suggestedMbps(for: resolution, codec: codec)
             }
         }
     }
 
     public init() {}
+
+    public init(for platform: ToolPlatforms) {
+        self.init()
+        if platform.contains(.iOS) && !platform.contains(.macOS) { isEnabled = true }
+    }
 
     /// The custom spec, or nil to use the preset.
     public var spec: DownscaleSpec? {
@@ -78,11 +103,65 @@ public struct AdvancedOptions: Sendable, Equatable {
             maxFrameRate: frameRate.cap, codec: codec)
     }
 
-    /// The bit rate the field suggests for `codec`, in Mbps.
-    static func suggestedMbps(for codec: VideoCodec) -> Double {
+    /// Plain-English quality band for a chosen bit rate relative to the resolution's recommended mark.
+    public enum BitRateTier: Equatable, Sendable {
+        case compact, recommended, highDetail
+
+        public var title: String {
+            switch self {
+            case .compact: "Compact"
+            case .recommended: "Recommended"
+            case .highDetail: "High Detail"
+            }
+        }
+
+        public var advice: String {
+            switch self {
+            case .compact: "Saves extra space; fast motion or dark scenes may look slightly softer."
+            case .recommended: "Sweet spot: looks sharp on phones and TVs while freeing plenty of space."
+            case .highDetail: "Keeps extra grain and fast action crisp, with smaller space savings."
+            }
+        }
+    }
+
+    /// Classifies `mbps` relative to the suggested bit rate for `resolution` and `codec`.
+    public static func bitRateTier(
+        mbps: Double, resolution: Resolution, codec: VideoCodec
+    ) -> BitRateTier {
+        let suggested = suggestedMbps(for: resolution, codec: codec)
+        if mbps < suggested * 0.75 { return .compact }
+        if mbps <= suggested * 1.3 { return .recommended }
+        return .highDetail
+    }
+
+    /// Plain-English sweet-spot guide for choosing bit rate at `resolution` and `codec`.
+    public static func bitRateGuide(for resolution: Resolution, codec: VideoCodec) -> String {
+        let range: String =
+            switch (resolution, codec) {
+            case (.p720, .hevcKeepHDR): "3–5 Mbps"
+            case (.p720, .h264Compatible): "5–8 Mbps"
+            case (.p1080, .hevcKeepHDR): "8–12 Mbps"
+            case (.p1080, .h264Compatible): "14–18 Mbps"
+            case (.p1440, .hevcKeepHDR): "14–18 Mbps"
+            case (.p1440, .h264Compatible): "22–28 Mbps"
+            case (.keep, .hevcKeepHDR): "18–24 Mbps"
+            case (.keep, .h264Compatible): "28–35 Mbps"
+            }
+        return "Good range for \(resolution.title) (\(codec == .hevcKeepHDR ? "HEVC" : "H.264")): \(range)."
+    }
+
+    /// The bit rate suggested for `resolution` and `codec`, in Mbps.
+    public static func suggestedMbps(for resolution: Resolution = .p1080, codec: VideoCodec) -> Double {
+        let hevc: Double =
+            switch resolution {
+            case .p720: 4.0
+            case .p1080: suggestedHEVCMbps
+            case .p1440: 16.0
+            case .keep: 20.0
+            }
         switch codec {
-        case .hevcKeepHDR: suggestedHEVCMbps
-        case .h264Compatible: (suggestedHEVCMbps * h264BitRateFactor * 10).rounded() / 10
+        case .hevcKeepHDR: return hevc
+        case .h264Compatible: return (hevc * h264BitRateFactor * 10).rounded() / 10
         }
     }
 }

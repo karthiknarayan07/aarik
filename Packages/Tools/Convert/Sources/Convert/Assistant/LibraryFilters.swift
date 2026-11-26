@@ -147,21 +147,23 @@ enum Phrase {
         return first.lowercased() + text.dropFirst()
     }
 
-    /// "4K" when every frame rate of a resolution is chosen, else the buckets by name: "4K60 or 1080p".
+    /// "4K" when every frame rate of a resolution is chosen (or only the unknown-rate 4K bucket), else the buckets by
+    /// name: "4K60 or 1080p".
     static func qualities(_ buckets: Set<QualityBucket>) -> String {
         var names: [String] = []
-        let uhd = buckets.compactMap { bucket -> FrameRateTier? in
+        let uhd = buckets.compactMap { bucket -> FrameRateTier?? in
             if case .uhd(let tier) = bucket { tier } else { nil }
         }
-        let fullHD = buckets.compactMap { bucket -> FrameRateTier? in
+        let fullHD = buckets.compactMap { bucket -> FrameRateTier?? in
             if case .fullHD(let tier) = bucket { tier } else { nil }
         }
-        func add(_ name: String, tiers: [FrameRateTier], make: (FrameRateTier) -> QualityBucket) {
+        func add(_ name: String, tiers: [FrameRateTier?], make: (FrameRateTier?) -> QualityBucket) {
             guard !tiers.isEmpty else { return }
-            if Set(tiers) == Set(FrameRateTier.allCases) {
+            let known = Set(tiers.compactMap { $0 })
+            if known == Set(FrameRateTier.allCases) || known.isEmpty {
                 names.append(name)
             } else {
-                names.append(contentsOf: tiers.map(make).sorted().map(\.title))
+                names.append(contentsOf: Set(tiers).map(make).sorted().map(\.title))
             }
         }
         add("4K", tiers: uhd, make: QualityBucket.uhd)

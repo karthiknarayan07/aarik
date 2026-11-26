@@ -18,6 +18,12 @@ First public release.
   VoiceOver can read. Tapping a video opens its page with a zoom. Select works like Photos: tap or swipe across tiles,
   then "Add to Queue" or "Convert Now". Haptics mark selecting, a finished conversion and a pause for battery or heat.
   Previews on long press, swipe actions and sheets with detents follow the system's own apps.
+- **iPhone filters, headers, and quality selection:** `4K` / `1080p` quality filters and compact filter submenus
+  work across the Photos library, grid headers scroll with content instead of sticking over the title, and tapping
+  **Next** on a bulk selection (or opening a video's page) shows a redesigned **Conversion Options** experience with
+  a live Before → After size card, plain-English **Resolution** choices (`720p`, `1080p Recommended`, `1440p`,
+  `Keep Original`), a **Picture Detail** bit rate slider with tier badges, per-resolution Mbps guides and a "How to
+  choose" tip, plus collapsible frame rate and format options.
 - **iPhone runs start when you say so:** Add to Queue only queues; Convert Now queues and starts; the Queue has a
   Start button with what the waiting videos would save. Videos handed over by the share sheet or Shortcuts wait in the
   Queue too. A relaunch continues a run you had started, and never starts a queue you hadn't.

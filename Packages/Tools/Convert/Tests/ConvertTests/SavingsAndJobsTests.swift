@@ -1,6 +1,9 @@
 import AppCore
+import AppServices
 import Foundation
+import LocalLibrary
 import MediaEngine
+import PhotosLibrary
 import Testing
 
 @testable import Convert
@@ -174,5 +177,75 @@ import Testing
         #expect(QueueButtonTitle.toolbarTitle(count: 0) == "Add to Queue")
         #expect(QueueButtonTitle.toolbarTitle(count: 1) == "Add to Queue")
         #expect(QueueButtonTitle.toolbarTitle(count: 3) == "Add 3 to Queue")
+    }
+
+    @Test func iosDefaultOptionsEnableCustomSpecAndPersistQualityKeys() {
+        let suite = UserDefaults(suiteName: "IOSSettingsTests-\(UUID().uuidString)")!
+        var initial = AppSettings.defaultAdvancedOptions(suite, platform: .iOS)
+        #expect(initial.isEnabled)
+        #expect(initial.resolution == .p1080)
+        #expect(initial.bitRateMbps == 10.0)
+        // Changing resolution while bit rate is at the previous suggestion tracks the new suggestion.
+        initial.resolution = .p720
+        #expect(initial.bitRateMbps == 4.0)
+        // Custom bit rate stays untouched when switching resolution.
+        initial.bitRateMbps = 14.0
+        initial.resolution = .p1440
+        #expect(initial.bitRateMbps == 14.0)
+
+        // Mac stays preset-based by default.
+        #expect(!AppSettings.defaultAdvancedOptions(suite, platform: .macOS).isEnabled)
+
+        suite.set(AdvancedOptions.Resolution.p720.rawValue, forKey: AppSettings.Keys.defaultResolution)
+        suite.set(AdvancedOptions.FrameRate.fps30.rawValue, forKey: AppSettings.Keys.defaultFrameRate)
+        suite.set(VideoCodec.h264Compatible.rawValue, forKey: AppSettings.Keys.defaultCodec)
+        // Without an explicit stored bit rate, H.264 @ 720p picks its suggested rate (6.4 Mbps).
+        let derived = AppSettings.defaultAdvancedOptions(suite, platform: .iOS)
+        #expect(derived.bitRateMbps == 6.4)
+        suite.set(8.5, forKey: AppSettings.Keys.defaultBitRateMbps)
+        let explicit = AppSettings.defaultAdvancedOptions(suite, platform: .iOS)
+        #expect(explicit.resolution == .p720)
+        #expect(explicit.frameRate == .fps30)
+        #expect(explicit.codec == .h264Compatible)
+        #expect(explicit.bitRateMbps == 8.5)
+
+        // Plain-English bit rate classification and guide track the chosen resolution and codec.
+        #expect(AdvancedOptions.bitRateTier(mbps: 4.0, resolution: .p1080, codec: .hevcKeepHDR) == .compact)
+        #expect(AdvancedOptions.bitRateTier(mbps: 10.0, resolution: .p1080, codec: .hevcKeepHDR) == .recommended)
+        #expect(AdvancedOptions.bitRateTier(mbps: 18.0, resolution: .p1080, codec: .hevcKeepHDR) == .highDetail)
+        #expect(AdvancedOptions.bitRateGuide(for: .p1080, codec: .hevcKeepHDR).contains("8–12 Mbps"))
+    }
+
+    @MainActor
+    @Test func photosSelectionEstimatesAndQueuesCustomSpecWhenEnabled() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "photos-spec-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = UserDefaults(suiteName: "PhotosCustomSpec-\(UUID().uuidString)")!
+        let asset = PhotoAsset(
+            id: "clip/L0/001", creationDate: Date(timeIntervalSince1970: 1_700_000_000), location: nil,
+            pixelSize: CGSize(width: 3840, height: 2160), duration: 60, originalFileName: "clip.mov",
+            originalByteSize: bytes(mbps: 100), modificationDate: nil)
+        let services = AppServices(
+            directory: directory, defaults: defaults, photoStore: FakePhotoStore(assets: [asset]))
+        let model = ConvertModel(services: services)
+        await model.start()
+        await model.photos.start()
+        await model.photos.waitUntilIdle()
+        model.selection = .photosVideos
+        model.photosBrowser.selection = Set(model.photos.items.map(\.id))
+        model.advanced.isEnabled = true
+        model.advanced.resolution = .p720
+        model.advanced.bitRateMbps = 5.0
+
+        // Photos items carry empty inventory in the sandbox, yet estimation and selection savings still work.
+        #expect(model.couldFreeSelected > 0)
+
+        model.addPhotosSelectionToQueue()
+        await model.services.waitForQueueCommands()
+        for _ in 0..<20 { await Task.yield() }
+        let job = try #require(model.jobs.first)
+        let decoded = try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
+        #expect(decoded.custom == model.advanced.spec)
     }
 }

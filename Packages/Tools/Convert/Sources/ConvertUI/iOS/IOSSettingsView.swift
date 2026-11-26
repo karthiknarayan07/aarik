@@ -2,6 +2,7 @@
     import AppCore
     import AppUI
     import Convert
+    import MediaEngine
     import SwiftUI
     import UIKit
     import UniformTypeIdentifiers
@@ -12,7 +13,10 @@
         @Bindable var model: ConvertModel
         @Environment(\.dismiss) private var dismiss
 
-        @AppStorage(AppSettings.Keys.preset) private var preset = Preset.balanced
+        @AppStorage(AppSettings.Keys.defaultResolution) private var resolution = AdvancedOptions.Resolution.p1080
+        @AppStorage(AppSettings.Keys.defaultBitRateMbps) private var bitRateMbps = AdvancedOptions.suggestedHEVCMbps
+        @AppStorage(AppSettings.Keys.defaultFrameRate) private var frameRate = AdvancedOptions.FrameRate.keep
+        @AppStorage(AppSettings.Keys.defaultCodec) private var codec = VideoCodec.hevcKeepHDR
         @AppStorage(AppSettings.Keys.speed) private var speed = SpeedSetting.default
         @AppStorage(AppSettings.Keys.defaultSaveTo) private var saveTo = SaveLocation.defaultChoice(for: .iOS)
         @AppStorage(AppSettings.Keys.defaultSaveFolder) private var saveFolder: Data?
@@ -37,11 +41,13 @@
         public var body: some View {
             NavigationStack {
                 Form {
-                    Section("Quality") {
-                        Picker("Default Preset", selection: $preset) {
-                            ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                        }
-                    }
+                    IOSQualitySections(
+                        resolution: $resolution,
+                        bitRateMbps: $bitRateMbps,
+                        frameRate: $frameRate,
+                        codec: $codec,
+                        resolutionSectionTitle: "Default Resolution",
+                        detailSectionTitle: "Default Picture Detail")
                     Section {
                         Picker("Conversion Speed", selection: $speed) {
                             ForEach(SpeedSetting.allCases) { option in
@@ -104,14 +110,37 @@
                     saveFolder = location.folderBookmark
                     saveTo = .folder
                 }
-                .onChange(of: preset) { _, newValue in
-                    if model.preset != newValue { model.preset = newValue }
+                .onChange(of: resolution) { oldValue, newValue in
+                    syncBitRateForResolutionChange(from: oldValue, to: newValue)
+                    model.applyDefaultAdvancedOptions()
                 }
+                .onChange(of: codec) { oldValue, newValue in
+                    syncBitRateForCodecChange(from: oldValue, to: newValue)
+                    model.applyDefaultAdvancedOptions()
+                }
+                .onChange(of: bitRateMbps) { model.applyDefaultAdvancedOptions() }
+                .onChange(of: frameRate) { model.applyDefaultAdvancedOptions() }
                 .onChange(of: speed) { _, newValue in
                     if model.services.speed != newValue { model.services.speed = newValue }
                 }
                 .onChange(of: saveTo) { model.applyDefaultSaveLocation() }
                 .onChange(of: saveFolder) { model.applyDefaultSaveLocation() }
+            }
+        }
+
+        private func syncBitRateForResolutionChange(
+            from oldValue: AdvancedOptions.Resolution, to newValue: AdvancedOptions.Resolution
+        ) {
+            let previousSuggested = AdvancedOptions.suggestedMbps(for: oldValue, codec: codec)
+            if bitRateMbps == previousSuggested {
+                bitRateMbps = AdvancedOptions.suggestedMbps(for: newValue, codec: codec)
+            }
+        }
+
+        private func syncBitRateForCodecChange(from oldValue: VideoCodec, to newValue: VideoCodec) {
+            let previousSuggested = AdvancedOptions.suggestedMbps(for: resolution, codec: oldValue)
+            if bitRateMbps == previousSuggested {
+                bitRateMbps = AdvancedOptions.suggestedMbps(for: resolution, codec: newValue)
             }
         }
     }

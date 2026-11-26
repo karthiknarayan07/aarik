@@ -289,8 +289,12 @@ public struct QueryTranslator: Sendable {
         var buckets: Set<QualityBucket> = []
         for resolution in chosen {
             switch resolution {
-            case .uhd: buckets.formUnion((tiers.isEmpty ? FrameRateTier.allCases : tiers).map(QualityBucket.uhd))
-            case .fullHD: buckets.formUnion((tiers.isEmpty ? FrameRateTier.allCases : tiers).map(QualityBucket.fullHD))
+            case .uhd:
+                buckets.formUnion(
+                    tiers.isEmpty ? QualityBucket.allUHD : Set(tiers.map { QualityBucket.uhd($0) }))
+            case .fullHD:
+                buckets.formUnion(
+                    tiers.isEmpty ? QualityBucket.allFullHD : Set(tiers.map { QualityBucket.fullHD($0) }))
             case .hd: buckets.insert(.hd)
             }
         }

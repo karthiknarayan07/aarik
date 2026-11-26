@@ -3,9 +3,10 @@ import AppUI
 import LocalLibrary
 import SwiftUI
 
-/// The toolbar's Filter menu: quality, size, length, codec and dynamic range, as Photos' and Mail's filter menus do.
-/// Each section lists only the options present in the current collection, with how many videos each would show and
-/// their total size; the counts come from the browser's cached snapshot. The icon fills in while a filter is on.
+/// The toolbar's Filter menu: quality, size, length, codec and dynamic range, grouped into submenus so every category
+/// stays visible at once. Each submenu lists only the options present in the current collection, with how many videos
+/// each would show and their total size; the counts come from the browser's cached snapshot. The icon fills in while a
+/// filter is on.
 struct LibraryFilterMenu: View {
     @Bindable var browser: LibraryBrowser
 
@@ -13,15 +14,19 @@ struct LibraryFilterMenu: View {
         let facets = browser.snapshot.facets
         let isActive = browser.quality.isActive
         Menu {
-            FilterSection(
-                title: "Quality", options: facets.qualities, selection: $browser.quality.qualities, name: \.title)
-            SizeSection(options: facets.sizes, selection: $browser.quality.minimumSize)
-            FilterSection(
-                title: "Length", options: facets.lengths, selection: $browser.quality.lengths, name: \.title)
-            FilterSection(
-                title: "Codec", options: facets.codecs, selection: $browser.quality.codecs, name: \.title)
-            FilterSection(
-                title: "Range", options: facets.ranges, selection: $browser.quality.ranges, name: \.title)
+            FilterSubmenu(
+                title: "Quality", systemImage: "4k.tv", options: facets.qualities,
+                selection: $browser.quality.qualities, name: \.title)
+            SizeSubmenu(options: facets.sizes, selection: $browser.quality.minimumSize)
+            FilterSubmenu(
+                title: "Length", systemImage: "clock", options: facets.lengths, selection: $browser.quality.lengths,
+                name: \.title)
+            FilterSubmenu(
+                title: "Codec", systemImage: "film.stack", options: facets.codecs, selection: $browser.quality.codecs,
+                name: \.title)
+            FilterSubmenu(
+                title: "Range", systemImage: "sun.max", options: facets.ranges, selection: $browser.quality.ranges,
+                name: \.title)
             if isActive {
                 Divider()
                 Button("Clear Filters", systemImage: "xmark.circle") { browser.quality = QualityFilter() }
@@ -38,9 +43,10 @@ struct LibraryFilterMenu: View {
     }
 }
 
-/// A section of checkmarked choices; any number can be on, and an item matching any of them is shown.
-private struct FilterSection<Value: Hashable & Sendable & Comparable>: View {
+/// A submenu of checkmarked choices; any number can be on, and an item matching any of them is shown.
+private struct FilterSubmenu<Value: Hashable & Sendable & Comparable>: View {
     let title: String
+    let systemImage: String
     let options: [QualityFacets.Option<Value>]
     @Binding var selection: Set<Value>
     let name: (Value) -> String
@@ -52,15 +58,33 @@ private struct FilterSection<Value: Hashable & Sendable & Comparable>: View {
         return (options + missing).sorted { $0.value < $1.value }
     }
 
+    private var activeSummary: String? {
+        guard !selection.isEmpty else { return nil }
+        return selection.sorted().map(name).joined(separator: ", ")
+    }
+
     var body: some View {
         let rows = rows
         if !rows.isEmpty {
-            Section(title) {
+            Menu {
                 ForEach(rows, id: \.value) { row in
                     Toggle(isOn: isOn(row.value)) {
                         Text(verbatim: optionTitle(name(row.value), row))
                     }
                     .accessibilityLabel(optionTitle(name(row.value), row))
+                }
+                if !selection.isEmpty {
+                    Divider()
+                    Button("Clear \(title)") { selection = [] }
+                }
+            } label: {
+                Label {
+                    Text(title)
+                    if let activeSummary {
+                        Text(activeSummary)
+                    }
+                } icon: {
+                    Image(systemName: systemImage)
                 }
             }
         }
@@ -76,7 +100,7 @@ private struct FilterSection<Value: Hashable & Sendable & Comparable>: View {
 }
 
 /// One "bigger than" threshold, or any size.
-private struct SizeSection: View {
+private struct SizeSubmenu: View {
     let options: [QualityFacets.Option<SizeThreshold>]
     @Binding var selection: SizeThreshold?
 
@@ -88,7 +112,7 @@ private struct SizeSection: View {
     var body: some View {
         let rows = rows
         if !rows.isEmpty {
-            Section("Size") {
+            Menu {
                 Picker("Size", selection: $selection) {
                     Text("Any Size").tag(SizeThreshold?.none)
                     ForEach(rows, id: \.value) { row in
@@ -99,6 +123,15 @@ private struct SizeSection: View {
                 }
                 .pickerStyle(.inline)
                 .labelsHidden()
+            } label: {
+                Label {
+                    Text("Size")
+                    if let selection {
+                        Text(selection.title)
+                    }
+                } icon: {
+                    Image(systemName: "internaldrive")
+                }
             }
         }
     }

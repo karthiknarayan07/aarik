@@ -59,41 +59,49 @@ public enum ResolutionClass: Sendable, Hashable {
 }
 
 /// Resolution and frame rate together, from the short side of the displayed size: 4K and 1080p are split by
-/// frame rate, 720p and smaller are not. A 4K or 1080p clip whose frame rate is unknown is `unknown`.
+/// frame rate when known, and keep their resolution ("4K", "1080p") when the frame rate is unknown (such as Photos
+/// before its index is read). Only items with no pixel size are `unknown`.
 public enum QualityBucket: Sendable, Hashable, Comparable {
-    case uhd(FrameRateTier)
-    case fullHD(FrameRateTier)
+    case uhd(FrameRateTier?)
+    case fullHD(FrameRateTier?)
     case hd
     case other
     case unknown
+
+    /// Every 4K bucket (all known frame rates plus unknown frame rate).
+    public static let allUHD: Set<QualityBucket> = Set(FrameRateTier.allCases.map(QualityBucket.uhd) + [.uhd(nil)])
+    /// Every 1080p bucket (all known frame rates plus unknown frame rate).
+    public static let allFullHD: Set<QualityBucket> = Set(
+        FrameRateTier.allCases.map(QualityBucket.fullHD) + [.fullHD(nil)])
 
     public init(item: LibraryItem) {
         let tier = FrameRateTier(fps: item.frameRate)
         switch ResolutionClass(shortSide: min(item.pixelSize.width, item.pixelSize.height)) {
         case .unknown: self = .unknown
-        case .uhd: self = tier.map(QualityBucket.uhd) ?? .unknown
-        case .fullHD: self = tier.map(QualityBucket.fullHD) ?? .unknown
+        case .uhd: self = .uhd(tier)
+        case .fullHD: self = .fullHD(tier)
         case .hd: self = .hd
         case .other: self = .other
         }
     }
 
-    /// "4K60", "1080p30", "720p", "Other", "Unknown".
+    /// "4K60", "4K", "1080p30", "1080p", "720p", "Other", "Unknown".
     public var title: String {
         switch self {
-        case .uhd(let tier): "4K" + tier.suffix
-        case .fullHD(let tier): "1080p" + tier.suffix
+        case .uhd(let tier): tier.map { "4K" + $0.suffix } ?? "4K"
+        case .fullHD(let tier): tier.map { "1080p" + $0.suffix } ?? "1080p"
         case .hd: "720p"
         case .other: "Other"
         case .unknown: "Unknown"
         }
     }
 
-    /// Display order: higher resolution first, then higher frame rate; Other and Unknown last.
+    /// Display order: higher resolution first, then higher frame rate (unknown rate after known rates of that resolution);
+    /// Other and Unknown last.
     private var order: Int {
         switch self {
-        case .uhd(let tier): 100 - tier.rawValue
-        case .fullHD(let tier): 200 - tier.rawValue
+        case .uhd(let tier): tier.map { 100 - $0.rawValue } ?? 101
+        case .fullHD(let tier): tier.map { 200 - $0.rawValue } ?? 201
         case .hd: 300
         case .other: 400
         case .unknown: 500
@@ -180,6 +188,14 @@ public enum CodecFamily: Int, Sendable, Hashable, CaseIterable, Comparable {
 
     public init(item: LibraryItem) { self.init(code: item.inventory["video.codec"]?.value) }
 
+    /// The codec family when the item carries one; nil when unknown (such as Photos without an index).
+    public static func known(for item: LibraryItem) -> CodecFamily? {
+        guard let code = item.inventory["video.codec"]?.value, !code.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return nil
+        }
+        return CodecFamily(code: code)
+    }
+
     public var title: String {
         switch self {
         case .hevc: "HEVC"
@@ -206,6 +222,14 @@ public enum DynamicRange: Int, Sendable, Hashable, CaseIterable, Comparable {
         } else {
             self = .sdr
         }
+    }
+
+    /// The dynamic range when the item carries a range badge; nil when unknown (such as Photos without an index).
+    public static func known(for badges: Set<MediaBadge>) -> DynamicRange? {
+        if badges.contains(.dolbyVision) { return .dolbyVision }
+        if badges.contains(.hdr) { return .hdr }
+        if badges.contains(.sdr) { return .sdr }
+        return nil
     }
 
     public var title: String {
@@ -276,15 +300,15 @@ public struct QualityFilter: Sendable, Hashable {
         let quality: QualityBucket
         let byteSize: Int64
         let length: LengthRange
-        let codec: CodecFamily
-        let range: DynamicRange
+        let codec: CodecFamily?
+        let range: DynamicRange?
 
         init(_ item: LibraryItem) {
             quality = QualityBucket(item: item)
             byteSize = item.byteSize
             length = LengthRange(seconds: item.duration)
-            codec = CodecFamily(item: item)
-            range = DynamicRange(badges: item.badges)
+            codec = CodecFamily.known(for: item)
+            range = DynamicRange.known(for: item.badges)
         }
     }
 
@@ -300,8 +324,8 @@ public struct QualityFilter: Sendable, Hashable {
             quality = filter.qualities.isEmpty || filter.qualities.contains(traits.quality)
             size = filter.minimumSize.map { traits.byteSize > $0.rawValue } ?? true
             length = filter.lengths.isEmpty || filter.lengths.contains(traits.length)
-            codec = filter.codecs.isEmpty || filter.codecs.contains(traits.codec)
-            range = filter.ranges.isEmpty || filter.ranges.contains(traits.range)
+            codec = filter.codecs.isEmpty || (traits.codec.map(filter.codecs.contains) ?? false)
+            range = filter.ranges.isEmpty || (traits.range.map(filter.ranges.contains) ?? false)
         }
 
         var all: Bool { quality && size && length && codec && range }
@@ -328,11 +352,11 @@ public struct QualityFilter: Sendable, Hashable {
             if match.quality && match.size && match.codec && match.range {
                 lengths[traits.length, default: .zero].add(traits.byteSize)
             }
-            if match.quality && match.size && match.length && match.range {
-                codecs[traits.codec, default: .zero].add(traits.byteSize)
+            if let codec = traits.codec, match.quality && match.size && match.length && match.range {
+                codecs[codec, default: .zero].add(traits.byteSize)
             }
-            if match.quality && match.size && match.length && match.codec {
-                ranges[traits.range, default: .zero].add(traits.byteSize)
+            if let range = traits.range, match.quality && match.size && match.length && match.codec {
+                ranges[range, default: .zero].add(traits.byteSize)
             }
         }
 

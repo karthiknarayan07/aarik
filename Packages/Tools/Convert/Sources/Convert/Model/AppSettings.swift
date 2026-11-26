@@ -1,11 +1,16 @@
 import AppCore
 import Foundation
+import MediaEngine
 
 /// The Convert tool's stored settings. The Settings views bind them with `@AppStorage`; the model and the runner
 /// read the same keys from `UserDefaults`. The queue's two shared keys (auto-start, speed) are `SettingsStore`'s.
 public enum AppSettings {
     public enum Keys {
         public static let preset = "downscale.preset"
+        public static let defaultResolution = "downscale.defaultResolution"
+        public static let defaultBitRateMbps = "downscale.defaultBitRateMbps"
+        public static let defaultFrameRate = "downscale.defaultFrameRate"
+        public static let defaultCodec = "downscale.defaultCodec"
         public static let compressPreset = "compress.preset"
         public static let autoStartQueue = SettingsStore.Keys.autoStartQueue
         /// `SpeedSetting` raw value: quiet, balanced or fastest.
@@ -44,6 +49,35 @@ public enum AppSettings {
     public static func prepareOriginalsFolder(_ defaults: UserDefaults) {
         guard (defaults.string(forKey: Keys.originalsFolder) ?? "").isEmpty else { return }
         try? FileManager.default.createDirectory(at: defaultOriginalsFolder, withIntermediateDirectories: true)
+    }
+
+    /// The custom conversion options new sessions start with (enabled with user defaults on iOS, preset-based on macOS).
+    public static func defaultAdvancedOptions(
+        _ defaults: UserDefaults, platform: ToolPlatforms = .current
+    ) -> AdvancedOptions {
+        var options = AdvancedOptions(for: platform)
+        guard platform.contains(.iOS) && !platform.contains(.macOS) else { return options }
+        if let raw = defaults.string(forKey: Keys.defaultResolution),
+            let resolution = AdvancedOptions.Resolution(rawValue: raw)
+        {
+            options.resolution = resolution
+        }
+        if let raw = defaults.string(forKey: Keys.defaultFrameRate),
+            let frameRate = AdvancedOptions.FrameRate(rawValue: raw)
+        {
+            options.frameRate = frameRate
+        }
+        if let raw = defaults.string(forKey: Keys.defaultCodec),
+            let codec = VideoCodec(rawValue: raw)
+        {
+            options.codec = codec
+        }
+        if let storedMbps = defaults.object(forKey: Keys.defaultBitRateMbps) as? Double,
+            storedMbps >= AdvancedOptions.minimumMbps
+        {
+            options.bitRateMbps = storedMbps
+        }
+        return options
     }
 
     /// The Save To choice new selections start with: next to original (macOS) or Documents (iOS), or a folder whose

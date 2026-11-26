@@ -82,8 +82,8 @@ public enum ShrinkResolution: Sendable, Equatable, CaseIterable {
 
     public var buckets: Set<QualityBucket> {
         switch self {
-        case .uhd: Set(FrameRateTier.allCases.map(QualityBucket.uhd))
-        case .fullHD: Set(FrameRateTier.allCases.map(QualityBucket.fullHD))
+        case .uhd: QualityBucket.allUHD
+        case .fullHD: QualityBucket.allFullHD
         }
     }
 

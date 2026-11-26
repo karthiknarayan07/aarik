@@ -33,7 +33,7 @@ import Testing
 
     @Test func resolutionMapsToEveryFrameRateOfThatResolution() async {
         let (result, _) = await translate(LibraryQuery(resolutions: ["4K"]))
-        #expect(result.filters.quality.qualities == Set(FrameRateTier.allCases.map(QualityBucket.uhd)))
+        #expect(result.filters.quality.qualities == QualityBucket.allUHD)
     }
 
     @Test func resolutionAndFrameRateMapToTheMatchingBuckets() async {
@@ -104,7 +104,7 @@ import Testing
             LibraryQuery(
                 mediaType: "Portrait", resolutions: ["8K", "4K"], codecs: ["AV1"], dynamicRanges: ["HLG"]))
         #expect(result.filters.mediaType == nil)
-        #expect(result.filters.quality.qualities == Set(FrameRateTier.allCases.map(QualityBucket.uhd)))
+        #expect(result.filters.quality.qualities == QualityBucket.allUHD)
         #expect(result.filters.quality.codecs.isEmpty)
         #expect(result.filters.quality.ranges.isEmpty)
         #expect(result.dropped.count == 4)

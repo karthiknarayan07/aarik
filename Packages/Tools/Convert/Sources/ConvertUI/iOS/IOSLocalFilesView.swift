@@ -84,7 +84,22 @@
                         sections: sections, selection: $browser.selection, name: \.name,
                         actions: MediaGridActions(open: { opened = $0.first }, quickLook: model.toggleQuickLook),
                         opensOnTap: !isSelecting
-                    ) { item, state in
+                    ) {
+                        SavingsHeader(
+                            couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
+                            availableCount: browser.snapshot.items.count(where: \.isAvailable)
+                        ) {
+                            Menu {
+                                Picker("Resolution", selection: $model.advanced.resolution) {
+                                    ForEach(AdvancedOptions.Resolution.allCases, id: \.self) {
+                                        Text($0.title).tag($0)
+                                    }
+                                }
+                            } label: {
+                                Label(model.advanced.resolution.title, systemImage: "slider.horizontal.3")
+                            }
+                        }
+                    } tile: { item, state in
                         LibraryTile(
                             item: item, state: state, thumbnails: model.thumbnailSource,
                             presetOverride: model.presetOverrides.shownOverride(
@@ -97,16 +112,6 @@
                                 LibraryTile(item: item, state: MediaTileState(), thumbnails: model.thumbnailSource)
                                     .frame(width: 280, height: 190)
                             }
-                    }
-                }
-            }
-            .safeAreaBar(edge: .top) {
-                SavingsHeader(
-                    couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
-                    availableCount: browser.snapshot.items.count(where: \.isAvailable)
-                ) {
-                    PresetPicker("Quality Preset", selection: $model.preset, options: Preset.allCases) {
-                        $0.displayName
                     }
                 }
             }

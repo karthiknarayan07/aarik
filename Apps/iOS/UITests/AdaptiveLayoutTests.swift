@@ -30,7 +30,7 @@ final class AdaptiveLayoutTests: AppTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(self.tile(named: AppTestCase.photosFixture).waitForExistence(timeout: 10))
         XCTAssertTrue(self.tile(named: AppTestCase.photosFixture).isSelected, "rotation dropped the selection")
-        XCTAssertTrue(app.buttons["convertSelection"].firstMatch.isEnabled, "rotation disabled the Convert bar")
+        XCTAssertTrue(app.buttons["selectionNext"].firstMatch.isEnabled, "rotation disabled the selection bar")
 
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(self.tile(named: AppTestCase.photosFixture).waitForExistence(timeout: 10))

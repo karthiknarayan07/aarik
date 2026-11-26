@@ -59,13 +59,16 @@ final class TabsAndOnboardingTests: AppTestCase {
         let tile = tile(named: AppTestCase.photosFixture)
         XCTAssertTrue(tile.waitForExistence(timeout: 30))
         tile.tap()
-        let convertNow = app.buttons["convertSelection"].firstMatch
-        XCTAssertTrue(convertNow.waitForExistence(timeout: 10), "no Convert Now over the selection")
-        XCTAssertEqual(convertNow.label, "Convert Now")
+        let next = app.buttons["selectionNext"].firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 10), "no Next button over the selection")
         XCTAssertTrue(
             element(labelContaining: "1 Video").exists, "the bar doesn't say what is selected")
+        next.tap()
+        let convertNow = app.buttons["convertSelection"].firstMatch
+        XCTAssertTrue(convertNow.waitForExistence(timeout: 10), "no Convert Now in Conversion Options")
+        XCTAssertEqual(convertNow.label, "Convert Now")
         let add = app.buttons["addSelectionToQueue"].firstMatch
-        XCTAssertTrue(add.exists, "no Add to Queue over the selection")
+        XCTAssertTrue(add.exists, "no Add to Queue in Conversion Options")
         XCTAssertEqual(add.label, "Add to Queue")
         add.tap()
         confirmLossIfAsked()

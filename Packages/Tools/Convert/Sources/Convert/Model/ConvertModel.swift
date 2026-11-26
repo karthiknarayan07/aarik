@@ -75,7 +75,7 @@ public final class ConvertModel {
     /// Presets chosen in the inspector for single videos; the header's `preset` is everyone else's (spec 8.2).
     /// Kept for the session.
     public var presetOverrides = PresetOverrides<UUID>()
-    public var advanced = AdvancedOptions()
+    public var advanced: AdvancedOptions
     public var saveLocation: SaveLocation
     /// Where the Videos page puts converted copies.
     public var photosSaveLocation = PhotosSaveLocation()
@@ -145,6 +145,7 @@ public final class ConvertModel {
             self.selection = page
         }
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
+        self.advanced = AppSettings.defaultAdvancedOptions(defaults)
         let library = services.library.local
         self.library = library
         self.browser = LibraryBrowser(collection: library)
@@ -214,6 +215,11 @@ public final class ConvertModel {
     /// Puts the Settings window's Save To default into the inspector.
     public func applyDefaultSaveLocation() {
         saveLocation = AppSettings.defaultSaveLocation(defaults)
+    }
+
+    /// Puts the stored default conversion options (resolution, bit rate, frame rate, format) into the inspector.
+    public func applyDefaultAdvancedOptions() {
+        advanced = AppSettings.defaultAdvancedOptions(defaults)
     }
 }
 

@@ -57,7 +57,7 @@ struct MediaDragItem<ID: Hashable & Sendable>: Identifiable, Transferable {
 /// - type-select: type a name to jump to it
 /// - drag files out to Finder or other apps
 /// - a ring on the keyboard-focused tile, and a grey selection when the window or the grid isn't active
-public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sendable {
+public struct MediaGrid<Item: Identifiable, Header: View, Tile: View>: View where Item.ID: Sendable {
 
     let sections: [MediaSection<Item>]
     @Binding var selection: Set<Item.ID>
@@ -66,6 +66,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     let actions: MediaGridActions<Item.ID>
     /// Touch only: a tap opens the video instead of toggling it, until the caller turns selecting on.
     let opensOnTap: Bool
+    let header: Header
     let tile: (Item, MediaTileState) -> Tile
 
     @State private var state = GridSelection<Item.ID>()
@@ -91,6 +92,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     public init(
         sections: [MediaSection<Item>], selection: Binding<Set<Item.ID>>, name: @escaping (Item) -> String,
         dragFile: ((Item) -> URL?)? = nil, actions: MediaGridActions<Item.ID>, opensOnTap: Bool = false,
+        @ViewBuilder header: () -> Header,
         @ViewBuilder tile: @escaping (Item, MediaTileState) -> Tile
     ) {
         self.sections = sections
@@ -99,7 +101,18 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
         self.dragFile = dragFile
         self.actions = actions
         self.opensOnTap = opensOnTap
+        self.header = header()
         self.tile = tile
+    }
+
+    public init(
+        sections: [MediaSection<Item>], selection: Binding<Set<Item.ID>>, name: @escaping (Item) -> String,
+        dragFile: ((Item) -> URL?)? = nil, actions: MediaGridActions<Item.ID>, opensOnTap: Bool = false,
+        @ViewBuilder tile: @escaping (Item, MediaTileState) -> Tile
+    ) where Header == EmptyView {
+        self.init(
+            sections: sections, selection: selection, name: name, dragFile: dragFile, actions: actions,
+            opensOnTap: opensOnTap, header: { EmptyView() }, tile: tile)
     }
 
     private var columns: Int {
@@ -119,45 +132,48 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     public var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns),
-                    alignment: .leading, spacing: spacing, pinnedViews: [.sectionHeaders]
-                ) {
-                    ForEach(sections) { section in
-                        Section {
-                            ForEach(section.items) { item in
-                                cell(item)
-                            }
-                        } header: {
-                            SectionHeader(title: section.title, subtitle: section.subtitle)
-                                .onGeometryChange(for: CGRect.self) {
-                                    $0.frame(in: .named(mediaGridSpace))
-                                } action: { [headerFrames] in
-                                    headerFrames.values[section.id] = $0
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns),
+                        alignment: .leading, spacing: spacing, pinnedViews: [.sectionHeaders]
+                    ) {
+                        ForEach(sections) { section in
+                            Section {
+                                ForEach(section.items) { item in
+                                    cell(item)
                                 }
-                                .onDisappear { [headerFrames] in headerFrames.values[section.id] = nil }
+                            } header: {
+                                SectionHeader(title: section.title, subtitle: section.subtitle)
+                                    .onGeometryChange(for: CGRect.self) {
+                                        $0.frame(in: .named(mediaGridSpace))
+                                    } action: { [headerFrames] in
+                                        headerFrames.values[section.id] = $0
+                                    }
+                                    .onDisappear { [headerFrames] in headerFrames.values[section.id] = nil }
+                            }
                         }
                     }
+                    .modifier(
+                        DragOutContainer(isEnabled: dragFile != nil, selection: selection, payload: dragItems(for:))
+                    )
+                    .padding(padding)
+                    // Empty space below the last row still belongs to the grid: a click there clears the selection.
+                    .frame(minHeight: viewport.height, alignment: .top)
+                    .coordinateSpace(.named(mediaGridSpace))
+                    #if os(macOS)
+                        .simultaneousGesture(marqueeGesture)
+                        .overlay(alignment: .topLeading) { MarqueeOverlay(state: marquee) }
+                    #else
+                        .contentShape(.rect)
+                        .onTapGesture {
+                            isFocused = true
+                            state.selected = []
+                            selection = []
+                        }
+                        .simultaneousGesture(sweepGesture, including: opensOnTap ? .subviews : .all)
+                    #endif
                 }
-                .modifier(
-                    DragOutContainer(isEnabled: dragFile != nil, selection: selection, payload: dragItems(for:))
-                )
-                .padding(padding)
-                // Empty space below the last row still belongs to the grid: a click there clears the selection.
-                .frame(minHeight: viewport.height, alignment: .top)
-                .coordinateSpace(.named(mediaGridSpace))
-                #if os(macOS)
-                    .simultaneousGesture(marqueeGesture)
-                    .overlay(alignment: .topLeading) { MarqueeOverlay(state: marquee) }
-                #else
-                    .contentShape(.rect)
-                    .onTapGesture {
-                        isFocused = true
-                        state.selected = []
-                        selection = []
-                    }
-                    .simultaneousGesture(sweepGesture, including: opensOnTap ? .subviews : .all)
-                #endif
             }
             .onGeometryChange(for: CGSize.self) {
                 $0.size

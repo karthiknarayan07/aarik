@@ -74,8 +74,8 @@ extension ConvertModel {
     /// Videos Photos says will lose something (Cinematic depth data) are listed for the user first.
     public func addPhotosSelectionToQueue(kind: ConvertJobKind = .shrink) {
         guard let destination = photosSaveLocation.destination else { return }
-        // The Advanced options are not offered for Photos videos yet, so a hidden custom spec never applies.
-        let settings = ConvertJobSettings(kind: kind, preset: preset, saveTo: .nextToOriginal)
+        let settings = ConvertJobSettings(
+            kind: kind, preset: preset, saveTo: .nextToOriginal, custom: kind == .shrink ? advanced.spec : nil)
         let items = selectedPhotoItems
         let presets = Dictionary(uniqueKeysWithValues: items.map { ($0.id, effectivePreset(for: $0)) })
         var lost: [String: [String]] = [:]

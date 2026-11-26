@@ -76,8 +76,9 @@ extension ConvertModel {
     }
 
     public func inspectorSource(for item: LibraryItem) -> InspectorSource {
-        InspectorSource(
-            byteSize: item.byteSize, inventory: item.inventory, isAvailable: item.isAvailable,
+        let source = item.savingsSource
+        return InspectorSource(
+            byteSize: source.byteSize, inventory: source.inventory, isAvailable: item.isAvailable,
             preset: effectivePreset(for: item))
     }
 
@@ -96,7 +97,7 @@ private struct SavingsKey: Hashable {
 }
 
 extension LibraryItem {
-    public var savingsSource: SavingsCalculator.Source { (byteSize: byteSize, inventory: inventory) }
+    public var savingsSource: SavingsCalculator.Source { OverviewSummary.estimationSource(for: self) }
 }
 
 extension ConvertModel {

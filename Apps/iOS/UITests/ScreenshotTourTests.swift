@@ -60,7 +60,7 @@ final class ScreenshotTourTests: AppTestCase {
         let tile = tile(named: AppTestCase.secondPhotosFixture)
         if tile.waitForExistence(timeout: 15) {
             tile.tap()
-            _ = ids("convertSelection").waitForExistence(timeout: 10)
+            _ = ids("selectionNext").waitForExistence(timeout: 10)
             shot(mode, "06-select-bar")
         }
         open("Files")

@@ -52,13 +52,23 @@ import Testing
         #expect(QualityBucket(item: item(width: 640, height: 480, fps: 30)) == .other)
     }
 
-    @Test func unknownBuckets() {
-        #expect(QualityBucket(item: item(width: 3840, height: 2160, fps: 0)) == .unknown)
-        #expect(QualityBucket(item: item(width: 1920, height: 1080, fps: 0)) == .unknown)
+    @Test func unknownFrameRateKeepsResolution() {
+        #expect(QualityBucket(item: item(width: 3840, height: 2160, fps: 0)) == .uhd(nil))
+        #expect(QualityBucket(item: item(width: 3840, height: 2160, fps: 0)).title == "4K")
+        #expect(QualityBucket(item: item(width: 1920, height: 1080, fps: 0)) == .fullHD(nil))
+        #expect(QualityBucket(item: item(width: 1920, height: 1080, fps: 0)).title == "1080p")
         #expect(QualityBucket(item: item(width: 0, height: 0, fps: 30)) == .unknown)
         // Frame rate isn't part of 720p and Other, so an unknown rate doesn't hide their resolution.
         #expect(QualityBucket(item: item(width: 1280, height: 720, fps: 0)) == .hd)
         #expect(QualityBucket(item: item(width: 640, height: 480, fps: 0)) == .other)
+    }
+
+    @Test func unknownCodecAndRangeAreOmittedFromFacets() {
+        let unknown = item(width: 3840, height: 2160, fps: 0, badges: [], codec: nil)
+        let (_, facets) = QualityFilter().apply(to: [unknown])
+        #expect(facets.qualities.map(\.value) == [.uhd(nil)])
+        #expect(facets.codecs.isEmpty)
+        #expect(facets.ranges.isEmpty)
     }
 
     @Test func bucketTitlesAndOrder() {

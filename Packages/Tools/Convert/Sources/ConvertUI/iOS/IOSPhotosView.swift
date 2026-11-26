@@ -131,15 +131,6 @@
                     }
                 } else {
                     grid(browser)
-                        .safeAreaBar(edge: .top) {
-                            VStack(spacing: 0) {
-                                IOSPhotosHeader(
-                                    totalBytes: browser.snapshot.totalBytes, count: browser.snapshot.items.count)
-                                if photos.authorization == .limited {
-                                    IOSLimitedPhotosNote(openSettings: model.openPhotosAccessSettings)
-                                }
-                            }
-                        }
                         .safeAreaBar(edge: .bottom) {
                             if let error = photos.loadError { IOSProblemNote(text: error) }
                         }
@@ -187,7 +178,14 @@
                     sections: sections, selection: $browser.selection, name: \.name,
                     actions: MediaGridActions(open: { opened = $0.first }, quickLook: model.quickLookPhotoPoster),
                     opensOnTap: !isSelecting
-                ) { item, state in
+                ) {
+                    VStack(spacing: 0) {
+                        IOSPhotosHeader(totalBytes: browser.snapshot.totalBytes)
+                        if model.photos.authorization == .limited {
+                            IOSLimitedPhotosNote(openSettings: model.openPhotosAccessSettings)
+                        }
+                    }
+                } tile: { item, state in
                     LibraryTile(item: item, state: state, thumbnails: model.thumbnailSource)
                         .equatable()
                         .matchedTransitionSource(id: item.id, in: zoom)
@@ -240,18 +238,15 @@
 
     private struct IOSPhotosHeader: View {
         let totalBytes: Int64
-        let count: Int
 
         var body: some View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(totalBytes > 0 ? "\(ByteFormat.string(totalBytes)) in videos" : "Your Photos videos")
                     .font(.title3)
                     .accessibilityAddTraits(.isHeader)
-                Text(
-                    "\(count == 1 ? "1 video" : "\(count) videos") · Nothing in Photos changes until you convert a video"
-                )
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                Text("Nothing in Photos changes until you convert a video")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal)
