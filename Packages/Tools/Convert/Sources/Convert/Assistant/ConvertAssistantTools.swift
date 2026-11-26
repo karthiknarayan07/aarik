@@ -35,6 +35,9 @@ final class ConvertAssistantContext {
         return model
     }
 
+    /// How many items a tool result lists: enough to answer, short enough for the model's small context.
+    static let listLimit = 5
+
     // MARK: Search
 
     func search(_ arguments: AssistantArguments) throws -> AssistantToolOutput {
@@ -51,14 +54,27 @@ final class ConvertAssistantContext {
             if let year, item.captureDate.map({ Calendar.current.component(.year, from: $0) }) != year { return false }
             return item.byteSize >= minimum
         }.sorted { $0.byteSize > $1.byteSize }
-        let lines = matches.prefix(8).map { item in
+        let shown = matches.prefix(Self.listLimit)
+        let lines = shown.map { item in
             "\(item.name) · \(QualityBucket(item: item).title) · \(ByteFormat.string(item.byteSize))"
         }
         let total = ByteFormat.string(matches.reduce(0) { $0 + $1.byteSize })
-        let summary =
-            matches.isEmpty
-            ? "No videos match."
-            : "\(matches.count) videos, \(total) in all. The biggest: " + lines.joined(separator: "; ")
+        let count = matches.count == 1 ? "1 video" : "\(matches.count.formatted()) videos"
+        var summary = "No videos found."
+        if !matches.isEmpty {
+            // Numbered, one per line: the model reads this as a list and repeats it by name.
+            let numbered = lines.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+            let more = matches.count - shown.count
+            let found =
+                matches.count == 1 ? "Found 1 video in total" : "Found \(matches.count.formatted()) videos in total"
+            let listed =
+                more > 0
+                ? "\(shown.count.formatted()) are listed below, largest first."
+                : (shown.count == 1 ? "It is listed below." : "All \(shown.count) are listed below, largest first.")
+            summary =
+                "\(found), \(total) combined. \(listed)\n\(numbered)"
+                + (more > 0 ? "\n\(more.formatted()) other videos aren't listed." : "")
+        }
         return AssistantToolOutput(text: summary, title: "Searched Library", count: matches.count, lines: lines)
     }
 
@@ -90,13 +106,14 @@ final class ConvertAssistantContext {
     func estimate() throws -> AssistantToolOutput {
         let analysis = try analysis()
         let total = analysis.buckets.reduce(Int64(0)) { $0 + $1.couldFree }
-        let top = analysis.buckets.prefix(4)
+        let top = analysis.buckets.prefix(Self.listLimit)
         let lines = top.map { "\($0.id): \($0.title) · \($0.detail)" }
+        let videos = analysis.buckets.reduce(0) { $0 + $1.count }
         let text =
             analysis.buckets.isEmpty
             ? "Nothing in the library would free space."
-            : "Converting everything could free about \(ByteFormat.string(total)). Biggest groups: "
-                + lines.joined(separator: "; ")
+            : "Converting everything could free about \(ByteFormat.string(total)) across \(videos.formatted()) videos. "
+                + "Biggest groups, most savings first:\n" + lines.joined(separator: "\n")
         return AssistantToolOutput(text: text, title: "Estimated Savings", count: analysis.buckets.count, lines: lines)
     }
 
@@ -124,7 +141,7 @@ final class ConvertAssistantContext {
     func listQueue() throws -> AssistantToolOutput {
         let model = try model()
         let pending = model.queuedJobs
-        let lines = pending.prefix(10).map { job -> String in
+        let lines = pending.prefix(Self.listLimit).map { job -> String in
             let state: String
             if case .running(let progress) = job.state {
                 state = "converting, \(Int(progress * 100))%"
@@ -137,7 +154,7 @@ final class ConvertAssistantContext {
         let text =
             pending.isEmpty
             ? status + "The queue is empty."
-            : status + "\(pending.count) in the queue: " + lines.joined(separator: "; ")
+            : status + "\(pending.count) in the queue, first \(lines.count):\n" + lines.joined(separator: "\n")
         return AssistantToolOutput(text: text, title: "Listed Queue", count: pending.count, lines: lines)
     }
 
@@ -234,7 +251,7 @@ private struct SearchLibraryTool: AssistantTool {
     let context: ConvertAssistantContext
     var name: String { "search_library" }
     var summary: String {
-        "Finds videos in the library by name, year or size and lists the biggest. Returns a count and total size."
+        "Finds videos in the library by name, year or size. Returns the count, the total size and the biggest videos by name and size."
     }
     var parameters: [AssistantParameter] {
         [
@@ -253,7 +270,7 @@ private struct EstimateSavingsTool: AssistantTool {
     let context: ConvertAssistantContext
     var name: String { "estimate_savings" }
     var summary: String {
-        "Estimates how much space converting could free, by group of videos, each with an id like B1."
+        "Estimates how much space converting could free in total and by group of videos, each with an id like B1."
     }
     func run(_ arguments: AssistantArguments) async throws -> AssistantToolOutput { try await context.estimate() }
 }

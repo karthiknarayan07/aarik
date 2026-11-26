@@ -84,13 +84,25 @@ import Testing
         defer { rig.cleanUp() }
         await ask(rig)
         let result = try #require(rig.client.toolResults.first)
-        #expect(result.hasPrefix("2 videos, 1.5 GB in all."))
+        #expect(result.hasPrefix("Found 2 videos in total, 1.5 GB combined. All 2 are listed below"))
         #expect(result.contains("Beach 1.MOV") && !result.contains("Party"))
+        #expect(!result.contains("aren't listed") && !result.contains("more"))
+        #expect(result.contains("\n1. Beach") && result.contains("\n2. Beach"))
         guard case .toolCall(let call) = rig.chat.items[1].content else {
             Issue.record("expected a tool row")
             return
         }
         #expect(call.title == "Searched Library" && call.count == 2 && call.state == .done)
+    }
+
+    @Test func searchSaysHowManyAreNotListedOnlyWhenSome() async throws {
+        let many = (1...7).map { Self.asset("A/L0/00\($0)", name: "Clip \($0).MOV", megabytes: 100 + $0) }
+        let rig = try await rig(assets: many) { _ in [.tool("search_library")] }
+        defer { rig.cleanUp() }
+        await ask(rig)
+        let result = try #require(rig.client.toolResults.first)
+        #expect(result.hasPrefix("Found 7 videos in total"))
+        #expect(result.contains("5 are listed below") && result.hasSuffix("2 other videos aren't listed."))
     }
 
     @Test func searchFiltersBySizeAndSaysWhenNothingMatches() async throws {
@@ -100,8 +112,8 @@ import Testing
         defer { rig.cleanUp() }
         await ask(rig)
         #expect(rig.client.toolResults.count == 2)
-        #expect(rig.client.toolResults[0].hasPrefix("1 videos"))
-        #expect(rig.client.toolResults[1] == "No videos match.")
+        #expect(rig.client.toolResults[0].hasPrefix("Found 1 video in total"))
+        #expect(rig.client.toolResults[1] == "No videos found.")
     }
 
     // MARK: Savings
@@ -202,7 +214,7 @@ import Testing
         while !rig.chat.hasPendingConfirmation { await Task.yield() }
         rig.chat.cancel(try #require(rig.pendingCard).id)
         await rig.chat.waitUntilIdle()
-        #expect(rig.client.toolResults == ["The person chose not to go ahead. Nothing was changed."])
+        #expect(rig.client.toolResults == [AssistantChat.cancelledNote])
         #expect(rig.model.queuedJobs.isEmpty)
     }
 

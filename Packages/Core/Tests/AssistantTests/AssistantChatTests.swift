@@ -62,6 +62,19 @@ struct AssistantChatTests {
         #expect(chat.context?.title == "Beach Day.mov")
     }
 
+    @Test func theContextSurvivesRegenerate() async {
+        let client = ScriptedChatClient { _ in [.text("Because it is 4K.")] }
+        let chat = makeChat(client: client)
+        chat.setContext(ChatContext(title: "Beach Day.mov", details: "4K."))
+        chat.send("Why so big?")
+        await chat.waitUntilIdle()
+        chat.regenerate()
+        await chat.waitUntilIdle()
+        #expect(client.requests.count == 2)
+        #expect(client.requests.last?.instructions.contains("Beach Day.mov") == true)
+        #expect(chat.context?.title == "Beach Day.mov")
+    }
+
     @Test func noContextLeavesTheRulesAlone() async {
         let client = ScriptedChatClient { _ in [.text("Hi.")] }
         let chat = makeChat(client: client)
@@ -136,7 +149,7 @@ struct AssistantChatTests {
         #expect(tool.runCount == 0)
         guard case .confirmation(let card) = chat.items[1].content else { return }
         #expect(card.state == .cancelled)
-        #expect(client.toolResults == ["The person chose not to go ahead. Nothing was changed."])
+        #expect(client.toolResults == [AssistantChat.cancelledNote])
     }
 
     @Test func stopCancelsAWaitingConfirmation() async {
@@ -198,5 +211,85 @@ struct AssistantChatTests {
         #expect(card.state == .expired)
         chat.stop()
         await chat.waitUntilIdle()
+    }
+
+    @Test func aWaitingCardEndsGeneratingAndSendingAgainSetsItAside() async {
+        let tool = CountingTool(name: "queue_videos", requiresConfirmation: true)
+        let client = ScriptedChatClient { prompt in
+            prompt == "Convert them" ? [.tool("queue_videos")] : [.text("Sure.")]
+        }
+        let chat = makeChat(client: client, tools: [tool])
+        chat.send("Convert them")
+        while !chat.hasPendingConfirmation { await Task.yield() }
+        #expect(!chat.isGenerating)
+        chat.send("Never mind")
+        await chat.waitUntilIdle()
+        #expect(tool.runCount == 0)
+        guard case .confirmation(let card) = chat.items[1].content else { return }
+        #expect(card.state == .cancelled)
+        #expect(chat.items.last?.content == .assistant("Sure."))
+        #expect(!chat.isGenerating)
+    }
+
+    @Test func aRefusalIsRetriedOnceWithASimplerPrompt() async {
+        let client = ScriptedChatClient { _ in [.text("About 38 GB.")] }
+        client.failNext(.guardrail)
+        let chat = makeChat(client: client)
+        chat.send("How much could I save?")
+        await chat.waitUntilIdle()
+        #expect(client.requests.count == 2)
+        #expect(client.requests[1].instructions == AssistantChat.simpleInstructions)
+        #expect(client.requests[1].history.isEmpty)
+        #expect(chat.items.map(\.content) == [.user("How much could I save?"), .assistant("About 38 GB.")])
+    }
+
+    @Test func aSecondRefusalShowsTheNotice() async {
+        let client = ScriptedChatClient { _ in [.text("x")] }
+        client.failNext(.guardrail, .guardrail)
+        let chat = makeChat(client: client)
+        chat.send("Hi")
+        await chat.waitUntilIdle()
+        #expect(client.requests.count == 2)
+        #expect(chat.items.last?.content == .notice(AssistantChat.message(for: AssistantError.guardrail)))
+    }
+
+    @Test func regenerateReplacesTheLastReply() async {
+        let client = ScriptedChatClient { _ in [.text("Answer.")] }
+        let chat = makeChat(client: client)
+        chat.send("One")
+        await chat.waitUntilIdle()
+        let first = chat.items[1].id
+        #expect(chat.canRegenerate)
+        chat.regenerate()
+        await chat.waitUntilIdle()
+        #expect(chat.items.count == 2 && chat.items[1].id != first)
+        #expect(client.requests.count == 2 && client.requests[1].history.isEmpty)
+    }
+
+    @Test func retryAfterAnErrorAsksAgain() async {
+        let client = ScriptedChatClient { _ in [.text("Fine.")] }
+        client.failNext(.failed)
+        let chat = makeChat(client: client)
+        chat.send("Hi")
+        await chat.waitUntilIdle()
+        guard case .notice = chat.items.last?.content else {
+            Issue.record("expected a notice")
+            return
+        }
+        #expect(chat.canRegenerate)
+        chat.regenerate()
+        await chat.waitUntilIdle()
+        #expect(chat.items.map(\.content) == [.user("Hi"), .assistant("Fine.")])
+    }
+
+    @Test func aConfirmedActionCannotBeRegenerated() async {
+        let tool = CountingTool(name: "queue_videos", requiresConfirmation: true)
+        let client = ScriptedChatClient { _ in [.tool("queue_videos"), .text("Queued.")] }
+        let chat = makeChat(client: client, tools: [tool])
+        chat.send("Convert them")
+        while !chat.hasPendingConfirmation { await Task.yield() }
+        chat.confirm(chat.items[1].id)
+        await chat.waitUntilIdle()
+        #expect(!chat.canRegenerate)
     }
 }

@@ -132,7 +132,8 @@
             let content = VStack(alignment: .leading, spacing: 14) {
                 ForEach(chat.items) { item in
                     ChatItemView(
-                        item: item, chat: chat, isStreaming: chat.isGenerating && item.id == chat.items.last?.id)
+                        item: item, chat: chat, isStreaming: chat.isGenerating && item.id == chat.items.last?.id,
+                        isLast: item.id == chat.items.last?.id)
                 }
             }
             .padding(24)
