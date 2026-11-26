@@ -60,6 +60,12 @@ public enum ShrinkVideosOutcome: Sendable, Equatable {
         }
     }
 
+    /// The message with sentences about how the run differed from what was asked (a folder that wasn't available,
+    /// videos that couldn't be read).
+    public func message(adding notes: [String]) -> String {
+        ([message] + notes).joined(separator: " ")
+    }
+
     private static func queuedMessage(queued: Int, skipped: Int, wait: ShrinkVideosWait) -> String {
         var sentences: [String] = []
         if queued == 0 {

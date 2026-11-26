@@ -98,18 +98,19 @@ struct ShrinkVideosIntent: AppIntent {
             files: urls, quality: quality?.choice, format: format?.choice, destination: destination?.choice,
             folder: folder?.fileURL, dateRange: dateRange?.choice, resolution: resolution?.choice,
             source: source?.choice, waitForCompletion: waitForCompletion)
-        let outcome = await AppModel.shared.shrinkVideos(
+        let (outcome, notes) = await AppModel.shared.shrinkVideos(
             request, dataInputs: dataInputs, providedCount: given.count)
+        let message = outcome.message(adding: notes)
         switch outcome {
         case .needsVideos:
             throw $files.needsValueError("Which videos do you want to shrink?")
         case .photosAccessNeeded, .failed:
-            throw ShrinkVideosIntentError(message: outcome.message)
+            throw ShrinkVideosIntentError(message: message)
         case .nothingMatched:
-            return .result(value: [], dialog: IntentDialog(Self.resource(outcome.message)))
+            return .result(value: [], dialog: IntentDialog(Self.resource(message)))
         case .queued:
             let files = (outcome.outputs ?? []).map { IntentFile(fileURL: $0, filename: $0.lastPathComponent) }
-            return .result(value: files, dialog: IntentDialog(Self.resource(outcome.message)))
+            return .result(value: files, dialog: IntentDialog(Self.resource(message)))
         }
     }
 

@@ -1,4 +1,6 @@
+import AppCore
 import Foundation
+import os
 
 /// The app's own copies of videos that reached an action as data only (no file to point at). Each copy lives in
 /// `<directory>/<uuid>/<name>`. They are ours, never a user's file, so they are removed once their job has ended.
@@ -26,14 +28,18 @@ public struct StagedInputs: Sendable {
     /// Whether `url` is a copy made here.
     public func owns(_ url: URL) -> Bool { folder(of: url) != nil }
 
-    /// Removes the copy and its folder. Anything not made here is left alone.
+    /// Removes the copy itself, then its folder if that is now empty. Anything else in the folder (a file the app
+    /// didn't stage) is left, and so is the folder. A file not made here is left alone.
     public func remove(_ url: URL) {
         guard let folder = folder(of: url) else { return }
-        try? FileManager.default.removeItem(at: folder)
+        let file = folder.appending(path: url.lastPathComponent)
+        try? FileManager.default.removeItem(at: file)
+        removeIfEmpty(folder)
     }
 
-    /// Removes every copy whose folder none of `sources` is in: what a crash or an early quit left behind. A copy a
-    /// queued or running job still reads is kept.
+    /// Removes the copies nothing reads: a folder holding exactly one regular file (the staged copy) that none of
+    /// `sources` is in, or an empty folder. A folder holding anything else is left and logged: the app didn't put
+    /// it there. A copy a job still needs is kept.
     public func sweep(keeping sources: some Sequence<URL>) {
         let kept = Set(sources.compactMap { folder(of: $0)?.path })
         let children =
@@ -41,8 +47,50 @@ public struct StagedInputs: Sendable {
                 at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
         for child in children where UUID(uuidString: child.lastPathComponent) != nil {
             guard !kept.contains(child.resolvingSymlinksInPath().path) else { continue }
-            try? FileManager.default.removeItem(at: child)
+            let contents =
+                (try? FileManager.default.contentsOfDirectory(at: child, includingPropertiesForKeys: nil)) ?? []
+            if contents.isEmpty {
+                try? FileManager.default.removeItem(at: child)
+            } else if contents.count == 1, Self.isRegularFile(contents[0]) {
+                try? FileManager.default.removeItem(at: contents[0])
+                removeIfEmpty(child)
+            } else {
+                Self.log.notice("Left a staging folder that holds more than its copy")
+            }
         }
+    }
+
+    /// Whether a job in this state still needs its copy: it is waiting or running, or it failed and may be retried.
+    /// A finished, kept-as-is or removed job doesn't.
+    public static func isNeeded(by job: Job) -> Bool {
+        switch job.state {
+        case .queued, .running, .failed: true
+        case .completed, .keptAsIs: false
+        }
+    }
+
+    /// Removes the watched copies no job in `jobs` needs and returns the ones still watched. A job gone from the
+    /// list (cancelled, or a failed one removed) needs nothing.
+    public func release(watching copies: Set<URL>, jobs: [Job]) -> Set<URL> {
+        let needed = Set(jobs.filter(Self.isNeeded(by:)).map { $0.source.standardizedFileURL })
+        var remaining = copies
+        for copy in copies where !needed.contains(copy.standardizedFileURL) {
+            remove(copy)
+            remaining.remove(copy)
+        }
+        return remaining
+    }
+
+    private static let log = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "app", category: "staging")
+
+    private static func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
+    }
+
+    private func removeIfEmpty(_ folder: URL) {
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        if contents.isEmpty { try? FileManager.default.removeItem(at: folder) }
     }
 
     /// The uuid folder holding `url`, when `url` is a file directly inside one directly inside `directory`.

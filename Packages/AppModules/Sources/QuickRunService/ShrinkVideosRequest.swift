@@ -73,12 +73,12 @@ public enum ShrinkResolution: Sendable, Equatable, CaseIterable {
     }
 
     /// Whether a video of this size has the resolution, for one whose frame rate is unknown (`QualityBucket.unknown`):
-    /// the same short-side thresholds `QualityBucket` uses.
+    /// the resolution classes are the ones the quality buckets use.
     public func includes(pixelSize: CGSize) -> Bool {
-        let shortSide = min(pixelSize.width, pixelSize.height)
+        let resolution = ResolutionClass(shortSide: min(pixelSize.width, pixelSize.height))
         switch self {
-        case .uhd: return shortSide >= 2160
-        case .fullHD: return shortSide >= 1080 && shortSide < 2160
+        case .uhd: return resolution == .uhd
+        case .fullHD: return resolution == .fullHD
         }
     }
 }

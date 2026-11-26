@@ -25,11 +25,12 @@ extension AppModel {
     /// a selection.
     func shrinkVideos(
         _ request: ShrinkVideosRequest, dataInputs: [ShrinkDataInput] = [], providedCount: Int
-    ) async -> ShrinkVideosOutcome {
+    ) async -> (outcome: ShrinkVideosOutcome, notes: [String]) {
         intentRunHandler?()
         await waitUntilStarted()
         notifier.requestAuthorizationOnce()
         var request = request
+        var notes: [String] = []
         var staged: [URL] = []
         if !dataInputs.isEmpty {
             let inputs = stagedInputs
@@ -38,14 +39,19 @@ extension AppModel {
             }.value
             request.files += staged
             if !staged.isEmpty {
-                guard let folder = visibleOutputFolder() else {
+                guard let (folder, note) = visibleOutputFolder() else {
                     for url in staged { stagedInputs.remove(url) }
-                    return .failed(.folderUnavailable)
+                    return (.failed(.folderUnavailable), [])
                 }
                 request.redirectedFolder = folder
+                if let note { notes.append(note) }
             }
         }
-        if providedCount > 0, request.files.isEmpty { return .failed(.inputsUnreadable) }
+        if providedCount > 0, request.files.isEmpty { return (.failed(.inputsUnreadable), []) }
+        let dropped = providedCount - request.files.count
+        if dropped > 0 {
+            notes.append("Couldn't read \(dropped) of \(providedCount) videos.")
+        }
         let stagedCopies = Set(staged)
         let outcome = await shrinkVideosAction.perform(request) { [unowned self] receipt in
             if !receipt.queuedJobIDs.isEmpty, receipt.startedQueue { isQueuePaused = false }
@@ -61,25 +67,34 @@ extension AppModel {
         }
         // Nothing was queued at all (the run didn't start): nothing will read the copies.
         if case .queued = outcome {} else { for url in staged { stagedInputs.remove(url) } }
-        return outcome
+        return (outcome, notes)
     }
 
-    /// Where results of data-only videos go: the Settings save folder when one is set, else the user's Movies folder.
-    /// Outputs never overwrite (their names are made unique).
-    private func visibleOutputFolder() -> URL? {
-        let saved = AppSettings.defaultSaveLocation(defaults)
-        if saved.choice == .folder, let folder = saved.folder { return folder }
-        return FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first
-    }
-
-    /// Removes the copies no queued or running job reads any more (finished, failed, kept as is or cancelled). The
-    /// queue itself is asked, so a job just added is never missed.
-    func releaseStagedInputs() async {
-        let reading = Set(await queue.jobs.filter(\.state.isPending).map(\.source.standardizedFileURL))
-        for url in stagedWatch where !reading.contains(url.standardizedFileURL) {
-            stagedInputs.remove(url)
-            stagedWatch.remove(url)
+    /// Where results of data-only videos go: the Settings save folder when one is set and usable, else the user's
+    /// Movies folder, with a sentence saying so when the Settings folder was set but isn't available. Outputs never
+    /// overwrite (their names are made unique).
+    private func visibleOutputFolder() -> (URL, String?)? {
+        let wantsFolder = defaults.string(forKey: AppSettings.Keys.defaultSaveTo) == SaveLocation.Choice.folder.rawValue
+        var note: String?
+        if wantsFolder {
+            let saved = AppSettings.defaultSaveLocation(defaults)
+            var probe = SaveLocation()
+            if saved.choice == .folder, let folder = saved.folder, (try? probe.setFolder(folder)) != nil {
+                return (folder, nil)
+            }
+            note = "The save folder in Settings isn't available, so the videos went to Movies."
         }
+        guard let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        return (movies, note)
+    }
+
+    /// Removes the copies no job needs any more (finished, kept as is, cancelled, or a failed job taken out of the
+    /// queue); a failed job keeps its copy so Retry works. The queue itself is asked, so a job just added is never
+    /// missed.
+    func releaseStagedInputs() async {
+        stagedWatch = stagedInputs.release(watching: stagedWatch, jobs: await queue.jobs)
     }
 }
 

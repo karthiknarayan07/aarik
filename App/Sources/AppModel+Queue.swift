@@ -25,7 +25,7 @@ extension AppModel {
             alert = AppAlert(title: "Couldn't read the queue", message: loadError)
         }
         // Copies of action inputs that no waiting job reads are left over from a crash or quit.
-        let stillRead = await queue.jobs.filter(\.state.isPending).map(\.source)
+        let stillRead = await queue.jobs.filter(StagedInputs.isNeeded(by:)).map(\.source)
         let staged = stagedInputs
         await Task.detached(priority: .utility) { staged.sweep(keeping: stillRead) }.value
         // A queue created paused (auto-start off) waits for Resume.
