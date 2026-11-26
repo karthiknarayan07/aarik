@@ -40,6 +40,8 @@ struct SavingsSummary: Equatable {
 public struct SavingsHeader<Accessory: View>: View {
     let summary: SavingsSummary
     let accessory: Accessory
+    @ScaledMetric(relativeTo: .body) private var horizontalPadding: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var verticalPadding: CGFloat = 10
 
     public init(couldFree: Int64, totalBytes: Int64, availableCount: Int, @ViewBuilder accessory: () -> Accessory) {
         self.summary = SavingsSummary(couldFree: couldFree, totalBytes: totalBytes, availableCount: availableCount)
@@ -50,7 +52,7 @@ public struct SavingsHeader<Accessory: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 title
-                    .font(.title2.weight(.semibold))
+                    .font(.title3)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 12)
                 accessory
@@ -66,8 +68,8 @@ public struct SavingsHeader<Accessory: View>: View {
                 .truncationMode(.middle)
                 .accessibilityLabel(summary.detailForVoiceOver)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
     }
 
     @ViewBuilder private var title: some View {

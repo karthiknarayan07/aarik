@@ -1,54 +1,10 @@
 import AppUI
-import LocalLibrary
+import DownscaleVideo
 
-/// Where the sidebar points.
-enum SidebarDestination: Hashable, Sendable {
-    case overview
-    case photosVideos
-    case localFiles
-    case mediaType(MediaBadge)
-    case tool(String)
-    case queue
-    case completed
-    case keptAsIs
-    case failed
+/// Where the sidebar points: the video tool's pages.
+typealias SidebarDestination = VideoPage
 
-    /// Local Files and the media-type filters share the grid.
-    var showsLibrary: Bool {
-        switch self {
-        case .localFiles, .mediaType: true
-        default: false
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .overview: "Overview"
-        case .photosVideos: "Videos"
-        case .localFiles: "Local files"
-        case .mediaType(let badge): badge.displayName
-        case .tool(let id): ToolRegistry.tool(withID: id)?.title ?? "Tool"
-        case .queue: "Queue"
-        case .completed: "Completed"
-        case .keptAsIs: "Kept as is"
-        case .failed: "Failed"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .overview: "chart.pie"
-        case .photosVideos: "photo.on.rectangle"
-        case .localFiles: "folder"
-        case .mediaType(let badge): badge.systemImage
-        case .tool(let id): ToolRegistry.tool(withID: id)?.systemImage ?? "wrench.and.screwdriver"
-        case .queue: "list.bullet.rectangle"
-        case .completed: "checkmark.circle"
-        case .keptAsIs: "equal.circle"
-        case .failed: "exclamationmark.triangle"
-        }
-    }
-
+extension VideoPage {
     /// Placeholder content for the destinations that don't have a screen yet.
     @MainActor var emptyState: EmptyState {
         switch self {

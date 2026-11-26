@@ -5,7 +5,8 @@ import LocalLibrary
 import QuickLook
 import SwiftUI
 
-/// The Local Files screen: savings header, the grid, and a status line. Media-type filters reuse it.
+/// The Local Files screen: the grid under a savings header. Filters, counts and Share live in the toolbar and the
+/// subtitle. Media-type filters reuse it.
 struct LocalFilesView: View {
     @Bindable var model: AppModel
 
@@ -20,49 +21,11 @@ struct LocalFilesView: View {
                     LocalFilesWelcome(error: model.library.persistenceError) { model.isImporterPresented = true }
                 }
             } else {
-                VStack(spacing: 0) {
-                    SavingsHeader(
-                        couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
-                        availableCount: browser.snapshot.items.count(where: \.isAvailable)
-                    ) {
-                        PresetPicker("Quality preset", selection: $model.preset, options: Preset.allCases) {
-                            $0.displayName
-                        }
-                    }
-                    Divider()
-                    QualityFilterBar(browser: browser)
-                    Divider()
-                    if sections.isEmpty {
-                        // Only the empty state fills the middle; the header, filters and status line stay put.
-                        Group {
-                            if browser.quality.isActive && browser.search.isEmpty {
-                                NoMatchingVideos { browser.quality = QualityFilter() }
-                            } else {
-                                ContentUnavailableView.search(text: browser.search)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        MediaGrid(sections: sections, selection: $browser.selection, onSpace: model.toggleQuickLook) {
-                            item, isSelected in
-                            LibraryTile(
-                                item: item, isSelected: isSelected, thumbnails: model.thumbnailSource,
-                                presetOverride: model.presetOverrides.shownOverride(
-                                    for: item.id, default: model.preset)?.displayName
-                            )
-                            .contextMenu { TileMenu(model: model, item: item) }
-                        }
-                        .onDeleteCommand { model.removeSelectionFromLibrary() }
-                    }
-                    Divider()
-                    LibraryStatusLine(
-                        browser: model.browser, isScanning: model.library.isScanning, scanningLabel: "Scanning…",
-                        error: model.library.persistenceError)
-                }
+                content(browser: browser, sections: sections)
             }
         }
         .navigationTitle(model.selection?.title ?? "Local files")
-        .navigationSubtitle(filteredSummary)
+        .navigationSubtitle(subtitle)
         .toolbar { LocalFilesToolbar(model: model) }
         .assistantSearchable(
             search: model.assistant.localSearch, browser: browser, sidebarBadge: model.badgeFilter,
@@ -71,12 +34,60 @@ struct LocalFilesView: View {
         .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
     }
 
-    /// What the quality filters leave, for example "218 videos · 29.8 GB"; empty when none is set.
-    private var filteredSummary: String {
-        let browser = model.browser
-        guard browser.quality.isActive, !model.library.items.isEmpty else { return "" }
-        let snapshot = browser.snapshot
-        return VideoCount.summary(count: snapshot.items.count, bytes: snapshot.totalBytes)
+    @ViewBuilder
+    private func content(browser: LibraryBrowser, sections: [MediaSection<VideoItem>]) -> some View {
+        @Bindable var browser = browser
+        Group {
+            if sections.isEmpty {
+                // Only the empty state fills the middle; the header stays put.
+                Group {
+                    if browser.quality.isActive && browser.search.isEmpty {
+                        NoMatchingVideos { browser.quality = QualityFilter() }
+                    } else {
+                        ContentUnavailableView.search(text: browser.search)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                MediaGrid(
+                    sections: sections, selection: $browser.selection, name: \.name,
+                    dragFile: { $0.isAvailable ? $0.fileURL : nil },
+                    actions: MediaGridActions(open: model.openLocal, quickLook: model.toggleQuickLook)
+                ) { item, state in
+                    LibraryTile(
+                        item: item, state: state, thumbnails: model.thumbnailSource,
+                        presetOverride: model.presetOverrides.shownOverride(
+                            for: item.id, default: model.preset)?.displayName
+                    )
+                    .contextMenu { TileMenu(model: model, item: item) }
+                }
+                .onDeleteCommand { model.removeSelectionFromLibrary() }
+            }
+        }
+        // The header and a problem note sit in the system's bars, so the grid scrolls under them.
+        .safeAreaBar(edge: .top) {
+            SavingsHeader(
+                couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
+                availableCount: browser.snapshot.items.count(where: \.isAvailable)
+            ) {
+                PresetPicker("Quality preset", selection: $model.preset, options: Preset.allCases) {
+                    $0.displayName
+                }
+            }
+        }
+        .safeAreaBar(edge: .bottom) {
+            if let error = model.library.persistenceError { LibraryProblemNote(text: error) }
+        }
+    }
+
+    /// "218 of 1,203 videos · 29.8 GB · 3 selected, 1.2 GB"; what is still being read goes at the end.
+    private var subtitle: String {
+        guard !model.library.items.isEmpty else { return "" }
+        let badge = model.badgeFilter
+        let total = model.library.items.count { item in badge.map(item.badges.contains) ?? true }
+        return model.subtitle(
+            for: model.browser, total: total, selected: model.selectedItems,
+            activity: model.library.isScanning ? "Scanning…" : nil)
     }
 }
 
@@ -104,7 +115,7 @@ private struct LocalFilesWelcome: View {
                 "An original goes to the Trash only after a verified copy exists, and only if you choose Replace.",
             ]
         ) {
-            Button("Add files…", action: addFiles)
+            Button("Add Files…", action: addFiles)
                 .buttonStyle(.borderedProminent)
                 .help("Choose videos or folders, or drag them into this window")
         }
@@ -117,9 +128,11 @@ private struct TileMenu: View {
     let item: VideoItem
 
     var body: some View {
-        Button("Add to queue", systemImage: "plus") { model.addToQueue(clicked: item) }
+        Button("Add to Queue", systemImage: "plus") { model.addToQueue(clicked: item) }
             .disabled(!model.canAddToQueue(clicked: item))
         Divider()
+        Button("Open", systemImage: "arrow.up.forward.app") { model.openLocal(clicked: item) }
+            .disabled(!item.isAvailable)
         Button("Show in Finder", systemImage: "folder") {
             let urls = model.contextTargets(clicked: item).filter(\.isAvailable).compactMap(\.fileURL)
             NSWorkspace.shared.activateFileViewerSelecting(urls)
@@ -128,8 +141,12 @@ private struct TileMenu: View {
         // Space does the same for the selection (the grid's own key handling).
         Button("Quick Look", systemImage: "eye") { model.quickLook(clicked: item) }
             .disabled(!item.isAvailable)
+        ShareLink(items: model.shareURLs(clicked: item)) {
+            Label("Share…", systemImage: "square.and.arrow.up")
+        }
+        .disabled(!item.isAvailable)
         Divider()
-        Button("Remove from library", systemImage: "minus.circle") { model.removeFromLibrary(clicked: item) }
+        Button("Remove from Library", systemImage: "minus.circle") { model.removeFromLibrary(clicked: item) }
     }
 }
 
@@ -143,44 +160,25 @@ private struct NoMatchingVideos: View {
         } description: {
             Text("No videos here match these filters.")
         } actions: {
-            Button("Clear filters", action: clear)
+            Button("Clear Filters", action: clear)
         }
     }
 }
 
-/// Count and size of what's shown, the selection, and a progress or error note; shared by both libraries.
-struct LibraryStatusLine: View {
-    let browser: LibraryBrowser
-    let isScanning: Bool
-    let scanningLabel: String
-    let error: String?
+/// A read or save problem, as a quiet note above the bottom edge: the symbol carries the colour, the text doesn't.
+struct LibraryProblemNote: View {
+    let text: String
 
     var body: some View {
-        let snapshot = browser.snapshot
-        let selected = browser.selectedItems
-        HStack(spacing: 6) {
-            Text(summary(count: snapshot.items.count, bytes: snapshot.totalBytes))
-            if !selected.isEmpty {
-                Text(verbatim: "·")
-                Text("\(selected.count) selected, \(ByteFormat.string(selected.reduce(0) { $0 + $1.byteSize }))")
-            }
-            Spacer()
-            if isScanning {
-                ProgressView().controlSize(.small)
-                Text(scanningLabel)
-            }
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
-            }
+        Label {
+            Text(text).foregroundStyle(.secondary)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
         }
         .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 16)
+        .padding(.horizontal)
         .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-    }
-
-    private func summary(count: Int, bytes: Int64) -> String {
-        VideoCount.summary(count: count, bytes: bytes)
     }
 }
