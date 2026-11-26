@@ -100,9 +100,45 @@ The names are stable; `PipelineStage` is the list and a test pins it. Adding a s
   - **Who enforces it.** The 20 % rule is enforced locally, on the release Mac, as a step of the release checklist
     (`docs/RELEASING.md`). The CI job `performance-report` only runs the benchmark in Release, prints the numbers
     and uploads them as a JSON artifact (`PERF_REPORT_PATH`); hosted runners are too varied to hold a baseline.
-- Launch time: `Apps/macOS/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines; set "Max %
+- Launch time (Mac): `Apps/macOS/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines; set "Max %
   Regression" to 20, Xcode's default is 10) belongs in the `AppUITests` target of the `ui-tests` branch; the target is
   not on this branch, so it doesn't build yet. Running UI tests needs automation permission.
+
+## iOS performance
+
+- **Tests.** `Apps/iOS/UITests/PerformanceTests.swift` (XCTest UI tests, so `measure`, `XCTApplicationLaunchMetric`,
+  `XCTClockMetric`, `XCTMemoryMetric` and `XCTCPUMetric` apply):
+  - `testLaunch`: launch to the first screen, five iterations; the pass/fail time is the fastest.
+  - `testConversionThroughput`: one generated 4K HLG clip from Add to Queue until it shows in Completed, three
+    iterations, each from a fresh launch and library.
+  - Peak memory and CPU come from the app itself: a Debug-only sampler (`-uiTestingProbe <file>`, `PerformanceProbe`)
+    writes the process's peak physical footprint and CPU seconds every 100 ms, because a UI test process can't read them
+    from the app. The metrics above still run, so the result bundle shows them too.
+- **Baseline JSON.** `Apps/iOS/UITests/Baselines/baselines.json`, the same shape and the same 20 % rule as the Mac's
+  (memory gets 10 MB and CPU 0.5 s of room). It is keyed by simulated device and host core count
+  (`iPhone18,3/10`); a machine with no entry measures, prints and passes. Record one on a quiet Mac, then commit the file:
+  `scripts/ios-ui-tests.sh --record-perf`. Check against it: `scripts/ios-ui-tests.sh --perf`. The tests skip unless
+  `RUN_PERF_TESTS=1`. `BaselineGuardTests` covers the rule and runs with every UI test run.
+- **What the numbers mean.** The Simulator uses a software encoder on the Mac's CPU, so they catch regressions between
+  builds; they say nothing about an iPhone's speed or heat. Real-device numbers come from Instruments (below) on the
+  owner's iPhone.
+- **CI** builds the iOS app and runs the UI tests (not the performance tests) on one iPhone Simulator.
+
+### Instruments on an iPhone
+
+Profile a **Release** build on a real device (Product > Profile, or `xcodebuild ... -configuration Release` and Xcode's
+Instruments with the device selected). Use a short generated or test clip, never personal media. Record, change one
+thing, record again with the same clip.
+
+| Template | Use it to | What to look for |
+| --- | --- | --- |
+| Time Profiler | See where CPU goes during a conversion and while browsing | The main thread should be nearly idle during a run; engine work sits in `VideoDownscaler`/VideoToolbox frames on the encoder and blocking-read threads, not `body` of a SwiftUI view. Filter by the app's subsystem signposts (`read`, `transfer`, `encode`, `write`, `verify`). |
+| Allocations | Memory growth and leaks across a batch | Run 20 videos back to back: Mark Generation after each. Persistent growth per video is a leak; the share extension and the app must never hold a whole video in memory (steady state under about 150 MB; the extension's cap is much lower). |
+| Energy Log (Energy Efficiency) | Battery cost of a run and of idle | Idle must be near zero and the work must stop when the queue empties. Check CPU, thermal state and "Overhead" lanes during a 10-minute batch; compare Low Power Mode on and off. |
+| Hangs (and Animation Hitches) | Main-thread stalls | No hang over 250 ms while browsing the Photos grid, rotating, and during a run; the grid scrolls without hitches. |
+
+Also useful: Points of Interest (the same `Signposts` intervals as the Mac) and the Xcode Energy and Memory gauges for a
+quick look. Record any real-device numbers you act on in the commit message, as for the Mac.
 
 ## Rules of thumb for changes
 

@@ -59,6 +59,7 @@ final class IOSShell {
     }
 
     func start() async {
+        startPerformanceProbe()
         startWidgetSync()
         // A job left running by a crash or termination goes back to the queue when the queue loads; its partial
         // output lives in the Work folder, which is swept before anything starts.
@@ -121,9 +122,35 @@ final class IOSShell {
     /// Picks up videos the share extension or the App Intent staged in the App Group, and hands them to Convert.
     func pickUpStaged() {
         Task { [services, scene] in
+            #if DEBUG
+                if let store = IOSShell.testHandoffStore() {
+                    await StagedPickup.shared.pickUp(into: scene, services: services, store: store)
+                    return
+                }
+            #endif
             await StagedPickup.shared.pickUp(into: scene, services: services)
         }
     }
+
+    #if DEBUG
+        /// UI tests stage a hand-off into this folder (`-uiTestingHandoff <folder>`) instead of the App Group, which a
+        /// test process can't reach; the pickup is the same code path.
+        nonisolated static func testHandoffStore() -> StagedInputs? {
+            LaunchArguments.value(of: "-uiTestingHandoff", in: ProcessInfo.processInfo.arguments).map {
+                StagedInputs(directory: URL(filePath: $0, directoryHint: .isDirectory))
+            }
+        }
+
+        /// With `-uiTestingProbe <file>`, samples this process's memory and CPU into that file for the performance tests.
+        private func startPerformanceProbe() {
+            guard
+                let path = LaunchArguments.value(of: "-uiTestingProbe", in: ProcessInfo.processInfo.arguments)
+            else { return }
+            PerformanceProbe.shared.start(writingTo: URL(filePath: path))
+        }
+    #else
+        private func startPerformanceProbe() {}
+    #endif
 
     nonisolated static func supportDirectory() -> URL {
         #if DEBUG

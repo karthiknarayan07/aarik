@@ -53,6 +53,36 @@ jobs:
       - name: Verify (iOS)
         run: scripts/verify.sh --only ios
 
+  ios-ui-tests:
+    # The iOS unit tests and XCUITests on one iPhone Simulator (picked by UDID: iPhone 17 Pro if present, else the newest
+    # iPhone). Fixtures are generated clips added to the Simulator's own Photos library; nobody's media is involved.
+    # The performance tests are not run here (they need a quiet machine; see PERFORMANCE.md).
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -z "$newest" ]]; then
+            echo "No versioned Xcode found under /Applications" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+
+      - name: UI tests (iPhone)
+        run: scripts/ios-ui-tests.sh
+
+      - name: Upload the result bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ui-test-results
+          path: .build/ios-ui/results
+          if-no-files-found: ignore
+
   sanitizers:
     # Thread and address sanitizer runs of the package tests, one job each.
     runs-on: macos-26
