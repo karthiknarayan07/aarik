@@ -21,6 +21,15 @@ final class LiveActivityController {
 
     private var runBaselineFinished = 0
     private var runBaselineCompleted = 0
+    /// Watches the system's view of the current activity: if it ends one we still need, the next sync asks again.
+    private var stateWatchTask: Task<Void, Never>?
+    /// The user swiped this run's activity away: it stays away until the run is over.
+    private var userDismissedThisRun = false
+    /// A run is under way (set at its first sync, cleared when it ends), so a fresh activity requested in the middle
+    /// of it keeps the run's own baseline.
+    private var runInProgress = false
+    /// How many times the system ended this run's activity under us; a few fresh requests, then it stays ended.
+    private var systemEndsThisRun = 0
 
     init(services: AppServices) {
         self.observedServices = services
@@ -49,6 +58,14 @@ final class LiveActivityController {
                 self.sync(with: services)
             }
         }
+        // The first request can be answered before the "Allow Live Activities?" decision is in; when the person
+        // decides, start (or restart) at once instead of waiting for the next queue change.
+        Task { [weak self] in
+            for await _ in ActivityAuthorizationInfo().activityEnablementUpdates {
+                guard let self, let services = self.observedServices else { return }
+                self.sync(with: services)
+            }
+        }
         sync(with: services)
     }
 
@@ -58,6 +75,29 @@ final class LiveActivityController {
         endActivity(finalState: nil, dismissalPolicy: .immediate)
     }
 
+    /// The Live Activity's state for a run: the real stage (downloading from iCloud, or converting) with the run's
+    /// progress, or a pause for heat or a low battery. A pure function of the jobs, so it is tested without
+    /// ActivityKit.
+    static func makeState(
+        jobs: [Job], pause: QueuePause, runBaselineFinished: Int
+    ) -> ConvertActivityAttributes.ContentState {
+        let run = RunStatus(jobs: jobs, runBaselineFinished: runBaselineFinished)
+        let status: ConvertActivityAttributes.ContentState.Status =
+            switch pause.automatic {
+            case .thermal: .waitingThermal
+            case .batteryLow: .waitingBattery
+            case nil: run.isDownloading ? .downloading : .running
+            }
+        return ConvertActivityAttributes.ContentState(
+            itemsRemaining: run.itemsRemaining,
+            totalItems: run.totalItems,
+            progress: run.progress,
+            savedBytes: ActivitySummary(jobs: jobs).savedBytes,
+            status: status,
+            detail: run.detail
+        )
+    }
+
     func sync(with services: AppServices) {
         let summary = services.activity
         let pause = services.queuePause
@@ -65,12 +105,18 @@ final class LiveActivityController {
 
         // User paused: end immediately.
         if pause.isPausedByUser {
+            userDismissedThisRun = false
+            systemEndsThisRun = 0
+            runInProgress = false
             endActivity(finalState: nil, dismissalPolicy: .immediate)
             return
         }
 
         // Queue is idle: end with a summary if work completed, or immediately if cancelled.
         if summary.isIdle {
+            userDismissedThisRun = false
+            systemEndsThisRun = 0
+            runInProgress = false
             guard activeActivity != nil else { return }
             let completedInRun = max(0, summary.completed - runBaselineCompleted)
             let finishedInRun = max(0, totalFinished - runBaselineFinished)
@@ -91,32 +137,18 @@ final class LiveActivityController {
         }
 
         // Active run (or waiting on thermal/battery while items remain).
-        if activeActivity == nil {
+        if !runInProgress {
+            runInProgress = true
             runBaselineFinished = totalFinished
             runBaselineCompleted = summary.completed
         }
 
-        let finishedInRun = max(0, totalFinished - runBaselineFinished)
-        let totalItems = max(1, finishedInRun + summary.queue)
-        let runningFraction = summary.runningProgress ?? 0
-        let wholeProgress = min(max((Double(finishedInRun) + runningFraction) / Double(totalItems), 0), 1)
-
-        let status: ConvertActivityAttributes.ContentState.Status =
-            switch pause.automatic {
-            case .thermal: .waitingThermal
-            case .batteryLow: .waitingBattery
-            case nil: .running
-            }
-
-        let state = ConvertActivityAttributes.ContentState(
-            itemsRemaining: summary.queue,
-            totalItems: totalItems,
-            progress: wholeProgress,
-            savedBytes: summary.savedBytes,
-            status: status
-        )
+        // A queued or running video keeps the activity alive, whatever stage it is in: nothing below ends it.
+        let state = Self.makeState(
+            jobs: services.jobs, pause: pause, runBaselineFinished: runBaselineFinished)
 
         if activeActivity == nil {
+            guard !userDismissedThisRun, systemEndsThisRun <= 3 else { return }
             startActivity(with: state)
         } else {
             enqueueUpdate(state)
@@ -138,12 +170,47 @@ final class LiveActivityController {
         let attributes = ConvertActivityAttributes()
         let content = ActivityContent(state: state, staleDate: nil)
         do {
-            activeActivity = try Activity.request(attributes: attributes, content: content, pushType: nil)
+            let activity = try Activity.request(attributes: attributes, content: content, pushType: nil)
+            activeActivity = activity
             lastSentState = state
             lastUpdateAt = .now
             pendingState = nil
+            watch(activity)
         } catch {
             activeActivity = nil
+        }
+    }
+
+    /// The system can end an activity on its own (one requested before the "Allow Live Activities?" decision is
+    /// answered is ended when the answer arrives) or the person can swipe it away. Updates sent to an ended
+    /// activity go nowhere, so a run that is still going must notice: a system end clears the reference so the next
+    /// sync asks for a fresh one; a swipe is the person's choice and holds until the run is over.
+    private func watch(_ activity: Activity<ConvertActivityAttributes>) {
+        stateWatchTask?.cancel()
+        stateWatchTask = Task { [weak self] in
+            for await state in activity.activityStateUpdates {
+                guard let self, !Task.isCancelled else { return }
+                guard self.activeActivity?.id == activity.id else { return }
+                switch state {
+                case .dismissed:
+                    self.userDismissedThisRun = true
+                    self.activeActivity = nil
+                    self.lastSentState = nil
+                    self.lastUpdateAt = nil
+                    return
+                case .ended:
+                    self.systemEndsThisRun += 1
+                    self.activeActivity = nil
+                    self.lastSentState = nil
+                    self.lastUpdateAt = nil
+                    if self.systemEndsThisRun <= 3, let services = self.observedServices {
+                        self.sync(with: services)
+                    }
+                    return
+                default:
+                    continue
+                }
+            }
         }
     }
 
@@ -201,6 +268,8 @@ final class LiveActivityController {
         scheduledFlushTask = nil
         pendingState = nil
         guard let activity = activeActivity else { return }
+        stateWatchTask?.cancel()
+        stateWatchTask = nil
         activeActivity = nil
         lastSentState = nil
         lastUpdateAt = nil

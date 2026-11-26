@@ -49,7 +49,7 @@ final class AdaptiveLayoutTests: AppTestCase {
 
     func testRunningJobKeepsRunningThroughRotation() throws {
         launch()
-        queuePhotosFixture()
+        queuePhotosFixture(convertNow: true)
         open("Queue")
         XCTAssertTrue(runningProgress.waitForExistence(timeout: 180), "the job never started converting")
         let before = percent(in: runningProgress.label) ?? 0

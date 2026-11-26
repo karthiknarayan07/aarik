@@ -154,7 +154,7 @@
                 Button("Add Files…", systemImage: "plus") { model.perform(.addVideos) }
             case .queue:
                 Button(
-                    model.isQueuePaused ? "Resume Queue" : "Pause Queue",
+                    model.isQueuePaused ? (model.waitsForStart ? "Start Queue" : "Resume Queue") : "Pause Queue",
                     systemImage: model.isQueuePaused ? "play.fill" : "pause.fill"
                 ) {
                     model.perform(.pauseOrResumeQueue)

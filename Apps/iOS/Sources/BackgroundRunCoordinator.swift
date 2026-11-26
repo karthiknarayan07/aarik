@@ -93,38 +93,12 @@ final class BackgroundRunCoordinator {
             return
         }
 
-        let currentJob =
-            jobs.first {
-                if case .running = $0.state { return true }
-                return false
-            } ?? jobs.first { $0.state == .queued }
-
-        let progress: Double =
-            if case .running(let value) = currentJob?.state { value } else { 0 }
-
-        let runFinished = max(0, totalFinished - runBaselineFinished)
-        let runTotal = max(1, runFinished + summary.queue)
-        let itemIndex = min(runTotal, runFinished + 1)
-
-        let title = Self.displayTitle(for: currentJob)
-        let subtitle = Self.displaySubtitle(for: currentJob, itemIndex: itemIndex, totalItems: runTotal)
+        // The real stage in the system's own words for the task: "Converting 2 Videos" over "1 of 2 · Downloading from
+        // iCloud · 42%", then the conversion's progress.
+        let run = RunStatus(jobs: jobs, runBaselineFinished: runBaselineFinished)
+        let title = run.title
+        let subtitle = run.subtitle
+        let progress = run.progress
         coordinator.update(isRunning: true, title: title, subtitle: subtitle, progress: progress)
-    }
-
-    private static func displayTitle(for job: Job?) -> String {
-        guard let job else { return "Shrinking Video" }
-        if job.source.isFileURL {
-            let name = job.source.deletingPathExtension().lastPathComponent
-            if !name.isEmpty { return name }
-        }
-        return "Shrinking Video"
-    }
-
-    private static func displaySubtitle(for job: Job?, itemIndex: Int, totalItems: Int) -> String {
-        let countLabel = totalItems > 1 ? "Item \(itemIndex) of \(totalItems)" : "Shrinking video"
-        if let phase = job?.phase, !phase.isEmpty {
-            return totalItems > 1 ? "\(countLabel) — \(phase)" : phase
-        }
-        return countLabel
     }
 }

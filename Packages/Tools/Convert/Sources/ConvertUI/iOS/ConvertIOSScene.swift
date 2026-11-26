@@ -49,7 +49,9 @@
                 return nil
             }
             if !files.isEmpty {
+                // Shown in Files, and queued: the run starts only from the Queue's Start.
                 model.addFiles(files)
+                model.queueHandedOff(files)
             } else if inputs.contains(where: {
                 if case .photosAsset = $0 { return true }
                 return false

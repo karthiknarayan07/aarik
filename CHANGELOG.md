@@ -16,8 +16,13 @@ First public release.
   Completed inside Queue; a bar above the tabs shows the video converting now. The Overview leads with a savings ring
   and a headline such as "You've Freed 12.4 GB This Month", pinned cards with small charts, and trends charts that
   VoiceOver can read. Tapping a video opens its page with a zoom. Select works like Photos: tap or swipe across tiles,
-  then "Convert 3 Videos · Save 1.2 GB". Haptics mark selecting, a finished conversion and a pause for battery or heat.
+  then "Add to Queue" or "Convert Now". Haptics mark selecting, a finished conversion and a pause for battery or heat.
   Previews on long press, swipe actions and sheets with detents follow the system's own apps.
+- **iPhone runs start when you say so:** Add to Queue only queues; Convert Now queues and starts; the Queue has a
+  Start button with what the waiting videos would save. Videos handed over by the share sheet or Shortcuts wait in the
+  Queue too. A relaunch continues a run you had started, and never starts a queue you hadn't.
+- **iPhone Live Activity shows the real stage:** "Downloading from iCloud · 42%", then "Converting · 63%", under
+  "Converting 2 Videos", and it stays until the run is over.
 - **First launch:** three short screens say your videos stay on the device, ask for Photos access and explain the
   battery and heat rules. They show once and can be skipped.
 - **Overview charts:** a savings ring with a one-line insight, summary cards with small charts, and trend charts

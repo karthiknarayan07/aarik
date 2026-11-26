@@ -17,9 +17,26 @@ private func isolatedDefaults() -> UserDefaults {
 
 @MainActor
 private func makeServices(
-    directory: URL, defaults: UserDefaults = isolatedDefaults()
+    directory: URL, defaults: UserDefaults = isolatedDefaults(), autoStartDefault: Bool = true
 ) -> AppServices {
-    AppServices(directory: directory, defaults: defaults, photoStore: FakePhotoStore())
+    AppServices(
+        directory: directory, defaults: defaults, photoStore: FakePhotoStore(), autoStartDefault: autoStartDefault)
+}
+
+/// Runs until cancelled, so a test can look at a run that is under way.
+private struct EndlessRunner: JobRunner {
+    func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
+        try await Task.sleep(for: .seconds(60))
+        return .keptAsIs(reason: "done", code: .other)
+    }
+}
+
+private struct EndlessTool: Tool {
+    let id = "endless"
+    var title: String { "Endless" }
+    var systemImage: String { "hourglass" }
+    var jobKinds: [JobKind] { ["endless"] }
+    func runner(for kind: JobKind) -> (any JobRunner)? { EndlessRunner() }
 }
 
 private func job(tool: String, name: String) -> Job {
@@ -107,6 +124,102 @@ private struct InstantTool: Tool {
         #expect(await services.queue.isPaused())
     }
 
+    // MARK: iOS: a run starts only when the person starts it
+
+    @Test func withTheIOSDefaultAddingDoesNotStartTheQueue() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let services = makeServices(directory: directory, autoStartDefault: false)
+        services.register(InstantTool())
+        await services.start()
+        #expect(services.isQueuePaused)
+        await services.queue.enqueue([job(tool: "instant", name: "a")])
+        for _ in 0..<50 { await Task.yield() }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(services.jobs.map(\.state) == [.queued])
+        #expect(!services.activity.isIdle)
+        await services.prepareForTermination()
+    }
+
+    @Test func startQueueRunsWhatWaits() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let services = makeServices(directory: directory, autoStartDefault: false)
+        services.register(InstantTool())
+        await services.start()
+        await services.queue.enqueue([job(tool: "instant", name: "a")])
+        services.startQueue()
+        #expect(!services.isQueuePaused)
+        while services.activity.keptAsIs == 0 { await Task.yield() }
+        #expect(services.activity.keptAsIs == 1)
+        await services.prepareForTermination()
+    }
+
+    @Test func aFinishedRunPutsTheQueueBackToWaitingForStart() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = isolatedDefaults()
+        let services = makeServices(directory: directory, defaults: defaults, autoStartDefault: false)
+        services.register(InstantTool())
+        await services.start()
+        services.startQueue()
+        await services.queue.enqueue([job(tool: "instant", name: "a")])
+        while !services.isQueuePaused { await Task.yield() }
+        #expect(services.activity.keptAsIs == 1)
+        #expect(!SettingsStore(defaults).runActive)
+        // What is added next waits for Start again.
+        await services.waitForQueueCommands()
+        await services.queue.enqueue([job(tool: "instant", name: "b")])
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(services.jobs.last?.state == .queued)
+        await services.prepareForTermination()
+    }
+
+    @Test func queuedJobsDoNotStartAfterARelaunchWhenNoRunWasStarted() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = isolatedDefaults()
+        let first = makeServices(directory: directory, defaults: defaults, autoStartDefault: false)
+        first.register(InstantTool())
+        await first.start()
+        await first.queue.enqueue([job(tool: "instant", name: "a")])
+        await first.prepareForTermination()
+
+        let second = makeServices(directory: directory, defaults: defaults, autoStartDefault: false)
+        second.register(InstantTool())
+        #expect(second.isQueuePaused)
+        await second.start()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(second.jobs.map(\.state) == [.queued])
+        await second.prepareForTermination()
+    }
+
+    @Test func aRunThatWasStartedAndCutShortContinuesAfterARelaunch() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = isolatedDefaults()
+        let first = makeServices(directory: directory, defaults: defaults, autoStartDefault: false)
+        first.register(EndlessTool())
+        await first.start()
+        first.startQueue()
+        await first.queue.enqueue([job(tool: "endless", name: "a")])
+        while !first.jobs.contains(where: { if case .running = $0.state { true } else { false } }) {
+            await Task.yield()
+        }
+        // The run is remembered while it is under way.
+        #expect(SettingsStore(defaults).runActive)
+        await first.prepareForTermination()
+
+        let second = makeServices(directory: directory, defaults: defaults, autoStartDefault: false)
+        second.register(EndlessTool())
+        #expect(!second.isQueuePaused)
+        await second.start()
+        while !second.jobs.contains(where: { if case .running = $0.state { true } else { false } }) {
+            await Task.yield()
+        }
+        await second.prepareForTermination()
+    }
+
     @Test func theSpeedIsReadFromAndWrittenToTheSharedSettings() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -186,8 +299,21 @@ private struct InstantTool: Tool {
         #expect(SettingsStore.Keys.speed == "performance.speed")
     }
 
+    @Test func autoStartDefaultsToTheMacsOnAndIOSsOffUnlessTheUserChose() {
+        #expect(SettingsStore(isolatedDefaults(), autoStartDefault: true).autoStartQueue)
+        #expect(!SettingsStore(isolatedDefaults(), autoStartDefault: false).autoStartQueue)
+        #if os(iOS)
+            #expect(!SettingsStore(isolatedDefaults()).autoStartQueue)
+        #else
+            #expect(SettingsStore(isolatedDefaults()).autoStartQueue)
+        #endif
+        let chosen = SettingsStore(isolatedDefaults(), autoStartDefault: false)
+        chosen.defaults.set(true, forKey: SettingsStore.Keys.autoStartQueue)
+        #expect(chosen.autoStartQueue)
+    }
+
     @Test func defaultsAreOnAndBalancedAndAnUnknownSpeedFallsBack() {
-        let store = SettingsStore(isolatedDefaults())
+        let store = SettingsStore(isolatedDefaults(), autoStartDefault: true)
         #expect(store.autoStartQueue)
         #expect(store.speed == .balanced)
         store.defaults.set("warp", forKey: SettingsStore.Keys.speed)

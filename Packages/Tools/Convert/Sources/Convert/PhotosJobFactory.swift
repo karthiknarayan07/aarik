@@ -10,7 +10,8 @@ public enum PhotosJobFactory {
     /// used for a Photos job; `destination` is.
     public static func makeJobs(
         for videos: [(assetID: String, name: String, preset: Preset)], settings: ConvertJobSettings,
-        destination: PhotosDestination, lost: [String: [String]]? = nil, now: Date = Date()
+        destination: PhotosDestination, lost: [String: [String]]? = nil, savings: [String: Int64] = [:],
+        now: Date = Date()
     ) -> [Job] {
         videos.compactMap { video in
             var settings = settings
@@ -19,6 +20,7 @@ public enum PhotosJobFactory {
             settings.photosFileName = video.name
             settings.predictedLost = lost.map { $0[video.assetID] ?? [] }
             settings.predictedLostKeys = nil
+            settings.estimatedSavedBytes = savings[video.assetID]
             guard let encoded = try? JSONEncoder().encode(settings) else { return nil }
             return Job(
                 toolID: ConvertTool.photosToolID, source: PhotoAssetURL.url(for: video.assetID),

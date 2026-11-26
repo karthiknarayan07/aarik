@@ -59,13 +59,18 @@ final class TabsAndOnboardingTests: AppTestCase {
         let tile = tile(named: AppTestCase.photosFixture)
         XCTAssertTrue(tile.waitForExistence(timeout: 30))
         tile.tap()
-        let bar = app.buttons["convertSelection"].firstMatch
-        XCTAssertTrue(bar.waitForExistence(timeout: 10), "no Convert bar over the selection")
-        XCTAssertTrue(bar.label.hasPrefix("Convert 1 Video"), "the bar reads \(bar.label)")
-        bar.tap()
+        let convertNow = app.buttons["convertSelection"].firstMatch
+        XCTAssertTrue(convertNow.waitForExistence(timeout: 10), "no Convert Now over the selection")
+        XCTAssertEqual(convertNow.label, "Convert Now")
+        XCTAssertTrue(
+            element(labelContaining: "1 Video").exists, "the bar doesn't say what is selected")
+        let add = app.buttons["addSelectionToQueue"].firstMatch
+        XCTAssertTrue(add.exists, "no Add to Queue over the selection")
+        XCTAssertEqual(add.label, "Add to Queue")
+        add.tap()
         confirmLossIfAsked()
 
-        // The job waits (auto-start is off), and the tab bar's accessory shows it.
+        // Add to Queue only queues: the job waits, and the tab bar's accessory shows it.
         XCTAssertTrue(
             app.descendants(matching: .any)["jobAccessory"].firstMatch.waitForExistence(timeout: 15),
             "no queue accessory over the tab bar")

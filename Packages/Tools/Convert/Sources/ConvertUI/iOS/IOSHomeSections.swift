@@ -33,6 +33,11 @@
         }
 
         private var detail: String {
+            // Before the person taps Start the videos are ready, not paused.
+            if model.waitsForStart {
+                let count = model.activity.queue
+                return count == 1 ? "1 video ready to start" : "\(count) videos ready to start"
+            }
             if let pause = model.queuePause.statusText { return pause }
             if let progress { return "\(running?.phase ?? "Converting") · \(Int((progress * 100).rounded()))%" }
             let count = model.activity.queue
@@ -49,7 +54,7 @@
                             HStack {
                                 Label(
                                     running?.displayName ?? "Queue",
-                                    systemImage: model.queuePause.isPaused
+                                    systemImage: model.queuePause.isPaused && !model.waitsForStart
                                         ? "pause.circle.fill" : "arrow.triangle.2.circlepath"
                                 )
                                 .lineLimit(1)

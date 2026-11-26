@@ -69,6 +69,13 @@ public final class AppServices {
     @ObservationIgnored private var lastQueueCommand: Task<Void, Never>?
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
     @ObservationIgnored private var hasStarted = false
+    /// Set once the queue's first snapshot (the saved jobs) arrived.
+    @ObservationIgnored private var hasReceivedJobs = false
+    /// The last value written to `SettingsStore.runActive`, so each change is written once and the stored value is
+    /// replaced at the first snapshot whatever an earlier launch left.
+    @ObservationIgnored private var rememberedRunActive: Bool?
+    /// A started run has had work since it was started: when the work is gone the run is over.
+    @ObservationIgnored private var runHadWork = false
     /// Set once `start()` has finished; entry points that arrive earlier (an intent that launched the app) wait.
     @ObservationIgnored private var hasFinishedStarting = false
     @ObservationIgnored private var startWaiters: [CheckedContinuation<Void, Never>] = []
@@ -106,10 +113,11 @@ public final class AppServices {
 
     public init(
         directory: URL, defaults: UserDefaults = .standard, photoStore: any PhotoStore = PhotoKitStore(),
-        assistantClient: any LanguageModelClient = .real
+        assistantClient: any LanguageModelClient = .real,
+        autoStartDefault: Bool = SettingsStore.platformAutoStartDefault
     ) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let settings = SettingsStore(defaults)
+        let settings = SettingsStore(defaults, autoStartDefault: autoStartDefault)
         self.directory = directory
         self.defaults = defaults
         self.settings = settings
@@ -120,10 +128,12 @@ public final class AppServices {
         self.library = LibraryService(directory: directory, photoStore: photoStore)
         self.pendingDeletions = PendingDeletions(directory: directory)
         self.savingsStats = SavingsStatsCache(store: SwiftDataSavingsStatsStore(directory: directory))
-        // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause.
-        let autoStart = settings.autoStartQueue
-        self.isQueuePaused = !autoStart
-        self.queue = JobQueue(store: JobStore(directory: directory), runners: [:], startPaused: !autoStart)
+        // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause. A run the
+        // user started that was cut short (the app was killed while it ran) still continues: only a run nobody
+        // started waits for Start.
+        let runs = settings.autoStartQueue || settings.runActive
+        self.isQueuePaused = !runs
+        self.queue = JobQueue(store: JobStore(directory: directory), runners: [:], startPaused: !runs)
     }
 
     // MARK: Assistant
@@ -248,6 +258,12 @@ public final class AppServices {
         await lastQueueCommand?.value
     }
 
+    /// Starts the run: the queue works through what waits (Start, Convert Now).
+    public func startQueue() {
+        isQueuePaused = false
+        send { await $0.resume() }
+    }
+
     public func toggleQueuePaused() {
         let pause = !isQueuePaused
         isQueuePaused = pause
@@ -335,12 +351,21 @@ public final class AppServices {
     private func refreshQueuePause() {
         let pause = pressure.queueChanged(jobs: jobs, isPausedByUser: isQueuePaused)
         if queuePause != pause { queuePause = pause }
+        // Remembered only after the saved queue was read, so the launch's first pressure update can't clear it.
+        if hasReceivedJobs {
+            let active = !isQueuePaused && jobs.contains { $0.state.isPending }
+            if rememberedRunActive != active {
+                rememberedRunActive = active
+                settings.runActive = active
+            }
+        }
         relaunchGate.update(jobs: jobs, isQueuePaused: pause.isPaused)
     }
 
     // MARK: Queue updates
 
     private func receive(_ jobs: [Job]) {
+        hasReceivedJobs = true
         self.jobs = jobs
         refreshQueuePause()
         activity = ActivitySummary(jobs: jobs)
@@ -363,5 +388,22 @@ public final class AppServices {
             for observer in runObservers { observer(summary) }
         }
         if !stagedWatch.isEmpty { Task { await releaseStagedInputs() } }
+        endRunIfDone(jobs)
+    }
+
+    /// With auto-start off, a run that has worked through everything puts the queue back to waiting for Start, so
+    /// what is added next doesn't start by itself.
+    private func endRunIfDone(_ jobs: [Job]) {
+        guard !settings.autoStartQueue else { return }
+        let hasWork = jobs.contains { $0.state.isPending }
+        if isQueuePaused {
+            runHadWork = false
+        } else if hasWork {
+            runHadWork = true
+        } else if runHadWork {
+            runHadWork = false
+            isQueuePaused = true
+            send { await $0.pause() }
+        }
     }
 }

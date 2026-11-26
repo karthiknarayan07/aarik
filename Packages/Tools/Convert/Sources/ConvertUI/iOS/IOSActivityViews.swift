@@ -13,6 +13,9 @@
 
         var body: some View {
             let jobs = model.queuedJobs
+            let waitsForStart = model.waitsForStart
+            // Before Start the waiting videos say so; "Paused" is for a run the user paused.
+            let waitingText = waitsForStart ? "Ready to Start" : model.queuePause.statusText
             Group {
                 if jobs.isEmpty {
                     ContentUnavailableView {
@@ -28,7 +31,7 @@
                     List {
                         ForEach(jobs) { job in
                             IOSQueueRow(
-                                job: job, pauseText: model.queuePause.statusText,
+                                job: job, pauseText: waitingText,
                                 thumbnails: model.thumbnailSource.cache
                             ) {
                                 model.cancel(job)
@@ -43,35 +46,65 @@
                     .listStyle(.insetGrouped)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if !jobs.isEmpty && model.isQueuePaused {
+                    startButton(waitsForStart: waitsForStart)
+                }
+            }
             .navigationTitle("Queue")
             .navigationSubtitle(
                 JobListActions.subtitle(
-                    kind: .queue, count: jobs.count, savedBytes: 0, pauseText: model.queuePause.statusText)
+                    kind: .queue, count: jobs.count, savedBytes: 0, pauseText: waitingText)
             )
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        model.toggleQueuePaused()
-                    } label: {
-                        Label(
-                            model.isQueuePaused ? "Resume" : "Pause",
-                            systemImage: model.isQueuePaused ? "play.fill" : "pause.fill")
+                // While paused with videos waiting, the bottom button starts or resumes; the toolbar pauses a run.
+                if !(model.isQueuePaused && !jobs.isEmpty) {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            model.toggleQueuePaused()
+                        } label: {
+                            Label(
+                                model.isQueuePaused ? "Resume" : "Pause",
+                                systemImage: model.isQueuePaused ? "play.fill" : "pause.fill")
+                        }
+                        .contentTransition(.symbolEffect(.replace))
+                        .accessibilityIdentifier("pauseResume")
                     }
-                    .contentTransition(.symbolEffect(.replace))
-                    .sensoryFeedback(.impact, trigger: model.isQueuePaused)
-                    .accessibilityIdentifier("pauseResume")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button("Cancel All…", systemImage: "xmark.circle") { isConfirmingCancelAll = true }
                         .disabled(jobs.isEmpty)
                 }
             }
+            .sensoryFeedback(.impact, trigger: model.isQueuePaused)
             .confirmationDialog("Cancel All Conversions?", isPresented: $isConfirmingCancelAll) {
                 Button("Cancel All Conversions", role: .destructive) { model.cancelAll() }
                 Button("Keep Converting", role: .cancel) {}
             } message: {
                 Text("Waiting videos leave the queue and the current conversion stops. Originals aren't touched.")
             }
+        }
+    }
+
+    extension IOSQueueView {
+        /// Start (or Resume, after a pause) with what the waiting videos would save together.
+        fileprivate func startButton(waitsForStart: Bool) -> some View {
+            let saving = model.queuedSavingEstimate
+            return Button {
+                model.startQueue()
+            } label: {
+                Text(
+                    waitsForStart
+                        ? QueueButtonTitle.startTitle(saved: saving > 0 ? ByteFormat.string(saving) : nil)
+                        : "Resume"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
+            .padding(.horizontal)
+            .padding(.bottom, 4)
+            .accessibilityIdentifier("startQueue")
         }
     }
 

@@ -19,10 +19,10 @@ final class SettingsTests: AppTestCase {
     func testSettingsShowsTheIOSOptionsOnly() throws {
         launch()
         openSettings()
-        XCTAssertTrue(
-            app.switches.matching(NSPredicate(format: "label == 'Start the Queue Automatically'")).firstMatch
-                .waitForExistence(timeout: 5))
-        XCTAssertTrue(speedPicker.exists)
+        XCTAssertTrue(speedPicker.waitForExistence(timeout: 5))
+        // A run starts only from Convert Now or the Queue's Start, so there is no auto-start switch.
+        XCTAssertFalse(
+            app.switches.matching(NSPredicate(format: "label CONTAINS[c] 'Automatically'")).firstMatch.exists)
         XCTAssertFalse(element(labelContaining: "Check for Updates").exists)
         XCTAssertFalse(element(labelContaining: "Menu Bar").exists)
         XCTAssertFalse(element(labelContaining: "Trash").exists)

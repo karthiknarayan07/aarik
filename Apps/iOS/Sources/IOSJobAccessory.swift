@@ -41,6 +41,11 @@ private struct IOSJobAccessory: View {
     private var title: String { running?.displayName ?? "Queue" }
 
     private var detail: String {
+        // Before the person taps Start the videos are ready, not paused.
+        if model.waitsForStart {
+            let count = model.activity.queue
+            return count == 1 ? "1 video ready to start" : "\(count) videos ready to start"
+        }
         if let pause = model.queuePause.statusText { return pause }
         if let progress { return "\(running?.phase ?? "Converting") · \(Int((progress * 100).rounded()))%" }
         let count = model.activity.queue
@@ -56,8 +61,9 @@ private struct IOSJobAccessory: View {
                         .controlSize(.small)
                         .accessibilityHidden(true)
                 } else {
-                    Image(systemName: model.queuePause.isPaused ? "pause.circle.fill" : "clock.fill")
-                        .foregroundStyle(model.queuePause.isPaused ? .orange : .secondary)
+                    let paused = model.queuePause.isPaused && !model.waitsForStart
+                    Image(systemName: paused ? "pause.circle.fill" : "clock.fill")
+                        .foregroundStyle(paused ? .orange : .secondary)
                         .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 0) {

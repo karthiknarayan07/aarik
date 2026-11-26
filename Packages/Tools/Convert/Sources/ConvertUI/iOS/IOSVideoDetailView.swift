@@ -20,13 +20,20 @@
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
-                            model.requestAddSelectionToQueue()
+                            model.requestAddSelectionToQueue(startsQueue: false)
                         } label: {
                             Label(model.toolbarAddToQueueTitle, systemImage: "plus")
                         }
-                        .buttonStyle(.glassProminent)
                         .disabled(!model.canAddSelectionToQueue)
                         .accessibilityIdentifier("detail.addToQueue")
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Convert Now") {
+                            model.convertSelectionNow()
+                        }
+                        .buttonStyle(.glassProminent)
+                        .disabled(!model.canAddSelectionToQueue)
+                        .accessibilityIdentifier("detail.convertNow")
                     }
                 }
                 .sensoryFeedback(.success, trigger: model.activity.queue)

@@ -21,7 +21,7 @@ struct ConvertLiveActivity: Widget {
                         .foregroundStyle(.secondary)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(statusTitle(for: context.state.status))
+                    Text(statusTitle(for: context.state))
                         .font(.headline)
                         .lineLimit(1)
                 }
@@ -29,7 +29,12 @@ struct ConvertLiveActivity: Widget {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView(value: context.state.progress)
                             .tint(statusTint(for: context.state.status))
-                        if context.state.savedBytes > 0 {
+                        if !context.state.detail.isEmpty && context.state.status != .finished {
+                            Text(context.state.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        } else if context.state.savedBytes > 0 {
                             Text("Saved \(formattedBytes(context.state.savedBytes))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -53,7 +58,7 @@ struct ConvertLiveActivity: Widget {
         switch state.status {
         case .finished:
             Text("Done")
-        case .running, .waitingThermal, .waitingBattery:
+        case .running, .downloading, .waitingThermal, .waitingBattery:
             Text("\(state.itemsRemaining) left")
         }
     }
@@ -65,24 +70,20 @@ struct ConvertLiveActivity: Widget {
             Image(systemName: "checkmark")
         case .waitingThermal, .waitingBattery:
             Image(systemName: "pause.fill")
-        case .running:
+        case .running, .downloading:
             Text(state.progress, format: .percent.precision(.fractionLength(0)))
                 .monospacedDigit()
         }
     }
 
-    private func statusTitle(for status: ConvertActivityAttributes.ContentState.Status) -> String {
-        switch status {
-        case .running: "Shrinking Videos"
-        case .waitingThermal: "Paused to Cool Down"
-        case .waitingBattery: "Paused: Battery Low"
-        case .finished: "Finished Shrinking"
-        }
+    private func statusTitle(for state: ConvertActivityAttributes.ContentState) -> String {
+        LiveActivityText.title(for: state)
     }
 
     private func statusSymbol(for status: ConvertActivityAttributes.ContentState.Status) -> String {
         switch status {
         case .running: "film.stack"
+        case .downloading: "icloud.and.arrow.down"
         case .waitingThermal: "thermometer.high"
         case .waitingBattery: "battery.25"
         case .finished: "checkmark.circle.fill"
@@ -91,7 +92,7 @@ struct ConvertLiveActivity: Widget {
 
     private func statusTint(for status: ConvertActivityAttributes.ContentState.Status) -> Color {
         switch status {
-        case .running: .accentColor
+        case .running, .downloading: .accentColor
         case .waitingThermal, .waitingBattery: .orange
         case .finished: .green
         }
@@ -121,7 +122,7 @@ private struct LockScreenView: View {
                 .tint(progressTint)
 
             HStack {
-                if state.savedBytes > 0 {
+                if state.savedBytes > 0 && state.status == .finished {
                     Text("Saved \(ByteCountFormatter.string(fromByteCount: state.savedBytes, countStyle: .file))")
                 } else {
                     Text(subtitleText)
@@ -137,29 +138,15 @@ private struct LockScreenView: View {
         }
     }
 
-    private var titleText: String {
-        switch state.status {
-        case .running: "Shrinking Videos"
-        case .waitingThermal: "Paused to Cool Down"
-        case .waitingBattery: "Paused: Battery Low"
-        case .finished: "Finished Shrinking"
-        }
-    }
+    private var titleText: String { LiveActivityText.title(for: state) }
 
-    private var subtitleText: String {
-        switch state.status {
-        case .running: "Processing queue"
-        case .waitingThermal: "Waiting for device temperature to drop"
-        case .waitingBattery: "Waiting for charger or higher battery"
-        case .finished: "All videos processed"
-        }
-    }
+    private var subtitleText: String { LiveActivityText.subtitle(for: state) }
 
     private var countText: String {
         switch state.status {
         case .finished:
             state.totalItems == 1 ? "1 video" : "\(state.totalItems) videos"
-        case .running, .waitingThermal, .waitingBattery:
+        case .running, .downloading, .waitingThermal, .waitingBattery:
             "\(state.itemsRemaining) left"
         }
     }
@@ -167,6 +154,7 @@ private struct LockScreenView: View {
     private var symbolName: String {
         switch state.status {
         case .running: "film.stack"
+        case .downloading: "icloud.and.arrow.down"
         case .waitingThermal: "thermometer.high"
         case .waitingBattery: "battery.25"
         case .finished: "checkmark.circle.fill"
@@ -175,7 +163,7 @@ private struct LockScreenView: View {
 
     private var progressTint: Color {
         switch state.status {
-        case .running: .accentColor
+        case .running, .downloading: .accentColor
         case .waitingThermal, .waitingBattery: .orange
         case .finished: .green
         }

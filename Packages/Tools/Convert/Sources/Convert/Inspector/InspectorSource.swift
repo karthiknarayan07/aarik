@@ -29,11 +29,18 @@ public enum QueueButtonTitle {
         }
     }
 
-    /// The bar over the grid while selecting: "Convert 3 Videos · Save 1.2 GB" (the saving is left out when unknown).
-    public static func selectionTitle(count: Int, saved: String?) -> String {
-        let noun = count == 1 ? "Convert 1 Video" : "Convert \(count) Videos"
+    /// What the bar over the grid says while selecting: "3 Videos · Save 1.2 GB" (the saving is left out when
+    /// unknown). The bar's buttons, Add to Queue and Convert Now, say what happens to them.
+    public static func selectionSummary(count: Int, saved: String?) -> String {
+        let noun = count == 1 ? "1 Video" : "\(count) Videos"
         guard let saved else { return noun }
         return "\(noun) · Save \(saved)"
+    }
+
+    /// The Queue's Start button: "Start" with what the waiting videos would save together, when known.
+    public static func startTitle(saved: String?) -> String {
+        guard let saved else { return "Start" }
+        return "Start · Save \(saved)"
     }
 
     /// The toolbar button's title: short, in Title Case. "Add to Queue", or "Add 3 to Queue" for several.
