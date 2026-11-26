@@ -29,7 +29,7 @@ final class IOSShell {
     init(
         directory: URL = IOSShell.supportDirectory(),
         defaults: UserDefaults = .standard,
-        photoStore: any PhotoStore = PhotoKitStore()
+        photoStore: any PhotoStore = IOSShell.defaultPhotoStore()
     ) {
         #if DEBUG
             // UI tests of the introduction start from a launch that has never shown it (`-uiTestingFreshOnboarding`).
@@ -185,9 +185,28 @@ final class IOSShell {
         private func startPerformanceProbe() {}
     #endif
 
+    /// The real library, or in a Debug build with `-uiTestingFakePhotos <count>` a synthetic one of that many videos (the
+    /// scroll performance test).
+    nonisolated static func defaultPhotoStore() -> any PhotoStore {
+        #if DEBUG
+            if let count = LaunchArguments.value(of: "-uiTestingFakePhotos", in: ProcessInfo.processInfo.arguments)
+                .flatMap(Int.init), count > 0
+            {
+                return SyntheticPhotoStore(count: count)
+            }
+        #endif
+        return PhotoKitStore()
+    }
+
     nonisolated static func supportDirectory() -> URL {
         #if DEBUG
             if let folder = LaunchArguments.value(of: "-uiTesting", in: ProcessInfo.processInfo.arguments) {
+                // "@tmp": a folder in the app's own temporary directory, for a run on a device, where the test
+                // runner's folders are out of the app's reach.
+                if folder == "@tmp" {
+                    return FileManager.default.temporaryDirectory.appending(
+                        path: "ui-support", directoryHint: .isDirectory)
+                }
                 return URL(filePath: folder, directoryHint: .isDirectory)
             }
         #endif
