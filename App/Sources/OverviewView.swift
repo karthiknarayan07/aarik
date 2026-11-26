@@ -78,11 +78,13 @@ struct OverviewView: View {
                 photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
                 custom: model.advanced.spec, completed: completed)
             let shrunk = model.shrunkIDs(in: model.browser)
-            let buckets = await Self.groups(
+            let (buckets, undated) = await Self.groups(
                 photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
                 custom: model.advanced.spec, shrunk: shrunk)
             // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
-            if !Task.isCancelled { model.assistant.smartPicks.update(buckets: buckets, key: inputs) }
+            if !Task.isCancelled {
+                model.assistant.smartPicks.update(buckets: buckets, undatedCount: undated, key: inputs)
+            }
         }
         .task(id: picksTrigger) { await model.assistant.smartPicks.generateIfNeeded() }
     }
@@ -91,9 +93,13 @@ struct OverviewView: View {
     @concurrent private static func groups(
         photos: [VideoItem], files: [VideoItem], preset: Preset, overrides: PresetOverrides<UUID>,
         custom: DownscaleSpec?, shrunk: Set<UUID>
-    ) async -> [SavingsBucket] {
-        SavingsAnalyzer.buckets(
-            photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk)
+    ) async -> (buckets: [SavingsBucket], undated: Int) {
+        (
+            SavingsAnalyzer.buckets(
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk),
+            SavingsAnalyzer.undatedCount(
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk)
+        )
     }
 
     /// The estimates read every video's metadata, so they run off the main actor.
@@ -231,6 +237,7 @@ private struct SmartPicksGroup: View {
                             Text("Suggested on this Mac. Nothing is added until you choose.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                            UndatedNote(count: store.undatedCount)
                         }
                     } else {
                         HStack {
@@ -245,11 +252,12 @@ private struct SmartPicksGroup: View {
             } else {
                 OverviewGroup(title: "Biggest Groups") {
                     VStack(alignment: .leading) {
-                        ForEach(Array(store.buckets.prefix(Self.listedGroups).enumerated()), id: \.element.id) {
+                        ForEach(Array(store.buckets.prefix(Self.listedGroups).enumerated()), id: \.element.identity) {
                             index, bucket in
                             if index > 0 { Divider() }
                             BiggestGroupRow(bucket: bucket) { model.show(bucket) }
                         }
+                        UndatedNote(count: store.undatedCount)
                     }
                 }
             }
@@ -257,6 +265,23 @@ private struct SmartPicksGroup: View {
     }
 
     private static let listedGroups = 5
+}
+
+/// Videos left out of every group for want of a capture date; nothing when there are none.
+private struct UndatedNote: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(
+                count == 1
+                    ? "1 video without a capture date isn't in any group."
+                    : "\(count.formatted()) videos without a capture date aren't in any group."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
 }
 
 private struct SmartPickRow: View {

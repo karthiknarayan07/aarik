@@ -24,10 +24,8 @@ private func makeBuckets(_ count: Int) -> [SavingsBucket] {
     }
 }
 
-private func draft(_ id: String, title: String = "Shrink these first", why: String = "They take a lot of room.")
-    -> SmartPickDraft
-{
-    SmartPickDraft(title: title, why: why, bucketID: id)
+private func draft(_ id: String, why: String = "They take a lot of room.") -> SmartPickDraft {
+    SmartPickDraft(why: why, bucketID: id)
 }
 
 @Suite struct SmartPickerTests {
@@ -122,25 +120,36 @@ private func draft(_ id: String, title: String = "Shrink these first", why: Stri
         #expect(await empty.picks(from: buckets) == .fallback)
     }
 
-    @Test func titleAndWhyAreCleanedAndANumberTheModelInventedIsReplaced() async {
-        let long = String(repeating: "long ", count: 100)
+    @Test func theTitleIsAlwaysTheGroupsOwnAndAnInventedNumberInTheReasonIsReplaced() async {
         let answer = SmartPicks(picks: [
-            draft("B1", title: "  Big\n\n4K   group  ", why: "This could free about 70 GB from 400 videos."),
-            draft("B2", title: "", why: "This would free 900 GB."),
-            draft("B3", title: long, why: "540 videos"),
+            draft("B1", why: "Biggest 4K60 savings: this could free about 70 GB from 400 videos."),
+            draft("B2", why: "This would free 900 GB."), draft("B3", why: "540 videos"),
         ])
         let (picker, _) = picker(returning: answer)
         guard case .picks(let picks) = await picker.picks(from: buckets) else {
             Issue.record("expected picks")
             return
         }
-        #expect(picks[0].title == "Big 4K group")
-        #expect(picks[0].why == "This could free about 70 GB from 400 videos.")
-        // Empty title: the group's own. Invented number: the group's own facts.
-        #expect(picks[1].title == buckets[1].title)
+        // The model can't name a group: what the row says is what Show filters by.
+        #expect(picks.map(\.title) == buckets.prefix(3).map(\.title))
+        #expect(picks.map(\.id) == buckets.prefix(3).map(\.identity))
+        // "60" is not on B1's line (its quality is 4K30), so the sentence is replaced.
+        #expect(picks[0].why == SmartPicker.factualWhy(for: buckets[0]))
         #expect(picks[1].why == SmartPicker.factualWhy(for: buckets[1]))
-        #expect(picks[2].title.count <= SmartPicker.maximumTitleLength)
         #expect(picks[2].why == SmartPicker.factualWhy(for: buckets[2]))
+    }
+
+    @Test func aGroundedReasonIsKeptAndBucketIdentitiesDoNotDependOnRank() {
+        let list = makeBuckets(3)
+        #expect(Set(list.map(\.identity)).count == 3)
+        let moved = SavingsBucket(
+            id: "B9", quality: list[0].quality, year: list[0].year, library: list[0].library,
+            excludesShrunk: list[0].excludesShrunk, count: list[0].count, bytes: list[0].bytes,
+            couldFree: list[0].couldFree, itemIDs: [])
+        #expect(moved.identity == list[0].identity)
+        #expect(SmartPicker.isGrounded("This could free about 70 GB from 400 videos.", in: list[0]))
+        // A copy of the line is not a reason.
+        #expect(!SmartPicker.isGrounded(SmartPicker.line(for: list[0]), in: list[0]))
     }
 
     // MARK: Failure
@@ -209,17 +218,21 @@ private func draft(_ id: String, title: String = "Shrink these first", why: Stri
 
 @MainActor
 @Suite struct SmartPicksStoreTests {
-    private func rig(available: Bool = true, handler: FakeLanguageModelClient.Handler? = nil)
-        -> (SmartPicksStore, FakeLanguageModelClient)
-    {
+    private func rig(
+        available: Bool = true, debounce: Duration = .milliseconds(1), maximumStaleness: Duration = .seconds(60),
+        retryAfter: Duration = .seconds(300), handler: FakeLanguageModelClient.Handler? = nil
+    ) -> (SmartPicksStore, FakeLanguageModelClient) {
         let client = FakeLanguageModelClient(
             isAvailable: available,
             handler: handler ?? { _, _ in
-                SmartPicks(picks: [SmartPickDraft(title: "Start here", why: "It is big.", bucketID: "B1")])
+                SmartPicks(picks: [SmartPickDraft(why: "It is big.", bucketID: "B1")])
             }
         )
         let availability = AssistantAvailability(client: client, observesActivation: false)
-        return (SmartPicksStore(availability: availability, picker: SmartPicker(client: client)), client)
+        let store = SmartPicksStore(
+            availability: availability, picker: SmartPicker(client: client), debounce: debounce,
+            maximumStaleness: maximumStaleness, retryAfter: retryAfter)
+        return (store, client)
     }
 
     @Test func picksAreAskedForOnceAndKeptUntilTheKeyChanges() async {
@@ -239,7 +252,8 @@ private func draft(_ id: String, title: String = "Shrink these first", why: Stri
 
         // The library or the job outcomes changed: the key changes, so it asks again.
         store.update(buckets: makeBuckets(4), key: 2)
-        #expect(store.state == .idle)
+        // The picks stay on screen; they are refreshed in the background.
+        if case .picks = store.state {} else { Issue.record("picks were cleared") }
         await store.generateIfNeeded()
         #expect(client.callCount == 2)
         #expect(store.buckets.count == 4)
@@ -296,7 +310,7 @@ private func draft(_ id: String, title: String = "Shrink these first", why: Stri
         let calls = Counter()
         let (store, client) = rig { _, _ in
             if calls.next() == 1 { return try await probe.waitUntilCancelled() }
-            return SmartPicks(picks: [SmartPickDraft(title: "T", why: "W", bucketID: "B1")])
+            return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
         }
         store.update(buckets: makeBuckets(3), key: 1)
         let task = Task { await store.generateIfNeeded() }
@@ -312,11 +326,11 @@ private func draft(_ id: String, title: String = "Shrink these first", why: Stri
         if case .picks = store.state {} else { Issue.record("expected picks") }
     }
 
-    @Test func newGroupsWhileAskingDiscardTheOldAnswer() async {
+    @Test func newGroupsWhileTheFirstRequestRunsDiscardTheOldAnswer() async {
         let gate = Counter()
         let (store, _) = rig { _, _ in
             if gate.next() == 1 { try await Task.sleep(for: .milliseconds(150)) }
-            return SmartPicks(picks: [SmartPickDraft(title: "T", why: "W", bucketID: "B1")])
+            return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
         }
         store.update(buckets: makeBuckets(3), key: 1)
         let slow = Task { await store.generateIfNeeded() }
@@ -326,6 +340,144 @@ private func draft(_ id: String, title: String = "Shrink these first", why: Stri
         // The slow answer was for the old groups: it must not land on the new ones.
         #expect(store.state == .idle)
         #expect(store.buckets.count == 5)
+    }
+
+    @Test func shownPicksStayWhileTheGroupsChangeAndAreRefreshedAfterTheyAreQuiet() async {
+        let (store, client) = rig(debounce: .milliseconds(150)) { _, _ in
+            SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1"), SmartPickDraft(why: "W", bucketID: "B2")])
+        }
+        store.update(buckets: makeBuckets(4), key: 1)
+        await store.generateIfNeeded()
+        #expect(client.callCount == 1)
+
+        // Jobs finish: groups change three times in a row.
+        var refresh: Task<Void, Never>?
+        for key in 2...4 {
+            refresh?.cancel()
+            store.update(buckets: makeBuckets(4), key: key)
+            // Never a spinner or an empty state: the same two rows, immediately.
+            guard case .picks(let shown) = store.state else {
+                Issue.record("picks were replaced by \(store.state)")
+                return
+            }
+            #expect(shown.count == 2)
+            refresh = Task { await store.generateIfNeeded() }
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+        // Still inside the quiet period: the model was not asked again.
+        #expect(client.callCount == 1)
+        await refresh?.value
+        #expect(client.callCount == 2)
+        guard case .picks(let after) = store.state else {
+            Issue.record("expected picks")
+            return
+        }
+        #expect(after.count == 2)
+    }
+
+    @Test func aRefreshIsNotStarvedWhileTheGroupsKeepChanging() async {
+        let (store, client) = rig(debounce: .milliseconds(200), maximumStaleness: .milliseconds(300)) { _, _ in
+            SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
+        }
+        store.update(buckets: makeBuckets(3), key: 0)
+        await store.generateIfNeeded()
+        var refresh: Task<Void, Never>?
+        for key in 1...12 {
+            refresh?.cancel()
+            store.update(buckets: makeBuckets(3), key: key)
+            refresh = Task { await store.generateIfNeeded() }
+            try? await Task.sleep(for: .milliseconds(80))
+            if client.callCount > 1 { break }
+        }
+        // Changes came every 80 ms, faster than the 200 ms quiet period, yet the model was asked once the 300 ms
+        // cap passed, and only once.
+        #expect(client.callCount == 2)
+        await refresh?.value
+        #expect(client.callCount == 2)
+    }
+
+    @Test func aPickWhoseGroupIsGoneDisappearsAtOnceAndTheOthersTakeTheNewNumbers() async {
+        let (store, _) = rig(debounce: .seconds(30)) { _, _ in
+            SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1"), SmartPickDraft(why: "W", bucketID: "B2")])
+        }
+        let list = makeBuckets(4)
+        store.update(buckets: list, key: 1)
+        await store.generateIfNeeded()
+        guard case .picks(let first) = store.state, first.count == 2 else {
+            Issue.record("expected two picks")
+            return
+        }
+
+        // B1's group is gone; B2's group has moved to rank 1 with new numbers.
+        let b2 = list[1]
+        let moved = SavingsBucket(
+            id: "B1", quality: b2.quality, year: b2.year, library: b2.library, excludesShrunk: b2.excludesShrunk,
+            count: b2.count + 3, bytes: b2.bytes, couldFree: b2.couldFree + 1_000_000_000, itemIDs: [UUID()])
+        store.update(buckets: [moved] + list.dropFirst(2), key: 2)
+
+        guard case .picks(let now) = store.state else {
+            Issue.record("expected picks")
+            return
+        }
+        #expect(now.map(\.id) == [b2.identity])
+        #expect(now.first?.bucket == moved)
+        #expect(store.current(list[0]) == nil)
+        #expect(store.current(b2) == moved)
+        // The sentence stays only while it is true; "W" is not a sentence, so the group's own facts show.
+        #expect(now.first?.why == SmartPicker.factualWhy(for: moved))
+    }
+
+    @Test func whenEveryPickIsGoneThereIsNoOldRowLeft() async {
+        let (store, _) = rig { _, _ in SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")]) }
+        let list = makeBuckets(4)
+        store.update(buckets: list, key: 1)
+        await store.generateIfNeeded()
+        store.update(buckets: Array(list.dropFirst()), key: 2)
+        #expect(store.state == .idle)
+    }
+
+    @Test func aFailedFirstAnswerIsTriedAgainAfterAWhileButNotBefore() async {
+        let calls = Counter()
+        let (store, client) = rig(retryAfter: .milliseconds(120)) { _, _ in
+            if calls.next() == 1 { throw AssistantError.rateLimited }
+            return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
+        }
+        store.update(buckets: makeBuckets(3), key: 1)
+        await store.generateIfNeeded()
+        #expect(store.state == .fallback)
+        await store.generateIfNeeded()
+        #expect(client.callCount == 1)
+
+        try? await Task.sleep(for: .milliseconds(150))
+        await store.generateIfNeeded()
+        #expect(client.callCount == 2)
+        #expect(store.isShowingPicks)
+        if case .picks = store.state {} else { Issue.record("expected picks") }
+    }
+
+    @Test func aFailedRefreshKeepsThePicksShown() async {
+        let calls = Counter()
+        let (store, client) = rig { _, _ in
+            if calls.next() > 1 { throw AssistantError.guardrail }
+            return SmartPicks(picks: [SmartPickDraft(why: "W", bucketID: "B1")])
+        }
+        store.update(buckets: makeBuckets(3), key: 1)
+        await store.generateIfNeeded()
+        store.update(buckets: makeBuckets(3), key: 2)
+        await store.generateIfNeeded()
+        #expect(client.callCount == 2)
+        if case .picks = store.state {} else { Issue.record("picks were dropped") }
+        // Not asked again until the groups change again.
+        await store.generateIfNeeded()
+        #expect(client.callCount == 2)
+    }
+
+    @Test func theCountOfUndatedVideosIsKeptWithTheGroups() {
+        let (store, _) = rig()
+        store.update(buckets: makeBuckets(2), undatedCount: 12, key: 1)
+        #expect(store.undatedCount == 12)
+        store.update(buckets: makeBuckets(2), undatedCount: 0, key: 2)
+        #expect(store.undatedCount == 0)
     }
 }
 

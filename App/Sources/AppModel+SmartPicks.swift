@@ -8,6 +8,8 @@ extension AppModel {
     /// can remove. Works the same with or without the model: no model is involved. Whatever search or filters the
     /// page had are replaced, and nothing is selected.
     func show(_ bucket: SavingsBucket) {
+        // A row may be a refresh behind: act on the group as it is now, and on nothing if it is gone.
+        guard let bucket = assistant.smartPicks.current(bucket) else { return }
         let isPhotos = bucket.library == .photos
         let page = isPhotos ? photosBrowser : browser
         let search = isPhotos ? assistant.photosSearch : assistant.localSearch
@@ -20,7 +22,7 @@ extension AppModel {
 
     /// Whether "Add These to the Queue" can run: the page it adds from has somewhere to save the copies.
     func canAddToQueue(_ bucket: SavingsBucket) -> Bool {
-        guard !bucket.itemIDs.isEmpty else { return false }
+        guard let bucket = assistant.smartPicks.current(bucket), !bucket.itemIDs.isEmpty else { return false }
         return bucket.library == .photos
             ? photosSaveLocation.destination != nil : saveLocation.destination != nil
     }
@@ -29,7 +31,7 @@ extension AppModel {
     /// Replace confirmation, the loss sheet for videos that would lose something, then the queue. The model never
     /// queues anything itself; this runs only when the user presses the button.
     func addToQueue(_ bucket: SavingsBucket) {
-        guard canAddToQueue(bucket) else { return }
+        guard canAddToQueue(bucket), let bucket = assistant.smartPicks.current(bucket) else { return }
         show(bucket)
         (bucket.library == .photos ? photosBrowser : browser).selection = Set(bucket.itemIDs)
         requestAddSelectionToQueue()

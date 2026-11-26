@@ -145,4 +145,29 @@ import Testing
         #expect(bucket?.title == "4K30 from 2024")
         #expect(bucket?.detail.hasPrefix("Photos · 1 video · 800 MB · could free about") == true)
     }
+
+    @Test func aBucketsIdentityNamesItsGroupNotItsRank() {
+        let photos = [Self.photo(megabytes: 900, year: 2022), Self.photo(megabytes: 300, year: 2021)]
+        let first = Self.buckets(photos: photos)
+        // A bigger group arrives and takes rank 1: the others keep their identity but not their id.
+        let more = Self.buckets(photos: photos + [Self.photo(megabytes: 4000, year: 2020)])
+        #expect(first.map(\.identity) == ["photos-2022-4K30", "photos-2021-4K30"])
+        #expect(more.map(\.identity).dropFirst() == first.map(\.identity)[...])
+        #expect(first.first?.id == "B1" && more.first(where: { $0.year == 2022 })?.id == "B2")
+    }
+
+    @Test func undatedVideosThatCouldFreeSomethingAreCountedSeparately() {
+        let undated = Self.file(megabytes: 900, year: nil)
+        let shrunk = Self.file(megabytes: 900, year: nil)
+        let small = Self.file(megabytes: 4, year: nil, width: 1280, height: 720)
+        let missing = Self.file(megabytes: 900, year: nil, available: false)
+        let dated = Self.file(megabytes: 900)
+
+        let count = SavingsAnalyzer.undatedCount(
+            photos: [Self.photo(megabytes: 500, year: nil)], files: [undated, shrunk, small, missing, dated],
+            preset: .balanced, shrunk: [shrunk.id])
+
+        // The Photos video and the one undated file: not the shrunk, the small, the missing or the dated one.
+        #expect(count == 2)
+    }
 }

@@ -37,6 +37,10 @@ public struct SavingsBucket: Sendable, Equatable, Identifiable {
         self.itemIDs = itemIDs
     }
 
+    /// Names the group itself (quality, year, library), unlike `id`, which is its rank and changes when the
+    /// ranking does. Use it to follow a group across refreshes.
+    public var identity: String { "\(library == .photos ? "photos" : "files")-\(year)-\(quality.title)" }
+
     public var sourceName: String { library == .photos ? "Photos" : "Local Files" }
 
     /// "4K60 from 2024"
@@ -67,6 +71,24 @@ public enum SavingsAnalyzer {
         var bytes: Int64 = 0
         var couldFree: Int64 = 0
         var itemIDs: [UUID] = []
+    }
+
+    /// How many videos could free something but are in no bucket because they have no capture date (Local Files
+    /// that already have a finished conversion don't count).
+    public static func undatedCount(
+        photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
+        custom: DownscaleSpec? = nil, shrunk: Set<UUID> = []
+    ) -> Int {
+        var count = 0
+        for (library, items) in [(OverviewSummary.Library.photos, photos), (.localFiles, files)] {
+            for item in items where item.captureDate == nil && item.isAvailable {
+                if library == .localFiles, shrunk.contains(item.id) { continue }
+                let free = OverviewSummary.couldFree(
+                    item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+                if free > 0 { count += 1 }
+            }
+        }
+        return count
     }
 
     /// Every bucket that could free something, the biggest saving first. `shrunk` are the Local Files videos that
