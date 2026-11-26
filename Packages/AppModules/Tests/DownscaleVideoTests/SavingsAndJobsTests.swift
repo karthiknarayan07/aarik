@@ -56,7 +56,8 @@ import Testing
             #expect((row.savedFraction ?? 0) > 0)
         }
         let small = SavingsCalculator.estimates(byteSize: bytes(mbps: 3), inventory: inventory(size: "1280x720"))
-        #expect(small.first { $0.preset == .balanced }?.decision == .keptAsIs(reason: "Already small"))
+        #expect(
+            small.first { $0.preset == .balanced }?.decision == .keptAsIs(reason: "Already small", code: .alreadySmall))
         #expect(small.first { $0.preset == .balanced }?.estimatedBytes == nil)
     }
 

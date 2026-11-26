@@ -36,6 +36,26 @@ xattr -dr com.apple.quarantine /Applications/Aarik.app
 
 Because the signature changes with each release, macOS may ask you to grant Photos access again after an update.
 
+## Photos videos
+
+The Videos page lists the videos in your Photos library, in the same grid, filters and inspector as Local Files.
+
+- **Permission:** the first time you open the page, macOS asks whether the app may read your Photos library. Choose
+  Allow Access to Photos. If you chose "Limited", only the photos you picked are listed. You can change this later in
+  System Settings ▸ Privacy & Security ▸ Photos. Without access the page explains how to turn it on and nothing else
+  in the app is affected.
+- **Browsing never downloads:** listing, thumbnails, badges and filters use what Photos already has on this Mac. A
+  video is downloaded from iCloud only when its turn in the queue comes.
+- **iCloud space and timing:** if your originals live in iCloud Photos, each video is downloaded first (the queue shows
+  "Downloading from iCloud" with its own progress, and you can cancel it), then converted, then saved to Photos as a
+  new video with the same date, location, favorite and albums. Downloading is usually the longest step, so a large
+  batch takes a while on a slow connection. The Mac needs room for the download and the converted copy (the app checks
+  before it starts). Your original is untouched unless you choose Replace Original in Photos; then, once the new
+  video is saved and checked, Photos asks you to confirm before the originals move to Recently Deleted. iCloud space
+  comes back when Recently Deleted is emptied, or after 30 days.
+- **Frame rate and codec filters** read Photos' own index and need Full Disk Access for the app. Everything else works
+  without it.
+
 ## Quick runs
 
 A quick run shrinks videos in the background, without opening the window. It uses your saved defaults (Settings: Default

@@ -39,6 +39,7 @@ import Testing
         #expect(rig.pending.all.isEmpty)
         #expect(rig.workContents.isEmpty)
         #expect(outcome.notes == ["Saved to Photos as a new video"])
+        #expect(outcome.noteCodes == [.savedToPhotos])
     }
 
     @Test(.timeLimit(.minutes(5))) func theDownloadIsItsOwnPhaseWithItsOwnProgress() async throws {
@@ -125,6 +126,7 @@ import Testing
         #expect(outcome.output == PhotoAssetURL.url(for: "new-1"))
         #expect(!outcome.replacedOriginal)
         #expect(outcome.notes == ["Saved to Photos as a new video", "Original will move to Recently Deleted"])
+        #expect(outcome.noteCodes == [.savedToPhotos, .originalInRecentlyDeleted])
         #expect(rig.pending.all == [PendingDeletion(assetID: rig.asset.id, jobID: job.id, replacedBy: "new-1")])
         #expect(rig.store.deletedIDs.isEmpty)
         #expect(!rig.store.operations.contains { if case .delete = $0 { true } else { false } })
@@ -198,6 +200,7 @@ import Testing
         #expect(!outcome.isVerified)
         #expect(rig.pending.all.isEmpty)
         #expect(outcome.warnings.last == "The original was kept because the copy couldn't be verified")
+        #expect(outcome.warningCodes.last == .originalKeptNotVerified)
     }
 
     @Test(.timeLimit(.minutes(5))) func anOriginalEditedDuringTheRunIsKept() async throws {
@@ -217,6 +220,7 @@ import Testing
         let outcome = try #require(completed(state))
         #expect(rig.pending.all.isEmpty)
         #expect(outcome.warnings == ["The original changed during conversion"])
+        #expect(outcome.warningCodes == [.originalChangedDuringConversion])
     }
 
     // MARK: - Refusals and failures
@@ -226,7 +230,7 @@ import Testing
 
         let state = try await rig.runner().run(try rig.job()) { _ in }
 
-        #expect(state == .keptAsIs(reason: DownscalePlanner.spatialReason))
+        #expect(state == .keptAsIs(reason: DownscalePlanner.spatialReason, code: .spatialVideo))
         #expect(rig.store.inputRequests.isEmpty)
         #expect(rig.store.saves.isEmpty)
         #expect(rig.workContents.isEmpty)
@@ -355,7 +359,7 @@ import Testing
             source: rig.clip, byteSize: size, inventory: inventory, settings: settings, requireLossShown: true,
             outputFolder: { (rig.directory, {}) }, progress: { _ in })
 
-        guard case .keptAsIs(let reason) = result else {
+        guard case .keptAsIs(let reason, _) = result else {
             Issue.record("expected keptAsIs")
             return
         }
@@ -399,7 +403,7 @@ import Testing
         await Self.waitUntil(queue) { jobs in
             if case .failed = jobs.first?.state { true } else { false }
         }
-        guard case .failed(let reason) = await queue.jobs[0].state else { return }
+        guard case .failed(let reason, _) = await queue.jobs[0].state else { return }
         #expect(reason.hasPrefix("Couldn't download from iCloud"))
         #expect(rig.workContents.isEmpty)
 

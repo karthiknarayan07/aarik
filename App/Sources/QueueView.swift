@@ -29,7 +29,7 @@ struct QueueView: View {
         Group {
             if jobs.isEmpty {
                 SidebarDestination.queue.emptyState
-                    .action("Go to Local files") { model.selection = .localFiles }
+                    .action("Go to Local Files") { model.selection = .localFiles }
             } else {
                 List(selection: $selection) {
                     ForEach(jobs) { job in

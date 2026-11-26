@@ -62,7 +62,7 @@ struct PresetOption {
 
     func help(isCustom: Bool) -> String {
         if isCustom { return PresetControl(shared: estimate.preset, isCustom: true).help }
-        if case .keptAsIs(let reason) = estimate.decision { return reason }
+        if case .keptAsIs(let reason, _) = estimate.decision { return reason }
         return "Use the \(estimate.preset.displayName) preset"
     }
 
@@ -70,7 +70,7 @@ struct PresetOption {
     var spoken: String {
         guard let bytes = estimate.estimatedBytes else {
             let reason: String
-            if case .keptAsIs(let text) = estimate.decision { reason = ": \(text)" } else { reason = "" }
+            if case .keptAsIs(let text, _) = estimate.decision { reason = ": \(text)" } else { reason = "" }
             return "\(name), kept as is\(reason)"
         }
         let saved = Int(((estimate.savedFraction ?? 0) * 100).rounded())

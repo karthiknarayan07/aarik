@@ -118,7 +118,7 @@ private struct OutputSettings: View {
     var body: some View {
         Form {
             Section {
-                Picker("Save converted videos", selection: saveToChoice) {
+                Picker("Save Converted Videos", selection: saveToChoice) {
                     Text(SaveLocation.Choice.nextToOriginal.title).tag(SaveLocation.Choice.nextToOriginal)
                     Text(SaveLocation.Choice.folder.title).tag(SaveLocation.Choice.folder)
                 }
@@ -128,7 +128,7 @@ private struct OutputSettings: View {
             }
             Section {
                 Toggle(isOn: $keepOriginals) {
-                    Text("Keep a copy of originals")
+                    Text("Keep a Copy of Originals")
                     Text(
                         "Before Replace moves an original to the Trash, a copy is saved here. Nothing in the folder is "
                             + "overwritten.")

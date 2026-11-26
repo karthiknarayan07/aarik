@@ -84,9 +84,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             await model.start()
             routeLaunch()
         }
-        #if DEBUG
-            if PhotosSpike.isRequested { PhotosSpike.start() }
-        #endif
         // A drive coming or going changes which library files are there.
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {

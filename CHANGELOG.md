@@ -9,6 +9,14 @@ First public release.
 
 ### Added
 
+- **Photos videos:** a page for the videos in your Photos library, with the same grid, filters, presets and queue as
+  Local Files. Browsing never downloads from iCloud; a video is downloaded (with its own progress and a way to cancel)
+  only when its turn comes, and the converted copy is saved to Photos as a new video with the original's date,
+  location, favorite and albums. The Overview and the README explain the permission and the iCloud timing.
+- **Reasons are saved as codes:** each kept-as-is, failed, warning and note result now records a code beside its
+  sentence, so Why? explains a result from the code and never from the wording. Results saved by an earlier version
+  still open and read as "another detail". Errors from macOS are told by their kind, so the sentences are plain on a Mac
+  set to another language.
 - **More at home on the Mac:** a working Help menu (README, privacy, release notes, issues); the Dock icon shows a
   progress bar while a video converts and a badge for the videos waiting, and its menu pauses or resumes the queue,
   shows the Queue and adds videos; Edit ▸ Undo Remove from Library; View ▸ Group By and Sort By; a Go menu with

@@ -348,7 +348,7 @@ private func isQueued(_ job: Job) -> Bool { job.state == .queued }
     _ = await starts.next()
     _ = await starts.next()
     await runner.finish(jobs[0].id, .failure(Boom()))
-    await waitUntil(queue) { $0.first?.state == .failed(reason: "boom") }
+    await waitUntil(queue) { $0.first?.state == .failed(reason: "boom", code: .conversionFailed) }
     #expect(await queue.jobs.last.map(isRunning) == true)
     await runner.finish(jobs[1].id)
     await waitUntil(queue) { $0.last.map(isCompleted) == true }

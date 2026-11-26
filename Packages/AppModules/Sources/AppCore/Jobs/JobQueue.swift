@@ -310,7 +310,7 @@ public actor JobQueue {
 
     private func execute(_ job: Job) async -> Disposition {
         guard let runner = runners[job.toolID] else {
-            return .finished(.failed(reason: Self.noToolReason))
+            return .finished(.failed(reason: Self.noToolReason, code: .noToolForJob))
         }
         let id = job.id
         // Progress arrives in order through a stream that keeps only the newest value, so a fast runner never
@@ -357,22 +357,71 @@ public actor JobQueue {
             if Task.isCancelled { return .requeue }
             // The sentence for the user; the full error (domain, code, user info) only to the log.
             Self.log.error("Job \(id, privacy: .public) failed: \(String(describing: error), privacy: .private)")
-            return .finished(.failed(reason: Self.reason(for: error)))
+            let failure = Self.failure(for: error)
+            return .finished(.failed(reason: failure.reason, code: failure.code))
         }
     }
 
-    /// The sentence shown for a failure. A Swift error that isn't localized bridges to "The operation couldn't be
-    /// completed. (… error N.)", which names types and codes; it is replaced by a plain sentence.
     static let noToolReason = "No tool can run this job"
 
-    static func reason(for error: any Error) -> String {
-        let description = error.localizedDescription
-        if description.hasPrefix("The operation couldn\u{2019}t be completed")
-            || description.hasPrefix("The operation couldn't be completed")
-        {
-            return "The video couldn't be converted."
+    static let genericFailureReason = "The video couldn't be converted."
+
+    /// The sentence and the code for a failed run. The code is decided by what the error is (its type, or its domain
+    /// and code for a system error), never by its words, which the system translates. An error of the app's own
+    /// carries its code and its sentence. For a file error from Foundation the sentence is the system's own, in the
+    /// user's language, unless that is the generic "operation couldn't be completed (error N)" form, which names a
+    /// domain and a number; then it is one of ours. Anything else is the generic sentence.
+    static func failure(for error: any Error) -> (reason: String, code: OutcomeCode) {
+        if let coded = error as? any OutcomeCoded {
+            let sentence = (error as? any LocalizedError)?.errorDescription ?? genericFailureReason
+            return (sentence, coded.outcomeCode)
         }
-        return description
+        let nsError = error as NSError
+        let known = knownSystemFailure(domain: nsError.domain, code: nsError.code)
+        if [NSCocoaErrorDomain, NSPOSIXErrorDomain, NSURLErrorDomain].contains(nsError.domain) {
+            let own = nsError.localizedDescription
+            let readable = !own.isEmpty && !mentionsNumber(nsError.code, in: own)
+            return (readable ? own : known?.sentence ?? genericFailureReason, known?.code ?? .conversionFailed)
+        }
+        // A Swift error of ours or a library's that words itself keeps its sentence; a system error of another
+        // domain (AVFoundation, Photos, Core Media) is not shown in its own words, which are often the generic form.
+        if !isSystemDomain(nsError.domain), let sentence = (error as? any LocalizedError)?.errorDescription {
+            return (sentence, .conversionFailed)
+        }
+        return (known?.sentence ?? genericFailureReason, known?.code ?? .conversionFailed)
+    }
+
+    /// The kind of a few common system errors, by domain and code.
+    private static func knownSystemFailure(domain: String, code: Int) -> (sentence: String, code: OutcomeCode)? {
+        switch (domain, code) {
+        case (NSCocoaErrorDomain, CocoaError.fileNoSuchFile.rawValue),
+            (NSCocoaErrorDomain, CocoaError.fileReadNoSuchFile.rawValue),
+            (NSPOSIXErrorDomain, Int(ENOENT)):
+            return ("The original file is missing or the drive isn't connected.", .originalUnavailable)
+        case (NSCocoaErrorDomain, CocoaError.fileWriteOutOfSpace.rawValue), (NSPOSIXErrorDomain, Int(ENOSPC)):
+            return ("There isn't enough free space on this Mac.", .notEnoughSpace)
+        case (NSCocoaErrorDomain, CocoaError.fileWriteNoPermission.rawValue),
+            (NSCocoaErrorDomain, CocoaError.fileWriteVolumeReadOnly.rawValue),
+            (NSPOSIXErrorDomain, Int(EROFS)):
+            return ("The output folder can't be written to.", .outputFolderUnavailable)
+        case (NSCocoaErrorDomain, CocoaError.fileReadNoPermission.rawValue), (NSPOSIXErrorDomain, Int(EACCES)),
+            (NSPOSIXErrorDomain, Int(EPERM)):
+            return ("The app doesn't have permission to read or write a file this job needs.", .conversionFailed)
+        default:
+            return nil
+        }
+    }
+
+    /// Whether `text` holds `code` as a number of its own, as the generic "(Cocoa error 4.)" form does. A false
+    /// match only means the app's own sentence is shown instead.
+    private static func mentionsNumber(_ code: Int, in text: String) -> Bool {
+        text.range(of: "(?<![0-9])\(code)(?![0-9])", options: .regularExpression) != nil
+    }
+
+    /// Error domains the system owns (Foundation, AVFoundation, Photos, Core Media, Core Animation and the
+    /// reverse-DNS ones). A Swift error's domain is its type's name, which starts with a module name instead.
+    private static func isSystemDomain(_ domain: String) -> Bool {
+        ["NS", "AV", "PH", "CM", "CA", "kCF", "com.apple."].contains { domain.hasPrefix($0) }
     }
 
     private func apply(_ disposition: Disposition, to id: UUID) {

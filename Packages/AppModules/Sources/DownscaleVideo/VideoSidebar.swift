@@ -25,12 +25,12 @@ public enum VideoPage: Hashable, Sendable {
         switch self {
         case .overview: "Overview"
         case .photosVideos: "Videos"
-        case .localFiles: "Local files"
+        case .localFiles: "Local Files"
         case .mediaType(let badge): badge.displayName
         case .tool(let id): VideoSidebar.tool(withID: id)?.name ?? "Tool"
         case .queue: "Queue"
         case .completed: "Completed"
-        case .keptAsIs: "Kept as is"
+        case .keptAsIs: "Kept as Is"
         case .failed: "Failed"
         }
     }
@@ -95,7 +95,7 @@ public enum VideoSidebar {
         if !badges.isEmpty {
             sections.append(
                 ToolSidebarSection(
-                    title: "Media types",
+                    title: "Media Types",
                     items: badges.map { item(.mediaType($0), count: state.badgeCounts[$0] ?? 0) }))
         }
         sections.append(

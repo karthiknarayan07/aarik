@@ -1,46 +1,11 @@
 import AppCore
 import Foundation
 
-/// What a result's own words come to, as a closed set. The runners write reasons, warnings and notes as plain
-/// text that can carry a file name, a folder, a place or a value, so none of that text goes to the model. Each
-/// text is matched to one of these codes by the fixed phrases the app itself writes, and the model is given the
-/// code's own sentence. Text that matches nothing becomes `.other`, which carries no detail at all.
-enum OutcomeReason: String, CaseIterable, Sendable {
-    // Why a video was kept as it is, or failed.
-    case alreadySmall
-    case savesLittle
-    case spatialVideo
-    case lengthUnreadable
-    case formatCannotKeepDetails
-    case lossNotShownBeforeAdding
-    case unsupportedVideo
-    case conversionFailed
-    case originalUnavailable
-    case outputFolderUnavailable
-    case notEnoughSpace
-    case outputNameTaken
-    case iCloudDownloadFailed
-    case photosAccessDenied
-    case photosSaveFailed
-    case noToolForJob
-    case cancelled
-    // Warnings.
-    case unexpectedLoss
-    case unexpectedChange
-    case originalChangedDuringConversion
-    case originalKeptBackupFailed
-    case originalKeptCouldNotTrash
-    case originalKeptNotVerified
-    case originalKeptOtherReason
-    case notAddedToAlbums
-    // Notes.
-    case containerChanged
-    case nameChanged
-    case savedToPhotos
-    case originalInRecentlyDeleted
-    case originalGone
-    case other
-
+/// The sentence the model reads for each reason code. The runners write reasons, warnings and notes as plain text
+/// that can carry a file name, a folder, a place or a value, so none of that text goes to the model: a result
+/// carries a code beside each text (`OutcomeCode`), and the model is given the code's own sentence. A result saved
+/// before codes existed reads as `.other`, which carries no detail at all.
+extension OutcomeCode {
     /// The plain sentence the model reads for this code. Written here, never taken from the result.
     var sentence: String {
         switch self {
@@ -77,75 +42,6 @@ enum OutcomeReason: String, CaseIterable, Sendable {
         case .originalGone: "The original was no longer in Photos."
         case .other: "Another detail the app cannot describe."
         }
-    }
-
-    /// Phrases in the order they are tried: the first whose words are all in the text (lowercased, curly
-    /// apostrophes straightened) wins. These are the app's own wordings; a rewording only makes a result
-    /// `.other`, never leaks anything.
-    private static let table: [(OutcomeReason, [String])] = [
-        (.spatialVideo, ["spatial video"]),
-        (.lengthUnreadable, ["read the video's length"]),
-        (.lossNotShownBeforeAdding, ["would lose", "wasn't known when it was added"]),
-        (.formatCannotKeepDetails, ["file format can't keep"]),
-        (.savesLittle, ["less than 10%"]),
-        (.alreadySmall, ["already small"]),
-        (.unsupportedVideo, ["can't be converted yet"]),
-        (.originalChangedDuringConversion, ["original changed during"]),
-        (.originalKeptBackupFailed, ["original was kept because", "originals folder"]),
-        (.originalKeptBackupFailed, ["original was kept because", "for the backup"]),
-        (.originalKeptCouldNotTrash, ["original was kept because", "trash"]),
-        (.originalKeptNotVerified, ["original was kept because", "verified"]),
-        (.originalKeptOtherReason, ["original was kept because"]),
-        (.originalKeptOtherReason, ["kept the original because"]),
-        (.originalKeptOtherReason, ["limited photos access"]),
-        (.notAddedToAlbums, ["albums"]),
-        (.photosSaveFailed, ["add the video to photos"]),
-        (.photosSaveFailed, ["didn't check out"]),
-        (.iCloudDownloadFailed, ["download from icloud"]),
-        (.originalUnavailable, ["drive isn't connected", "original"]),
-        (.outputFolderUnavailable, ["output folder"]),
-        (.originalUnavailable, ["no longer in your photos library"]),
-        (.photosAccessDenied, ["photos library isn't allowed"]),
-        (.notEnoughSpace, ["free space"]),
-        (.outputNameTaken, ["free output name"]),
-        (.outputNameTaken, ["already exists, so nothing was saved"]),
-        (.noToolForJob, ["no tool can run"]),
-        (.cancelled, ["cancelled"]),
-        (.conversionFailed, ["couldn't be converted"]),
-        (.conversionFailed, ["encoder stopped responding"]),
-        (.unexpectedChange, [" changed from "]),
-        (.unexpectedLoss, [" is lost"]),
-        (.containerChanged, ["can't hold all of its tracks"]),
-        (.nameChanged, ["saved as", "because"]),
-        (.savedToPhotos, ["saved to photos"]),
-        (.originalInRecentlyDeleted, ["recently deleted"]),
-        (.originalGone, ["no longer in photos"]),
-    ]
-
-    /// The code of `text`. `names` are the job's own file names (with and without extension): they are taken out
-    /// of the text first, so a file called "Cancelled trip.mov" can't decide the category. When several rows match,
-    /// the most specific one wins (the most matched characters); a tie goes to the earlier row.
-    static func classify(_ text: String, removing names: [String] = []) -> OutcomeReason {
-        var lowered = normalized(text)
-        let cleaned = names.map(normalized).filter { !$0.isEmpty }
-        let stems = cleaned.map { ($0 as NSString).deletingPathExtension }.filter { $0.count >= 2 }
-        for name in cleaned.sorted(by: { $0.count > $1.count }) {
-            lowered = lowered.replacingOccurrences(of: name, with: " ")
-        }
-        for stem in Set(stems).sorted(by: { $0.count > $1.count }) {
-            let pattern = #"(?<![\p{L}\p{N}])"# + NSRegularExpression.escapedPattern(for: stem) + #"(?![\p{L}\p{N}])"#
-            lowered = lowered.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
-        }
-        var best: (reason: OutcomeReason, score: Int)?
-        for (reason, words) in table where words.allSatisfy(lowered.contains) {
-            let score = words.reduce(0) { $0 + $1.count }
-            if best == nil || score > best?.score ?? 0 { best = (reason, score) }
-        }
-        return best?.reason ?? .other
-    }
-
-    private static func normalized(_ text: String) -> String {
-        text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
     }
 }
 

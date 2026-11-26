@@ -53,7 +53,7 @@ private struct LossRow: View {
                     .font(.caption)
             }
             Spacer()
-            Toggle("Skip this video", isOn: $entry.skip)
+            Toggle("Skip This Video", isOn: $entry.skip)
                 .toggleStyle(.checkbox)
                 .accessibilityLabel("Skip \(entry.name)")
         }

@@ -19,7 +19,7 @@ struct LibraryInspector: View {
         let items = model.selection?.showsLibrary == true ? model.selectedItems : []
         if items.isEmpty {
             EmptyState(
-                "No selection", systemImage: "rectangle.dashed",
+                "No Selection", systemImage: "rectangle.dashed",
                 message: "Select videos to see what converting them would save.")
         } else {
             Form {

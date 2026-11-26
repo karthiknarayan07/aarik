@@ -124,7 +124,7 @@ private struct VideoDetail: View {
                 page.emptyState
                     .navigationTitle(page.title)
             case nil:
-                EmptyState("Nothing selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar.")
+                EmptyState("Nothing Selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar.")
                     .navigationTitle(AppModel.displayName)
             }
         }

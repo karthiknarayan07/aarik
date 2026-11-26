@@ -238,6 +238,7 @@ private struct WatchingStore: PhotoStore {
         PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalChanged.message)
 
         #expect(outcome.warnings == ["Kept the original because it changed after shrinking"])
+        #expect(outcome.warningCodes == [.originalKeptOtherReason])
         #expect(!outcome.notes.contains("Original will move to Recently Deleted"))
         #expect(!outcome.replacedOriginal)
 
@@ -254,6 +255,7 @@ private struct WatchingStore: PhotoStore {
         PhotosDownscaleRunner.markOriginalGone(&outcome)
 
         #expect(outcome.notes == ["Original no longer in Photos"])
+        #expect(outcome.noteCodes == [.originalGone])
         #expect(!outcome.replacedOriginal)
     }
 
@@ -261,12 +263,14 @@ private struct WatchingStore: PhotoStore {
         var outcome = JobOutcome(
             output: PhotoAssetURL.url(for: "new-1"), bytesBefore: 100, bytesAfter: 40, report: MetadataReport(),
             replacedOriginal: false,
-            notes: ["Saved to Photos as a new video", "Original will move to Recently Deleted"])
+            notes: ["Saved to Photos as a new video", "Original will move to Recently Deleted"],
+            noteCodes: [.savedToPhotos, .originalInRecentlyDeleted])
 
         PhotosDownscaleRunner.markOriginalMoved(&outcome)
         PhotosDownscaleRunner.markOriginalMoved(&outcome)
 
         #expect(outcome.replacedOriginal)
         #expect(outcome.notes == ["Saved to Photos as a new video", "Original moved to Recently Deleted"])
+        #expect(outcome.noteCodes == [.savedToPhotos, .originalInRecentlyDeleted])
     }
 }

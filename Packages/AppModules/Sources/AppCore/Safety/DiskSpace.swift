@@ -173,3 +173,7 @@ public struct DiskSpaceCheck: Sendable {
         return overflow ? Int64.max : sum
     }
 }
+
+extension NotEnoughSpaceError: OutcomeCoded {
+    public var outcomeCode: OutcomeCode { .notEnoughSpace }
+}

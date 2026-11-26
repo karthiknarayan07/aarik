@@ -14,14 +14,14 @@ import Testing
     @Test func sectionsAndItemsKeepTheirOrderAndTitles() {
         let sections = VideoSidebar.sections(state())
         #expect(sections.map(\.title) == ["Library", "Tools", "Activity"])
-        #expect(sections[0].items.map(\.title) == ["Overview", "Videos", "Local files"])
+        #expect(sections[0].items.map(\.title) == ["Overview", "Videos", "Local Files"])
         #expect(sections[1].items.map(\.title) == ["Downscale Video", "Convert Image", "PDF Tools"])
-        #expect(sections[2].items.map(\.title) == ["Queue", "Completed", "Kept as is", "Failed"])
+        #expect(sections[2].items.map(\.title) == ["Queue", "Completed", "Kept as Is", "Failed"])
     }
 
     @Test func mediaTypesAppearOnlyWhenPresentInBadgeOrder() {
         let sections = VideoSidebar.sections(state(badges: [.sdr: 2, .k4: 5]))
-        #expect(sections.map(\.title) == ["Library", "Media types", "Tools", "Activity"])
+        #expect(sections.map(\.title) == ["Library", "Media Types", "Tools", "Activity"])
         #expect(sections[1].items.map(\.title) == ["4K", "SDR"])
         #expect(sections[1].items.map(\.count) == [5, 2])
         #expect(sections[1].items.map(\.destination) == [.mediaType(.k4), .mediaType(.sdr)])

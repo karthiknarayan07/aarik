@@ -1,3 +1,4 @@
+import AppCore
 import Foundation
 
 /// A Photos video fetched into the work folder, ready to convert.
@@ -25,6 +26,8 @@ public enum PhotoFetchError: Error, Sendable, Equatable, LocalizedError {
     /// what PhotoKit said, for the log.
     case downloadFailed(underlying: String)
     case cancelled
+    /// Access to the Photos library is not allowed.
+    case notAuthorized
     /// Any other reason Photos could not give the video.
     case failed(String)
 
@@ -33,6 +36,7 @@ public enum PhotoFetchError: Error, Sendable, Equatable, LocalizedError {
         case .notInLibrary: "No longer in your Photos library"
         case .downloadFailed: "Couldn't download from iCloud. Check that you're online and try again."
         case .cancelled: "Cancelled"
+        case .notAuthorized: "Access to Photos is not allowed. Turn it on in System Settings, then try again."
         case .failed(let reason): "Couldn't get the video from Photos: \(reason)"
         }
     }
@@ -133,7 +137,20 @@ public struct PhotoInputFetcher: Sendable {
         case .notInLibrary: return .notInLibrary
         case .downloadFailed(let reason): return .downloadFailed(underlying: reason)
         case .unavailable(let reason): return .failed(reason)
-        case .notAuthorized, nil: return .failed(error.localizedDescription)
+        case .notAuthorized: return .notAuthorized
+        case nil: return .failed(error.localizedDescription)
+        }
+    }
+}
+
+extension PhotoFetchError: OutcomeCoded {
+    public var outcomeCode: OutcomeCode {
+        switch self {
+        case .notInLibrary: .originalUnavailable
+        case .downloadFailed: .iCloudDownloadFailed
+        case .cancelled: .cancelled
+        case .notAuthorized: .photosAccessDenied
+        case .failed: .originalUnavailable
         }
     }
 }

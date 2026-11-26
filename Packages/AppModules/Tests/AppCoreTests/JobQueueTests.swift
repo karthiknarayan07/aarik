@@ -159,8 +159,8 @@ private func waitUntil(
     await waitUntil(queue) { $0.allSatisfy { if case .failed = $0.state { true } else { false } } }
 
     let jobs = await queue.jobs
-    #expect(jobs[0].state == .failed(reason: "boom happened"))
-    #expect(jobs[1].state == .failed(reason: "The video couldn't be converted."))
+    #expect(jobs[0].state == .failed(reason: "boom happened", code: .conversionFailed))
+    #expect(jobs[1].state == .failed(reason: "The video couldn't be converted.", code: .conversionFailed))
 }
 
 /// A Cocoa error reads as its sentence, not as a dump of its domain, code and user info.
@@ -180,12 +180,13 @@ private func waitUntil(
     await runner.finish(job.id, .failure(error))
     await waitUntil(queue) { if case .failed = $0.first?.state { true } else { false } }
 
-    guard case .failed(let reason) = await queue.jobs.first?.state else {
+    guard case .failed(let reason, _) = await queue.jobs.first?.state else {
         Issue.record("expected failed")
         return
     }
     #expect(reason == error.localizedDescription)
     #expect(reason.contains("sdr-4k.mov"))
+    #expect(await queue.jobs.first?.state == .failed(reason: reason, code: .conversionFailed))
     #expect(!reason.contains("Domain"))
     #expect(!reason.contains("AVAssetPropertyKeys"))
 }
@@ -195,7 +196,7 @@ private func waitUntil(
     defer { try? FileManager.default.removeItem(at: dir) }
     let queue = JobQueue(store: store, runners: [:])
     await queue.enqueue([makeJob(tool: "nope")])
-    await waitUntil(queue) { $0.first?.state == .failed(reason: "No tool can run this job") }
+    await waitUntil(queue) { $0.first?.state == .failed(reason: "No tool can run this job", code: .noToolForJob) }
 }
 
 @Test func retryRequeues() async throws {
@@ -209,7 +210,7 @@ private func waitUntil(
     await queue.enqueue([job])
     _ = await starts.next()
     await runner.finish(job.id, .failure(Boom()))
-    await waitUntil(queue) { $0.first?.state == .failed(reason: "boom happened") }
+    await waitUntil(queue) { $0.first?.state == .failed(reason: "boom happened", code: .conversionFailed) }
 
     await queue.retry(job.id)
     _ = await starts.next()
@@ -231,7 +232,9 @@ private func waitUntil(
     #expect(await queue.jobs.map(\.state) == [.queued, .queued])
 
     await queue.resume()
-    await waitUntil(queue) { $0.allSatisfy { $0.state == .failed(reason: "No tool can run this job") } }
+    await waitUntil(queue) {
+        $0.allSatisfy { $0.state == .failed(reason: "No tool can run this job", code: .noToolForJob) }
+    }
     await queue.pause()
     await queue.retryAllFailed()
     #expect(await queue.jobs.map(\.state) == [.queued, .queued])
@@ -406,13 +409,13 @@ private actor ProgressRunner: JobRunner {
     #expect(await queue.enqueue([readded]).map(\.id) == [readded.id])
     await queue.retry(failedA.id)
     func state(_ id: UUID) async -> JobState? { await queue.jobs.first { $0.id == id }?.state }
-    #expect(await state(failedA.id) == .failed(reason: "No tool can run this job"))
+    #expect(await state(failedA.id) == .failed(reason: "No tool can run this job", code: .noToolForJob))
 
     // Retry all: "a" is still pending through the re-added job, and only one of the two "c" jobs goes back.
     await queue.retryAllFailed()
-    #expect(await state(failedA.id) == .failed(reason: "No tool can run this job"))
+    #expect(await state(failedA.id) == .failed(reason: "No tool can run this job", code: .noToolForJob))
     #expect(await state(failedC1.id) == .queued)
-    #expect(await state(failedC2.id) == .failed(reason: "No tool can run this job"))
+    #expect(await state(failedC2.id) == .failed(reason: "No tool can run this job", code: .noToolForJob))
     #expect(await state(readded.id) == .queued)
     await queue.shutdown()
 }

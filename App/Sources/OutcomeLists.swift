@@ -96,7 +96,7 @@ struct KeptAsIsView: View {
                 .jobListActions(model: model, kind: .keptAsIs, selection: selection)
             }
         }
-        .navigationTitle("Kept as is")
+        .navigationTitle("Kept as Is")
         .navigationSubtitle(
             JobListActions.subtitle(kind: .keptAsIs, count: rows.count, savedBytes: 0, pauseText: nil))
     }

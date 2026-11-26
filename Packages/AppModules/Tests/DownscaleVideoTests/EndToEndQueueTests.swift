@@ -51,7 +51,9 @@ import Testing
         #expect(outcome.bytesAfter < outcome.bytesBefore)
         #expect(outcome.output.lastPathComponent == "big (1080p).mov")
         #expect(FileManager.default.fileExists(atPath: big.path))
-        #expect(final.first(where: { $0.source == small })?.state == .keptAsIs(reason: "Already small"))
+        #expect(
+            final.first(where: { $0.source == small })?.state == .keptAsIs(reason: "Already small", code: .alreadySmall)
+        )
         let activity = ActivitySummary(jobs: final)
         #expect(activity.completed == 1 && activity.keptAsIs == 1 && activity.queue == 0)
         #expect(activity.savedBytes == outcome.bytesBefore - outcome.bytesAfter)

@@ -37,8 +37,7 @@ not exist yet. Change a rule only together with its test.
    ends. "Moved" rests on the delete succeeding and the id no longer fetching (PhotoKit can't list Recently Deleted).
    A job put back in the queue after its copy was saved (crash, quit) finds its `SavedCopy` marker in
    `PendingDeletions` and never saves a second copy; a backup written in a run that is then cancelled is removed
-   again. Package tests use `FakePhotoStore` and never touch the real library; the only code that does is the
-   DEBUG-only `PhotosSpike` (launch argument), not shipped.
+   again. Package tests use `FakePhotoStore` and never touch the real library, and no debug code in the app does.
 8. **Persisted queue is never overwritten blindly** (`AppCore/Jobs/JobStore.swift`). `jobs.json` is written
    atomically; an unreadable file is moved to `jobs.json.corrupt-<time>`, or, if that fails, left alone and
    the session's queue is not saved (`mustNotSave`).

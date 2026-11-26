@@ -274,7 +274,7 @@ public actor QuickRun {
                 byteSize: source.byteSize, inventory: source.inventory, preset: preset, custom: custom,
                 fallsBackToQuickTime: fallbacks.contains(url))
             switch decision {
-            case .keptAsIs(let reason):
+            case .keptAsIs(let reason, _):
                 skipped.append(QuickRunSkip(url: url, reason: reason))
             case .convert:
                 let loss = LossCheck.losses(

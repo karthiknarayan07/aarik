@@ -24,7 +24,7 @@ struct LocalFilesView: View {
                 content(browser: browser, sections: sections)
             }
         }
-        .navigationTitle(model.selection?.title ?? "Local files")
+        .navigationTitle(model.selection?.title ?? "Local Files")
         .navigationSubtitle(subtitle)
         .toolbar { LocalFilesToolbar(model: model) }
         .assistantSearchable(
@@ -70,7 +70,7 @@ struct LocalFilesView: View {
                 couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
                 availableCount: browser.snapshot.items.count(where: \.isAvailable)
             ) {
-                PresetPicker("Quality preset", selection: $model.preset, options: Preset.allCases) {
+                PresetPicker("Quality Preset", selection: $model.preset, options: Preset.allCases) {
                     $0.displayName
                 }
             }
@@ -156,7 +156,7 @@ private struct NoMatchingVideos: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("No matching videos", systemImage: "line.3.horizontal.decrease.circle")
+            Label("No Matching Videos", systemImage: "line.3.horizontal.decrease.circle")
         } description: {
             Text("No videos here match these filters.")
         } actions: {

@@ -51,9 +51,10 @@ import Testing
 
     @Test func keptAsIsAndFailedPromptsCarryAReasonCodeNotTheReasonText() {
         let text = "Couldn't read /Users/jane/Holiday with Anna/Beach day with Anna.mov: Already small"
-        for state in [JobState.keptAsIs(reason: text), .failed(reason: text)] {
+        for state in [JobState.keptAsIs(reason: text, code: .alreadySmall), .failed(reason: text, code: .alreadySmall)]
+        {
             let prompt = OutcomeExplainer.prompt(job: job(state), outcome: nil, report: nil)
-            #expect(prompt.contains("Reason: \(OutcomeReason.alreadySmall.sentence)"))
+            #expect(prompt.contains("Reason: \(OutcomeCode.alreadySmall.sentence)"))
             for secret in ["Anna", "jane", "Holiday", "/Users", ".mov", "Couldn"] {
                 #expect(!prompt.contains(secret), "leaked \(secret)")
             }
@@ -63,7 +64,7 @@ import Testing
                 .localizedCaseInsensitiveContains("kept as is"))
         #expect(
             OutcomeExplainer.prompt(job: job(.failed(reason: "x")), outcome: nil, report: nil)
-                .contains("Reason: \(OutcomeReason.other.sentence)"))
+                .contains("Reason: \(OutcomeCode.other.sentence)"))
     }
 
     @Test func aJobWhoseReasonsNameAFileAFolderAndAPathProducesAPromptWithNoneOfThem() {
@@ -205,9 +206,9 @@ import Testing
     @Test func aJobThatChangedIsExplainedAgain() async {
         let client = FakeLanguageModelClient(returning: "Because.")
         let explanations = OutcomeExplanations(explainer: OutcomeExplainer(client: client))
-        var job = job(.failed(reason: "Disk full"))
+        var job = job(.failed(reason: "Disk full", code: .notEnoughSpace))
         _ = await explanations.explain(job: job, outcome: nil)
-        job.state = .failed(reason: "Already small")
+        job.state = .failed(reason: "Already small", code: .alreadySmall)
         _ = await explanations.explain(job: job, outcome: nil)
         #expect(client.callCount == 2)
     }

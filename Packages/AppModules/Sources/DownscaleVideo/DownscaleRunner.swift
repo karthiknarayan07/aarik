@@ -2,7 +2,7 @@ import AppCore
 import Foundation
 import MediaEngine
 
-public enum DownscaleRunnerError: Error, LocalizedError, Equatable {
+public enum DownscaleRunnerError: Error, LocalizedError, Equatable, OutcomeCoded {
     case sourceUnavailable
     case outputFolderUnavailable
     case nameTaken
@@ -12,6 +12,14 @@ public enum DownscaleRunnerError: Error, LocalizedError, Equatable {
         case .sourceUnavailable: "Original file is missing or the drive isn't connected"
         case .outputFolderUnavailable: "The chosen output folder is missing or the drive isn't connected"
         case .nameTaken: "Couldn't find a free output name"
+        }
+    }
+
+    public var outcomeCode: OutcomeCode {
+        switch self {
+        case .sourceUnavailable: .originalUnavailable
+        case .outputFolderUnavailable: .outputFolderUnavailable
+        case .nameTaken: .outputNameTaken
         }
     }
 }
@@ -75,7 +83,7 @@ public struct DownscaleRunner: JobRunner {
             outputFolder: { try Self.outputFolder(for: settings.saveTo, source: source) }, progress: progress)
         let converted: Conversion
         switch result {
-        case .keptAsIs(let reason): return .keptAsIs(reason: reason)
+        case .keptAsIs(let reason, let code): return .keptAsIs(reason: reason, code: code)
         case .converted(let value): converted = value
         }
         let output = converted.output
@@ -89,7 +97,7 @@ public struct DownscaleRunner: JobRunner {
             // checked, and only once the original is safely in the Trash. Otherwise nothing moves and the job
             // still completes with the output beside the original.
             if !warnings.isEmpty {
-                warnings.append(Self.keptBecause(Self.unverifiedCopyReason))
+                warnings.append(Self.keptBecauseLine(Self.unverifiedCopyReason, .originalKeptNotVerified))
             } else {
                 let result = replace(source, identity: identity, with: output)
                 finalURL = result.url
@@ -101,7 +109,8 @@ public struct DownscaleRunner: JobRunner {
         return .completed(
             JobOutcome(
                 output: finalURL, bytesBefore: byteSize, bytesAfter: converted.outputSize,
-                report: converted.report, replacedOriginal: replaced, warnings: warnings, notes: notes,
+                report: converted.report, replacedOriginal: replaced, warnings: warnings.map(\.text),
+                warningCodes: warnings.map(\.code), notes: notes.map(\.text), noteCodes: notes.map(\.code),
                 source: source))
     }
 
@@ -115,14 +124,14 @@ public struct DownscaleRunner: JobRunner {
         let outputInventory: MetadataInventory
         let report: MetadataReport
         /// What was lost beyond the prediction or changed unexpectedly; empty means verified.
-        let warnings: [String]
+        let warnings: [OutcomeLine]
         /// Sentences that explain the result and are not problems.
-        let notes: [String]
+        let notes: [OutcomeLine]
     }
 
     enum ConversionResult {
         /// Nothing was written: the original stays as it is, for this reason.
-        case keptAsIs(String)
+        case keptAsIs(String, OutcomeCode)
         case converted(Conversion)
     }
 
@@ -153,7 +162,7 @@ public struct DownscaleRunner: JobRunner {
             inventory: inventory, byteSize: byteSize, spec: requested,
             fallsBackToQuickTime: container.fallsBackToQuickTime)
         switch decision {
-        case .keptAsIs(let reason): return .keptAsIs(reason)
+        case .keptAsIs(let reason, let code): return .keptAsIs(reason, code)
         case .convert(let planned, let estimate, let report):
             (spec, predicted, estimatedBytes) = (planned, report, estimate)
         }
@@ -161,13 +170,13 @@ public struct DownscaleRunner: JobRunner {
             !Self.fallbackLossWasShown(
                 inventory, predictedLost: settings.predictedLost, predictedLostKeys: settings.predictedLostKeys)
         {
-            return .keptAsIs(Self.formatCantKeepDetails)
+            return .keptAsIs(Self.formatCantKeepDetails, .formatCannotKeepDetails)
         }
 
         // A video whose details couldn't be listed when it was added (a Photos video isn't read until it runs) may
         // only lose what the user was shown then.
         if requireLossShown, let unshown = Self.unshownLoss(predicted, inventory: inventory, settings: settings) {
-            return .keptAsIs(Self.lossNotShownReason(unshown))
+            return .keptAsIs(Self.lossNotShownReason(unshown), .lossNotShownBeforeAdding)
         }
 
         let folder = try outputFolder()
@@ -188,7 +197,7 @@ public struct DownscaleRunner: JobRunner {
                 source: source, nameAfter: nameAfter ?? source, spec: spec, label: label, directory: folder.url,
                 pathExtension: container.pathExtension, progress: progress)
         } catch DownscaleError.sourceAlreadySmall {
-            return .keptAsIs(DownscalePlanner.alreadySmallReason)
+            return .keptAsIs(DownscalePlanner.alreadySmallReason, .alreadySmall)
         }
 
         // From here the output exists and is ours: any way out that doesn't keep it removes it.
@@ -202,7 +211,7 @@ public struct DownscaleRunner: JobRunner {
             outputSize = try sizeOf(output)
             if outputSize >= byteSize * 9 / 10 {
                 try? FileManager.default.removeItem(at: output)
-                return .keptAsIs(DownscalePlanner.savesLittleReason)
+                return .keptAsIs(DownscalePlanner.savesLittleReason, .savesLittle)
             }
             outputInventory = try await Signposts.interval(.verify) { try await inspect(output) }
             try Self.stopIfCancelled(removing: output)
@@ -218,16 +227,18 @@ public struct DownscaleRunner: JobRunner {
             !Self.unpredictedLosses(report, predicted: predicted).isEmpty
         {
             try? FileManager.default.removeItem(at: output)
-            return .keptAsIs(Self.formatCantKeepDetails)
+            return .keptAsIs(Self.formatCantKeepDetails, .formatCannotKeepDetails)
         }
-        var notes: [String] = []
+        var notes: [OutcomeLine] = []
         if container.fallsBackToQuickTime {
-            notes.append(Self.containerNote(source: source, pathExtension: container.pathExtension))
+            notes.append(
+                OutcomeLine(
+                    Self.containerNote(source: source, pathExtension: container.pathExtension), .containerChanged))
         }
         return .converted(
             Conversion(
                 output: output, outputSize: outputSize, outputInventory: outputInventory, report: report,
-                warnings: Self.warnings(report, predicted: predicted, spec: spec), notes: notes))
+                warnings: Self.warningLines(report, predicted: predicted, spec: spec), notes: notes))
     }
 
     /// Whether what leaving MPEG-4 for QuickTime loses was shown before the job was added: every lost item's key
@@ -278,25 +289,27 @@ public struct DownscaleRunner: JobRunner {
     /// file the conversion read. Returns where the output ends up, the warning saying why the original was kept
     /// when it was, and a note when the output couldn't take the original's name.
     private func replace(_ source: URL, identity: FileIdentity, with output: URL)
-        -> (url: URL, warning: String?, note: String?)
+        -> (url: URL, warning: OutcomeLine?, note: OutcomeLine?)
     {
-        guard identity.matches(source) else { return (output, Self.originalChanged, nil) }
+        let changed = OutcomeLine(Self.originalChanged, .originalChangedDuringConversion)
+        guard identity.matches(source) else { return (output, changed, nil) }
         if let backup = originalsBackup() {
             do {
                 _ = try backUp(source, byteSize: identity.size, into: backup.folder)
             } catch {
-                return (output, Self.keptBecause(error.keptBecause), nil)
+                return (output, Self.keptBecauseLine(error.keptBecause, .originalKeptBackupFailed), nil)
             }
         }
-        guard identity.matches(source) else { return (output, Self.originalChanged, nil) }
+        guard identity.matches(source) else { return (output, changed, nil) }
         guard (try? trash(source)) != nil else {
-            return (output, Self.keptBecause(Self.trashFailedReason), nil)
+            return (output, Self.keptBecauseLine(Self.trashFailedReason, .originalKeptCouldNotTrash), nil)
         }
         // Take the original's name if it is still free, else keep the output's own name and say why.
         let target = Self.replacementURL(for: source, output: output)
         if (try? AtomicOutput.moveWithoutReplacing(output, to: target)) != nil { return (target, nil, nil) }
         let why = FileManager.default.fileExists(atPath: target.path) ? "already exists" : "couldn't be used"
-        return (output, nil, Self.renamedNote(output: output, target: target, why: why))
+        let note = Self.renamedNote(output: output, target: target, why: why)
+        return (output, nil, OutcomeLine(note, .nameChanged))
     }
 
     static func lossNotShownReason(_ unshown: String) -> String {
@@ -326,6 +339,10 @@ public struct DownscaleRunner: JobRunner {
 
     static func keptBecause(_ reason: String) -> String {
         "The original was kept because \(reason)"
+    }
+
+    static func keptBecauseLine(_ reason: String, _ code: OutcomeCode) -> OutcomeLine {
+        OutcomeLine(keptBecause(reason), code)
     }
 
     /// Throws `CancellationError` when the task was cancelled, after removing `output` (the runner's own file).
@@ -377,12 +394,19 @@ public struct DownscaleRunner: JobRunner {
     /// One line per thing lost beyond what was predicted (plain names, each once: a Cinematic track and its
     /// metadata are one line), then one per unexpected change.
     static func warnings(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec) -> [String] {
+        warningLines(report, predicted: predicted, spec: spec).map(\.text)
+    }
+
+    /// The same warnings with their codes.
+    static func warningLines(_ report: MetadataReport, predicted: MetadataReport, spec: DownscaleSpec)
+        -> [OutcomeLine]
+    {
         let context = report.kept + report.lost
         let lost = MetadataNames.plainNames(of: unpredictedLosses(report, predicted: predicted), context: context)
-            .map { "\($0) is lost" }
+            .map { OutcomeLine("\($0) is lost", .unexpectedLoss) }
         let auxiliary = MetadataNames.auxiliaryTracks(in: context)
         let changed = ExpectedChanges.unexpected(in: report, spec: spec).map {
-            MetadataNames.changeSentence($0, auxiliaryTracks: auxiliary)
+            OutcomeLine(MetadataNames.changeSentence($0, auxiliaryTracks: auxiliary), .unexpectedChange)
         }
         return lost + changed
     }

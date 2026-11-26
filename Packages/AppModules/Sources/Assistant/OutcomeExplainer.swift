@@ -14,8 +14,8 @@ public struct OutcomeExplanation: Sendable, Equatable {
 /// Explains a result in two to four plain sentences, from the job's own report: reason, notes and warnings,
 /// predicted versus actual losses, sizes and preset.
 ///
-/// The prompt is built from structured fields only (see `prompt`): never a file name or path, never a metadata
-/// value such as a location, and never the result's free-text reasons. Without an answer (error, refusal,
+/// The prompt is built from structured fields only (see `prompt`): the result's reason codes, never a file name or
+/// path, never a metadata value such as a location, and never the result's free-text reasons. Without an answer (error, refusal,
 /// timeout) the result's existing text is shown instead.
 public struct OutcomeExplainer: Sendable {
     let client: any LanguageModelClient
@@ -56,22 +56,21 @@ public struct OutcomeExplainer: Sendable {
     // MARK: Prompt
 
     /// The facts the model reads, built only from structured fields: the result's kind, reason codes (see
-    /// `OutcomeReason`), plain metadata names from `MetadataNames`, sizes, the preset and the codec and
+    /// `OutcomeCode`), plain metadata names from `MetadataNames`, sizes, the preset and the codec and
     /// resolution labels, and the names of predicted and actual losses. The result's own reason, warning and
     /// note texts are never included: they can hold a file name, a folder or a metadata value.
     static func prompt(job: Job, outcome: JobOutcome?, report: MetadataReport?) -> String {
         let report = report ?? outcome?.report
-        let names = fileNames(of: job, outcome: outcome)
         var lines: [String] = []
         switch job.state {
         case .completed(let done):
             lines.append("Result: \(done.isVerified ? "completed" : "completed with warnings")")
-        case .keptAsIs(let reason):
+        case .keptAsIs(_, let code):
             lines.append("Result: kept as is, no new file was made")
-            lines.append("Reason: \(OutcomeReason.classify(reason, removing: names).sentence)")
-        case .failed(let reason):
+            lines.append("Reason: \(code.sentence)")
+        case .failed(_, let code):
             lines.append("Result: failed")
-            lines.append("Reason: \(OutcomeReason.classify(reason, removing: names).sentence)")
+            lines.append("Reason: \(code.sentence)")
         case .queued, .running:
             lines.append("Result: not finished")
         }
@@ -94,28 +93,16 @@ public struct OutcomeExplainer: Sendable {
             lines.append("Kept: \(report.kept.count) items")
         }
         if let outcome {
-            for reason in codes(outcome.warnings, removing: names) { lines.append("Warning: \(reason.sentence)") }
-            for reason in codes(outcome.notes, removing: names) { lines.append("Note: \(reason.sentence)") }
+            for code in distinct(outcome.warningCodes) { lines.append("Warning: \(code.sentence)") }
+            for code in distinct(outcome.noteCodes) { lines.append("Note: \(code.sentence)") }
         }
         return lines.joined(separator: "\n")
     }
 
-    /// The codes of some texts, each once, in order; a text the app can't place is one `.other`.
-    private static func codes(_ texts: [String], removing names: [String]) -> [OutcomeReason] {
-        var seen = Set<OutcomeReason>()
-        return texts.map { OutcomeReason.classify($0, removing: names) }.filter { seen.insert($0).inserted }
-    }
-
-    /// The job's own file names, which are taken out of a text before it is matched to a code.
-    static func fileNames(of job: Job, outcome: JobOutcome?) -> [String] {
-        var urls = [job.source, job.sourceUsed]
-        if let outcome {
-            urls.append(outcome.output)
-            if let source = outcome.source { urls.append(source) }
-        }
-        var names = urls.filter(\.isFileURL).map(\.lastPathComponent)
-        if let photosName = settings(of: job)?.photosFileName { names.append(photosName) }
-        return names
+    /// Each code once, in order.
+    private static func distinct(_ codes: [OutcomeCode]) -> [OutcomeCode] {
+        var seen = Set<OutcomeCode>()
+        return codes.filter { seen.insert($0).inserted }
     }
 
     private static func list(_ names: [String]) -> String {
@@ -142,7 +129,7 @@ public struct OutcomeExplainer: Sendable {
     /// The result's existing text: its reason, or its warnings and notes.
     static func fallback(job: Job, outcome: JobOutcome?) -> String {
         switch job.state {
-        case .keptAsIs(let reason), .failed(let reason): return reason
+        case .keptAsIs(let reason, _), .failed(let reason, _): return reason
         case .completed(let done):
             let text = (done.warnings + done.notes).joined(separator: " ")
             return text.isEmpty ? "Nothing unexpected was lost or changed." : text
