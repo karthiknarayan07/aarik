@@ -10,7 +10,7 @@ final class TabsAndOnboardingTests: AppTestCase {
 
     func testOnboardingShowsOnceAndRemembersItWasSeen() throws {
         launch(onboarding: true)
-        XCTAssertTrue(app.descendants(matching: .any)["onboarding"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["onboarding.continue"].waitForExistence(timeout: 10))
         let next = app.buttons["onboarding.continue"]
         for _ in 0..<3 {
             XCTAssertTrue(next.waitForExistence(timeout: 5))

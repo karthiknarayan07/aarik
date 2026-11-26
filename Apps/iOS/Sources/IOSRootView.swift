@@ -16,7 +16,7 @@ struct IOSRootView: View {
     @State private var toolsPath: [ToolRoute] = []
     @State private var hasRestored = false
 
-    var body: some View {
+    private var tabs: some View {
         TabView(selection: $tab) {
             Tab("Home", systemImage: "house.fill", value: IOSTab.home) {
                 NavigationStack {
@@ -54,12 +54,22 @@ struct IOSRootView: View {
         .sensoryFeedback(trigger: shell.convert.queuePause.automatic) { old, new in
             new != nil && old != new ? .warning : nil
         }
-        .modifier(SheetsModifier(scenes: shell.scenes))
-        .sheet(isPresented: onboardingShown) {
-            IOSOnboardingView(requestPhotosAccess: { await shell.requestPhotosAccess() }) {
-                hasOnboarded = true
+    }
+
+    /// The first launch shows the introduction in place of the tabs (a cover over charts that are still loading
+    /// would resize them under their feet); afterwards the tabs.
+    var body: some View {
+        Group {
+            if hasOnboarded {
+                tabs
+            } else {
+                IOSOnboardingView(requestPhotosAccess: { await shell.requestPhotosAccess() }) {
+                    hasOnboarded = true
+                }
             }
         }
+        .animation(.smooth, value: hasOnboarded)
+        .modifier(SheetsModifier(scenes: shell.scenes))
         .task { restore() }
         .onChange(of: tab) { storedTab = tab.rawValue }
         .onChange(of: shell.convert.assistant.isAvailable) {
@@ -74,14 +84,6 @@ struct IOSRootView: View {
         let home = ToolRoute(toolID: route.toolID)
         toolsPath = route.page == nil ? [home] : [home, route]
         tab = .browse
-    }
-
-    private var onboardingShown: Binding<Bool> {
-        Binding {
-            !hasOnboarded
-        } set: {
-            if !$0 { hasOnboarded = true }
-        }
     }
 
     private func restore() {

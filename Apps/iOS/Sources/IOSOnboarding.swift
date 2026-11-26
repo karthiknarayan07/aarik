@@ -130,7 +130,6 @@ struct IOSOnboardingView: View {
         }
         .animation(.smooth, value: step)
         .interactiveDismissDisabled()
-        .accessibilityIdentifier("onboarding")
     }
 
     private func advance(count: Int) {
