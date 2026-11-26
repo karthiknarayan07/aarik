@@ -131,7 +131,7 @@ import Testing
         #expect(predicted.changed.first { $0.key == "video.dimensions" }?.to == "1920x1080")
     }
 
-    @Test(.timeLimit(.minutes(2))) func estimateWithinRange() async throws {
+    @Test(.timeLimit(.minutes(5))) func estimateWithinRange() async throws {
         var options = ClipOptions()
         options.seconds = 2
         let source = try await FixtureFactory.makeClip(options)

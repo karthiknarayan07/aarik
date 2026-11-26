@@ -42,7 +42,7 @@ import Testing
         return try await track.load(.timeRange).duration.seconds
     }
 
-    @Test(.timeLimit(.minutes(2))) func hlg4KTo1080KeepsEverything() async throws {
+    @Test(.timeLimit(.minutes(5))) func hlg4KTo1080KeepsEverything() async throws {
         var options = ClipOptions()
         options.quickTimeMetadata = [
             "com.apple.quicktime.make": "Apple",
@@ -72,7 +72,7 @@ import Testing
         #expect(dolbyVision.value.hasPrefix("profile 8, level ") && dolbyVision.value.hasSuffix(", compat 4"))
     }
 
-    @Test(.timeLimit(.minutes(2))) func sdrSourceDoesNotGainDolbyVision() async throws {
+    @Test(.timeLimit(.minutes(5))) func sdrSourceDoesNotGainDolbyVision() async throws {
         let source = try await FixtureFactory.makeClip(clip { $0.hdr = .sdr })
         let output = try await downscale(source, spec: smallSpec)
 
@@ -102,7 +102,7 @@ import Testing
         return (sourceInventory, outputInventory, output)
     }
 
-    @Test(.timeLimit(.minutes(2))) func videoTrackMetadataAndLanguageSurvive() async throws {
+    @Test(.timeLimit(.minutes(5))) func videoTrackMetadataAndLanguageSurvive() async throws {
         let (source, output, outputURL) = try await roundTrip(
             clip {
                 $0.videoTrackMetadata = ["com.example.fixture.track": "track value"]
@@ -115,7 +115,7 @@ import Testing
         #expect(try await track.load(.languageCode) == "eng")
     }
 
-    @Test(.timeLimit(.minutes(2))) func audioGroupEnabledStateAndFallbackSurvive() async throws {
+    @Test(.timeLimit(.minutes(5))) func audioGroupEnabledStateAndFallbackSurvive() async throws {
         let (source, output, _) = try await roundTrip(clip { $0.includeFallbackAudioTrack = true })
         let expected = [
             "audio.0.enabled": "true", "audio.1.enabled": "false",
@@ -128,7 +128,7 @@ import Testing
         }
     }
 
-    @Test(.timeLimit(.minutes(2))) func staticHDRMetadataIsCarried() async throws {
+    @Test(.timeLimit(.minutes(5))) func staticHDRMetadataIsCarried() async throws {
         let (source, output, _) = try await roundTrip(
             clip {
                 // BT.2020 primaries, D65, 1000 / 0.005 nits; MaxCLL 1000, MaxFALL 400; 314 lux, D65.
@@ -145,7 +145,7 @@ import Testing
         }
     }
 
-    @Test(.timeLimit(.minutes(2))) func unknownQuickTimeKeysSurvive() async throws {
+    @Test(.timeLimit(.minutes(5))) func unknownQuickTimeKeysSurvive() async throws {
         let source = try await FixtureFactory.makeClip(
             clip { $0.quickTimeMetadata = ["com.apple.quicktime.some-future-key": "42"] })
         let output = try await downscale(source, spec: smallSpec)
@@ -153,7 +153,7 @@ import Testing
         #expect(inventory["qt.com.apple.quicktime.some-future-key"]?.value == "42")
     }
 
-    @Test(.timeLimit(.minutes(2))) func portraitRotationPreserved() async throws {
+    @Test(.timeLimit(.minutes(5))) func portraitRotationPreserved() async throws {
         let source = try await FixtureFactory.makeClip(
             {
                 var options = ClipOptions()
@@ -173,7 +173,7 @@ import Testing
         #expect(sourceTransform != .identity)
     }
 
-    @Test(.timeLimit(.minutes(2))) func refusesToUpscale() async throws {
+    @Test(.timeLimit(.minutes(5))) func refusesToUpscale() async throws {
         let source = try await FixtureFactory.makeClip(
             clip {
                 $0.width = 1920
@@ -186,7 +186,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: output.path))
     }
 
-    @Test(.timeLimit(.minutes(2))) func refusesExistingOutput() async throws {
+    @Test(.timeLimit(.minutes(5))) func refusesExistingOutput() async throws {
         let source = try await FixtureFactory.makeClip(clip())
         let output = outputURL(next: source)
         let existing = Data("keep me".utf8)
@@ -199,7 +199,7 @@ import Testing
 
     /// A file that appears at the final path after the pre-check (another job writing the same name) is not this
     /// run's: it must survive, and the run fails at the exclusive commit.
-    @Test(.timeLimit(.minutes(2))) func keepsOutputCreatedByOthersDuringRun() async throws {
+    @Test(.timeLimit(.minutes(5))) func keepsOutputCreatedByOthersDuringRun() async throws {
         let source = try await FixtureFactory.makeClip(clip())
         let output = outputURL(next: source)
         let other = Data("another job's output".utf8)
@@ -212,7 +212,7 @@ import Testing
         try expectNoPartial(beside: output)
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancelRemovesPartialOutput() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancelRemovesPartialOutput() async throws {
         let source = try await FixtureFactory.makeClip(clip { $0.seconds = 4 })
         let output = outputURL(next: source)
         let spec = smallSpec
@@ -240,7 +240,7 @@ import Testing
         try expectNoPartial(beside: output)
     }
 
-    @Test(.timeLimit(.minutes(2))) func sixtyToThirtyKeepsDurationAndSync() async throws {
+    @Test(.timeLimit(.minutes(5))) func sixtyToThirtyKeepsDurationAndSync() async throws {
         let source = try await FixtureFactory.makeClip(
             clip {
                 $0.fps = 60
@@ -259,7 +259,7 @@ import Testing
         #expect(abs(outputAudio - outputVideo) <= 1.0 / 30, "audio \(outputAudio) vs video \(outputVideo)")
     }
 
-    @Test(.timeLimit(.minutes(2))) func audioIsPassedThrough() async throws {
+    @Test(.timeLimit(.minutes(5))) func audioIsPassedThrough() async throws {
         let source = try await FixtureFactory.makeClip(clip())
         let output = try await downscale(source, spec: smallSpec)
         let sourceInventory = try await MediaInspector().inventory(of: source)
@@ -273,7 +273,7 @@ import Testing
     /// A reader that stops early (here: cancelled once video is done, standing in for a read failure) makes every
     /// passthrough output return nil, which looks like the end of the track. The run must fail, not write a
     /// truncated file.
-    @Test(.timeLimit(.minutes(2))) func readerStoppingEarlyFailsAndRemovesOutput() async throws {
+    @Test(.timeLimit(.minutes(5))) func readerStoppingEarlyFailsAndRemovesOutput() async throws {
         let source = try await FixtureFactory.makeClip(clip { $0.audioTailSeconds = 5 })
         let output = outputURL(next: source)
         var downscaler = VideoDownscaler()
@@ -288,7 +288,7 @@ import Testing
     /// Regression: once video is finished, the passthrough drain must feed every track. Draining one track at a time
     /// hangs: with the timed-metadata track first, its input runs ahead of the audio and stays not ready while the
     /// audio is never fed. (With audio first, macOS 27.2 does not throttle audio against metadata, so no hang.)
-    @Test(.timeLimit(.minutes(2))) func audioTailWithTimedMetadataCompletes() async throws {
+    @Test(.timeLimit(.minutes(5))) func audioTailWithTimedMetadataCompletes() async throws {
         let source = try await FixtureFactory.makeClip(
             clip {
                 $0.includeTimedMetadataTrack = true

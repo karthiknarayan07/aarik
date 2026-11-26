@@ -40,7 +40,7 @@ import Testing
 
     // MARK: - Corrupted input
 
-    @Test(.timeLimit(.minutes(2))) func aFileThatIsNotAVideoFailsWithoutOutput() async throws {
+    @Test(.timeLimit(.minutes(5))) func aFileThatIsNotAVideoFailsWithoutOutput() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -49,7 +49,7 @@ import Testing
         try await failsCleanly(source)
     }
 
-    @Test(.timeLimit(.minutes(2))) func anEmptyFileFailsWithoutOutput() async throws {
+    @Test(.timeLimit(.minutes(5))) func anEmptyFileFailsWithoutOutput() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -58,7 +58,7 @@ import Testing
         try await failsCleanly(source)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aTruncatedClipFailsWithoutOutput() async throws {
+    @Test(.timeLimit(.minutes(5))) func aTruncatedClipFailsWithoutOutput() async throws {
         let clip = try await FixtureFactory.makeClip(options { $0.seconds = 2 })
         defer { try? FileManager.default.removeItem(at: clip.deletingLastPathComponent()) }
         // The writer puts the index (moov) after the media, so cutting the file in half loses it: what an
@@ -68,7 +68,7 @@ import Testing
         try await failsCleanly(clip)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aDamagedMiddleNeverYieldsAKeptOutputThatLooksComplete() async throws {
+    @Test(.timeLimit(.minutes(5))) func aDamagedMiddleNeverYieldsAKeptOutputThatLooksComplete() async throws {
         let clip = try await FixtureFactory.makeClip(options { $0.seconds = 2 })
         let directory = clip.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -109,7 +109,7 @@ import Testing
         return times.sorted()
     }
 
-    @Test(.timeLimit(.minutes(2))) func variableFrameRateKeepsEveryFrameAndItsTiming() async throws {
+    @Test(.timeLimit(.minutes(5))) func variableFrameRateKeepsEveryFrameAndItsTiming() async throws {
         let source = try await FixtureFactory.makeClip(
             options {
                 $0.fps = 10
@@ -137,7 +137,7 @@ import Testing
         #expect(abs(outputDuration - sourceDuration) < 0.15, "\(outputDuration) vs \(sourceDuration)")
     }
 
-    @Test(.timeLimit(.minutes(2))) func variableFrameRateWithAFrameRateCapStillKeepsTheDuration() async throws {
+    @Test(.timeLimit(.minutes(5))) func variableFrameRateWithAFrameRateCapStillKeepsTheDuration() async throws {
         let source = try await FixtureFactory.makeClip(
             options {
                 $0.fps = 30

@@ -100,6 +100,10 @@ public enum FixtureFactory {
         }
     }
 
+    /// One fixture at a time (concurrent writers were seen to stall). A test's time limit includes its wait in this
+    /// queue, so tests that build fixtures carry 5 minutes, not 2: the limit is only there to catch a hang, and a
+    /// stalled fixture already fails by itself after 30 seconds. (Caching fixtures was the alternative; nearly every
+    /// test needs its own options, and many damage or rewrite the clip, so a cache would rarely hit.)
     private static let slots = WorkSlots(count: 1)
 
     private static func writeClip(_ options: ClipOptions) async throws -> URL {

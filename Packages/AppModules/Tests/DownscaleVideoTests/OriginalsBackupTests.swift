@@ -28,7 +28,7 @@ import Testing
         return nil
     }
 
-    @Test(.timeLimit(.minutes(2))) func keepOriginalsCopiesBeforeTrash() async throws {
+    @Test(.timeLimit(.minutes(5))) func keepOriginalsCopiesBeforeTrash() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -56,7 +56,7 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: backup.path) == ["clip.mov"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func missingBackupFolderNeverTrashes() async throws {
+    @Test(.timeLimit(.minutes(5))) func missingBackupFolderNeverTrashes() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -86,7 +86,7 @@ import Testing
             ])
     }
 
-    @Test(.timeLimit(.minutes(2))) func takenBackupNameGetsCounterAndIsNeverOverwritten() async throws {
+    @Test(.timeLimit(.minutes(5))) func takenBackupNameGetsCounterAndIsNeverOverwritten() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -109,7 +109,7 @@ import Testing
         #expect(names == ["clip 2.mov", "clip.mov"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func backupOfTheWrongSizeNeverTrashes() async throws {
+    @Test(.timeLimit(.minutes(5))) func backupOfTheWrongSizeNeverTrashes() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -140,7 +140,7 @@ import Testing
         #expect(outcome.warnings == ["The original was kept because its copy in the originals folder didn't match"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func backupIsOnlyMadeForReplace() async throws {
+    @Test(.timeLimit(.minutes(5))) func backupIsOnlyMadeForReplace() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -156,7 +156,7 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: backup.path) == [])
     }
 
-    @Test(.timeLimit(.minutes(2))) func staleBackupPartialsOfThisSourceAreRemovedOthersKept() async throws {
+    @Test(.timeLimit(.minutes(5))) func staleBackupPartialsOfThisSourceAreRemovedOthersKept() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }

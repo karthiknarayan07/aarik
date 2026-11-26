@@ -74,6 +74,12 @@ checked here, on the Mac the baselines were recorded on, with nothing else runni
    in the Hangs instrument during a 20-video batch, and a 50-video batch with memory flat (under 10 % growth after
    warm-up) and every original intact on each failure.
 4. ASan and TSan CI jobs are green.
+5. E2, a real variable-frame-rate clip: the test fixtures for variable frame rate have no audio (a writer stall with
+   audio was seen and its cause never found; the engine's stall deadline now fails such a job as "The encoder stopped
+   responding" instead of hanging). So check the real case by hand: take one iPhone clip that has variable frame
+   rate, audio and metadata (a screen recording or a slow-motion clip), convert it with the Release build, and confirm
+   it finishes, the audio and metadata are kept (the report shows nothing lost) and the sound stays in sync. Use a
+   test clip you made for this and keep it out of the repository; never commit personal media.
 
 ## Each release
 
