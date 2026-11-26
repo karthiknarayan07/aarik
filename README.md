@@ -71,12 +71,35 @@ cd Packages/AppModules && swift test        # run the unit tests
 scripts/make-dmg.sh                         # build a release DMG into build/dist
 ```
 
+## Apple Intelligence
+
+On a Mac with Apple Intelligence turned on, the app adds a few helpers. Each one runs on your Mac with the model that
+ships with macOS, so nothing is sent to a server, ours or anyone else's.
+
+- **Ask in Plain Words:** type a sentence such as "4K videos from last summer that I haven't shrunk" in the search
+  field, press Return or the sparkle button, and it becomes filters you can see and remove.
+- **Why?:** a short explanation of a result that was kept as is, finished with warnings or failed.
+- **Smart Picks:** on Overview, up to three groups of videos worth shrinking first. Add These to the Queue goes
+  through the usual checks, and nothing is added by itself.
+
+**What the model sees.** Only metadata, never the video itself: names of formats (for example 4K60 or HEVC), sizes,
+years, preset names, the names of metadata that would be lost, and a fixed phrase for each kind of result. It never
+sees video frames, file names, folder names, places or the text of a message the app wrote about a file. For Ask in
+Plain Words it also reads the words you type, so type what you want to see rather than a file's name.
+
+**Hidden when it's off.** If Apple Intelligence is off or isn't available on your Mac, none of this appears and the
+app looks and works as it does without it. The app checks again whenever you switch back to it and whenever you click
+into the search field, so turning it on in System Settings needs no restart.
+
+**To turn it off,** open System Settings ▸ Apple Intelligence & Siri and turn off Apple Intelligence. The helpers go
+away the next time you switch back to the app.
+
 ## Privacy
 
 Your videos, their metadata and your Photos library never leave your Mac. The only network connection the app makes is
 the update check, which downloads the update feed from this project's GitHub Pages site and sends nothing about you or
 your files beyond what any web request carries (Sparkle's optional system profile is off). Turn it off in Settings ▸
-General.
+General. The Apple Intelligence helpers run on your Mac too (see above).
 
 ## Releasing
 
