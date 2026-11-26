@@ -15,6 +15,7 @@
 
         @AppStorage(AppSettings.Keys.defaultResolution) private var resolution = AdvancedOptions.Resolution.p1080
         @AppStorage(AppSettings.Keys.defaultBitRateMbps) private var bitRateMbps = AdvancedOptions.suggestedHEVCMbps
+        @AppStorage(AppSettings.Keys.defaultKeepOriginalBitRate) private var keepOriginalBitRate = false
         @AppStorage(AppSettings.Keys.defaultFrameRate) private var frameRate = AdvancedOptions.FrameRate.keep
         @AppStorage(AppSettings.Keys.defaultCodec) private var codec = VideoCodec.hevcKeepHDR
         @AppStorage(AppSettings.Keys.speed) private var speed = SpeedSetting.default
@@ -44,10 +45,10 @@
                     IOSQualitySections(
                         resolution: $resolution,
                         bitRateMbps: $bitRateMbps,
+                        keepOriginalBitRate: $keepOriginalBitRate,
                         frameRate: $frameRate,
                         codec: $codec,
-                        resolutionSectionTitle: "Default Resolution",
-                        detailSectionTitle: "Default Picture Detail")
+                        resolutionSectionTitle: "Default Resolution")
                     Section {
                         Picker("Conversion Speed", selection: $speed) {
                             ForEach(SpeedSetting.allCases) { option in
@@ -119,6 +120,7 @@
                     model.applyDefaultAdvancedOptions()
                 }
                 .onChange(of: bitRateMbps) { model.applyDefaultAdvancedOptions() }
+                .onChange(of: keepOriginalBitRate) { model.applyDefaultAdvancedOptions() }
                 .onChange(of: frameRate) { model.applyDefaultAdvancedOptions() }
                 .onChange(of: speed) { _, newValue in
                     if model.services.speed != newValue { model.services.speed = newValue }

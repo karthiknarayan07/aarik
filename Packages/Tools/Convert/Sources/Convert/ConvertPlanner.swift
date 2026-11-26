@@ -75,11 +75,14 @@ public enum ConvertPlanner {
             if source.shortSide > 0, source.shortSide <= target {
                 return .keptAsIs(reason: alreadySmallReason, code: .alreadySmall)
             }
-        } else if source.videoBitRate <= Double(spec.averageBitRate) {
+        }
+        if spec.keepsSourceBitRate {
+            spec.averageBitRate = max(1_000_000, Int(source.videoBitRate.rounded()))
+        } else if spec.targetShortSide == nil, source.videoBitRate <= Double(spec.averageBitRate) {
             return .keptAsIs(reason: alreadySmallReason, code: .alreadySmall)
         }
         let estimate = Estimator.estimatedBytes(source: source, spec: spec)
-        if Double(estimate) > Double(byteSize) * 0.9 {
+        if !spec.keepsSourceBitRate, Double(estimate) > Double(byteSize) * 0.9 {
             return .keptAsIs(reason: savesLittleReason, code: .savesLittle)
         }
         var report = predicted(inventory: inventory, source: source, spec: spec)

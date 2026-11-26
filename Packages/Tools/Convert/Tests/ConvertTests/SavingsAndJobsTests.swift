@@ -300,4 +300,24 @@ import Testing
         #expect(updatedJob.displayName == "second.mov")
         #expect(updatedJob.presetLabel == "720p · H.264")
     }
+
+    @Test func keepOriginalBitRateResolvesSourceBitRateAndPersists() {
+        let suite = UserDefaults(suiteName: "KeepOriginalBitRate-\(UUID().uuidString)")!
+        suite.set(true, forKey: AppSettings.Keys.defaultKeepOriginalBitRate)
+        let options = AppSettings.defaultAdvancedOptions(suite, platform: .iOS)
+        #expect(options.keepOriginalBitRate)
+        #expect(options.spec?.keepsSourceBitRate == true)
+        #expect(AdvancedOptions(from: options.spec).keepOriginalBitRate)
+
+        let sourceInventory = inventory(size: "3840x2160")
+        let decision = ConvertPlanner.decide(
+            inventory: sourceInventory, byteSize: bytes(mbps: 50), kind: .shrink,
+            custom: options.spec)
+        guard case .convert(let chosenSpec, _, _) = decision else {
+            Issue.record("Expected 4K -> 1080p with keepsSourceBitRate to convert instead of skipping")
+            return
+        }
+        #expect(chosenSpec.keepsSourceBitRate)
+        #expect(chosenSpec.averageBitRate >= 45_000_000)
+    }
 }

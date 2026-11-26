@@ -16,6 +16,8 @@ public struct DownscaleSpec: Sendable, Hashable, Codable {
     /// `nil` keeps the source resolution.
     public var targetShortSide: Int? = 1080
     public var averageBitRate: Int = 20_000_000
+    /// True to encode at the source video's own bit rate instead of a fixed target.
+    public var keepsSourceBitRate: Bool = false
     /// `nil` keeps the source frame rate. A cap never increases the frame rate.
     public var maxFrameRate: Double? = nil
     public var codec: VideoCodec = .hevcKeepHDR
@@ -24,21 +26,23 @@ public struct DownscaleSpec: Sendable, Hashable, Codable {
     public var maxBitRate: Int? = nil
 
     public init(
-        targetShortSide: Int? = 1080, averageBitRate: Int = 20_000_000, maxFrameRate: Double? = nil,
-        codec: VideoCodec = .hevcKeepHDR, maxBitRate: Int? = nil
+        targetShortSide: Int? = 1080, averageBitRate: Int = 20_000_000, keepsSourceBitRate: Bool = false,
+        maxFrameRate: Double? = nil, codec: VideoCodec = .hevcKeepHDR, maxBitRate: Int? = nil
     ) {
         self.targetShortSide = targetShortSide
         self.averageBitRate = averageBitRate
+        self.keepsSourceBitRate = keepsSourceBitRate
         self.maxFrameRate = maxFrameRate
         self.codec = codec
         self.maxBitRate = maxBitRate
     }
 
-    /// Job JSON written before `codec` or `maxBitRate` existed has no key for them; they decode as HEVC and nil.
+    /// Job JSON written before `codec`, `maxBitRate`, or `keepsSourceBitRate` existed decodes with safe defaults.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         targetShortSide = try container.decodeIfPresent(Int.self, forKey: .targetShortSide)
         averageBitRate = try container.decode(Int.self, forKey: .averageBitRate)
+        keepsSourceBitRate = try container.decodeIfPresent(Bool.self, forKey: .keepsSourceBitRate) ?? false
         maxFrameRate = try container.decodeIfPresent(Double.self, forKey: .maxFrameRate)
         codec = try container.decodeIfPresent(VideoCodec.self, forKey: .codec) ?? .hevcKeepHDR
         maxBitRate = try container.decodeIfPresent(Int.self, forKey: .maxBitRate)

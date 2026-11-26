@@ -9,6 +9,7 @@ public enum AppSettings {
         public static let preset = "downscale.preset"
         public static let defaultResolution = "downscale.defaultResolution"
         public static let defaultBitRateMbps = "downscale.defaultBitRateMbps"
+        public static let defaultKeepOriginalBitRate = "downscale.defaultKeepOriginalBitRate"
         public static let defaultFrameRate = "downscale.defaultFrameRate"
         public static let defaultCodec = "downscale.defaultCodec"
         public static let compressPreset = "compress.preset"
@@ -77,6 +78,7 @@ public enum AppSettings {
         {
             options.bitRateMbps = storedMbps
         }
+        options.keepOriginalBitRate = defaults.bool(forKey: Keys.defaultKeepOriginalBitRate)
         return options
     }
 

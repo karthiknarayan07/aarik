@@ -469,6 +469,7 @@
                     IOSQualitySections(
                         resolution: $options.resolution,
                         bitRateMbps: $options.bitRateMbps,
+                        keepOriginalBitRate: $options.keepOriginalBitRate,
                         frameRate: $options.frameRate,
                         codec: $options.codec,
                         locksFrameRate: locksFrameRate)

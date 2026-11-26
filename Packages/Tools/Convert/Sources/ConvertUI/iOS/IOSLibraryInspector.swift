@@ -115,6 +115,7 @@
                     IOSQualitySections(
                         resolution: optionsBinding.resolution,
                         bitRateMbps: optionsBinding.bitRateMbps,
+                        keepOriginalBitRate: optionsBinding.keepOriginalBitRate,
                         frameRate: optionsBinding.frameRate,
                         codec: optionsBinding.codec,
                         locksFrameRate: locksFrameRate)
@@ -145,7 +146,9 @@
         var body: some View {
             switch decision {
             case .convert(_, let estimate, _):
-                let savedPercent = ByteFormat.savedPercent(before: originalBytes, after: estimate)
+                let savedPercent =
+                    estimate >= originalBytes * 98 / 100
+                    ? "Similar size" : ByteFormat.savedPercent(before: originalBytes, after: estimate)
                 let afterFraction = originalBytes > 0 ? min(max(Double(estimate) / Double(originalBytes), 0), 1) : 1
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline) {
@@ -235,16 +238,16 @@
         }
     }
 
-    /// Approachable Resolution checklist, Picture Detail slider with plain-English bit rate advice, and collapsible
-    /// advanced options shared between Conversion Options and iOS Settings.
+    /// Approachable Resolution checklist and collapsible More Options (Bit Rate, Frame Rate, Format) shared between
+    /// Conversion Options, Queue Editor, and iOS Settings.
     struct IOSQualitySections: View {
         @Binding var resolution: AdvancedOptions.Resolution
         @Binding var bitRateMbps: Double
+        @Binding var keepOriginalBitRate: Bool
         @Binding var frameRate: AdvancedOptions.FrameRate
         @Binding var codec: VideoCodec
         var locksFrameRate = false
         var resolutionSectionTitle = "Resolution"
-        var detailSectionTitle = "Picture Detail"
 
         @State private var showsBitRateTip = false
         @State private var showsMoreOptions = false
@@ -268,6 +271,12 @@
             case .recommended: .green
             case .highDetail: .blue
             }
+        }
+
+        private var moreSummary: String {
+            let rate = keepOriginalBitRate ? "Original bit rate" : bitRateText
+            let format = codec == .hevcKeepHDR ? "HEVC" : "H.264"
+            return "\(rate) · \(frameRate.title) · \(format)"
         }
 
         var body: some View {
@@ -310,91 +319,90 @@
             }
 
             Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
-                        Text(tier.title)
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(tierTint.opacity(0.16), in: .capsule)
-                            .foregroundStyle(tierTint)
-                        Spacer()
-                        Text(bitRateText)
-                            .font(.subheadline.weight(.semibold))
-                            .monospacedDigit()
-                    }
+                DisclosureGroup(isExpanded: $showsMoreOptions) {
+                    Toggle("Keep Same Bit Rate as Original", isOn: $keepOriginalBitRate)
+                    if keepOriginalBitRate {
+                        Text("Encodes using the original video's bit rate so detail stays the same.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 8) {
+                                Text("Bit Rate")
+                                Text(tier.title)
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(tierTint.opacity(0.16), in: .capsule)
+                                    .foregroundStyle(tierTint)
+                                Spacer()
+                                Text(bitRateText)
+                                    .font(.subheadline.weight(.semibold))
+                                    .monospacedDigit()
+                            }
 
-                    Slider(
-                        value: $bitRateMbps,
-                        in: AdvancedOptions.minimumSliderMbps...AdvancedOptions.maximumSliderMbps,
-                        step: 1
-                    ) {
-                        Text("Picture Detail")
-                    }
-                    .accessibilityLabel("Bit rate in megabits per second")
-                    .accessibilityValue("\(tier.title), \(bitRateText)")
+                            Slider(
+                                value: $bitRateMbps,
+                                in: AdvancedOptions.minimumSliderMbps...AdvancedOptions.maximumSliderMbps,
+                                step: 1
+                            ) {
+                                Text("Bit Rate")
+                            }
+                            .accessibilityLabel("Bit rate in megabits per second")
+                            .accessibilityValue("\(tier.title), \(bitRateText)")
 
-                    HStack {
-                        Text("Smaller file")
-                        Spacer()
-                        Text("Sharper video")
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                    Text(tier.advice)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    HStack(spacing: 8) {
-                        Text(AdvancedOptions.bitRateGuide(for: resolution, codec: codec))
+                            HStack {
+                                Text("Smaller file")
+                                Spacer()
+                                Text("Sharper video")
+                            }
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        if abs(bitRateMbps - suggested) >= 0.5 {
-                            Button("Use \(Int(suggested.rounded())) Mbps") {
-                                bitRateMbps = suggested
+
+                            Text(tier.advice)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            HStack(spacing: 8) {
+                                Text(AdvancedOptions.bitRateGuide(for: resolution, codec: codec))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                if abs(bitRateMbps - suggested) >= 0.5 {
+                                    Button("Use \(Int(suggested.rounded())) Mbps") {
+                                        bitRateMbps = suggested
+                                    }
+                                    .font(.caption.weight(.medium))
+                                    .buttonStyle(.borderless)
+                                }
                             }
-                            .font(.caption.weight(.medium))
+
+                            Button {
+                                withAnimation(.snappy) { showsBitRateTip.toggle() }
+                            } label: {
+                                Label(
+                                    showsBitRateTip ? "Hide bit rate guide" : "How to choose bit rate",
+                                    systemImage: showsBitRateTip ? "info.circle.fill" : "info.circle"
+                                )
+                                .font(.caption)
+                            }
                             .buttonStyle(.borderless)
+
+                            if showsBitRateTip {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Bit rate controls how much detail each second keeps.")
+                                    Text(
+                                        "Start with Recommended — it stays sharp on phones and TVs while shrinking files most."
+                                    )
+                                    Text("Go higher for sports or dark scenes, or keep original bit rate above.")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
-                }
-                .padding(.vertical, 4)
 
-                if showsBitRateTip {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("How to pick a bit rate", systemImage: "lightbulb")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
-                        Text("Bit rate controls how much detail each second keeps.")
-                        Text("Start with Recommended — it stays sharp on phones and TVs while shrinking files most.")
-                        Text("Go higher for sports, concerts, or night shots; go lower for quick messaging.")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 4)
-                }
-            } header: {
-                HStack {
-                    Text(detailSectionTitle)
-                    Spacer()
-                    Button {
-                        withAnimation(.snappy) { showsBitRateTip.toggle() }
-                    } label: {
-                        Label(
-                            showsBitRateTip ? "Hide tip" : "How to choose",
-                            systemImage: showsBitRateTip ? "info.circle.fill" : "info.circle"
-                        )
-                        .font(.caption)
-                        .textCase(nil)
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-
-            Section {
-                DisclosureGroup(isExpanded: $showsMoreOptions) {
                     Picker("Frame Rate", selection: $frameRate) {
                         ForEach(AdvancedOptions.FrameRate.allCases) { Text($0.title).tag($0) }
                     }
@@ -414,9 +422,11 @@
                     HStack {
                         Text("More Options")
                         Spacer()
-                        Text("\(frameRate.title) · \(codec == .hevcKeepHDR ? "HEVC" : "H.264")")
+                        Text(moreSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
             }

@@ -217,7 +217,7 @@ public struct ConvertRunner: JobRunner {
             // The estimate can overstate the saving (heavy audio counted as video). If the real output is not at
             // least 10% smaller, remove our own output and keep the original untouched.
             outputSize = try sizeOf(output)
-            if outputSize >= byteSize * 9 / 10 {
+            if !spec.keepsSourceBitRate, outputSize >= byteSize * 9 / 10 {
                 try? FileManager.default.removeItem(at: output)
                 return .keptAsIs(ConvertPlanner.savesLittleReason, .savesLittle)
             }

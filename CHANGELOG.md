@@ -23,7 +23,7 @@ First public release.
   **Next** on a bulk selection (or opening a video's page) shows a redesigned **Conversion Options** experience with
   a live Before → After size card, plain-English **Resolution** choices (`720p`, `1080p Recommended`, `1440p`,
   `Keep Original`), a **Picture Detail** bit rate slider with tier badges, per-resolution Mbps guides and a "How to
-  choose" tip, plus collapsible frame rate and format options.
+  choose" tip, plus collapsible frame rate, bit rate (with an option to keep the original bit rate), and format options.
 - **iPhone Queue improvements:** the bottom Queue accessory hides when you open the Queue page, Queue and Completed
   rows display real Photos/Files video thumbnails and clear format labels, and tapping a waiting Queue item lets you
   edit its resolution, bit rate, format, save destination, or swap the selected video.

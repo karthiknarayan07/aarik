@@ -76,6 +76,8 @@ public struct AdvancedOptions: Sendable, Equatable {
         }
     }
     public var bitRateMbps = Self.suggestedHEVCMbps
+    /// When true, conversion encodes at the video's original bit rate instead of `bitRateMbps`.
+    public var keepOriginalBitRate = false
     public var frameRate = FrameRate.keep
     /// Switching format while the bit rate still holds the old format's suggestion moves it to the new one's, so an
     /// untouched field follows the format and a typed value is left alone.
@@ -108,6 +110,7 @@ public struct AdvancedOptions: Sendable, Equatable {
                 case 60?: .fps60
                 default: .keep
                 }
+            self.keepOriginalBitRate = custom.keepsSourceBitRate
             self.bitRateMbps = max(
                 Self.minimumMbps, (Double(custom.averageBitRate) / 1_000_000 * 10).rounded() / 10)
         } else {
@@ -136,7 +139,7 @@ public struct AdvancedOptions: Sendable, Equatable {
         let mbps = max(bitRateMbps.isFinite ? bitRateMbps : Self.minimumMbps, Self.minimumMbps)
         return DownscaleSpec(
             targetShortSide: resolution.shortSide, averageBitRate: Int((mbps * 1_000_000).rounded()),
-            maxFrameRate: frameRate.cap, codec: codec)
+            keepsSourceBitRate: keepOriginalBitRate, maxFrameRate: frameRate.cap, codec: codec)
     }
 
     /// Plain-English quality band for a chosen bit rate relative to the resolution's recommended mark.

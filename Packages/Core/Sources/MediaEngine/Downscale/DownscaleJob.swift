@@ -63,9 +63,13 @@ final class DownscaleJob {
             isTenBit
             ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         self.pixelFormat = pixelFormat
-        let (naturalSize, transform, descriptions, frameRate) = try await videoTrack.load(
-            .naturalSize, .preferredTransform, .formatDescriptions, .nominalFrameRate)
+        let (naturalSize, transform, descriptions, frameRate, estimatedDataRate) = try await videoTrack.load(
+            .naturalSize, .preferredTransform, .formatDescriptions, .nominalFrameRate, .estimatedDataRate)
         let size = spec.outputSize(forNaturalSize: naturalSize)
+        let targetBitRate =
+            spec.keepsSourceBitRate && estimatedDataRate > 0
+            ? max(1_000_000, Int(estimatedDataRate.rounded()))
+            : spec.averageBitRate
         let description = descriptions.first
         func color(_ key: CFString) -> CFString? {
             description.flatMap { CMFormatDescriptionGetExtension($0, extensionKey: key) as? String } as CFString?
@@ -79,7 +83,7 @@ final class DownscaleJob {
             ambientViewingEnvironment = data(kCMFormatDescriptionExtension_AmbientViewingEnvironment)
             encoder = try VideoEncoder(
                 .init(
-                    width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
+                    width: Int(size.width), height: Int(size.height), averageBitRate: targetBitRate,
                     maxBitRate: spec.maxBitRate,
                     isTenBit: isTenBit, expectedFrameRate: expectedFrameRate,
                     colorPrimaries: color(kCMFormatDescriptionExtension_ColorPrimaries),
@@ -93,7 +97,7 @@ final class DownscaleJob {
             ambientViewingEnvironment = nil
             encoder = try VideoEncoder(
                 .h264(
-                    width: Int(size.width), height: Int(size.height), averageBitRate: spec.averageBitRate,
+                    width: Int(size.width), height: Int(size.height), averageBitRate: targetBitRate,
                     expectedFrameRate: expectedFrameRate))
             scaler = try FrameScaler(
                 width: Int(size.width), height: Int(size.height),
