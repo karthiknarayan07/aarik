@@ -17,8 +17,6 @@ import Testing
         options.width = 1280
         options.height = 720
         options.hdr = .sdr
-        // Video only: the fixture writer can stall on audio interleaving when several clips are made at once.
-        options.includeAudio = false
         configure(&options)
         return options
     }
