@@ -145,6 +145,13 @@
                     clear: { browser.selection = [] })
             }
             .animation(.smooth, value: isSelecting)
+            .onChange(of: isSelecting) { _, newValue in
+                model.isSelecting = newValue
+            }
+            .onChange(of: opened) { _, newValue in
+                if newValue == nil, !isSelecting { browser.selection = [] }
+            }
+            .onDisappear { model.isSelecting = false }
             .navigationDestination(item: $opened) { id in
                 IOSVideoDetailView(model: model, id: id)
                     .navigationTransition(.zoom(sourceID: id, in: zoom))

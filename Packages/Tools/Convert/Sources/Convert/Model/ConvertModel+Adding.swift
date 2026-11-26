@@ -4,7 +4,8 @@ import Foundation
 import LocalLibrary
 
 /// Videos that would lose metadata, each with what it loses and whether the user chose to skip it.
-public struct LossReview {
+public struct LossReview: Identifiable {
+    public let id = UUID()
     public struct Entry: Identifiable {
         public let id: UUID
         public let name: String

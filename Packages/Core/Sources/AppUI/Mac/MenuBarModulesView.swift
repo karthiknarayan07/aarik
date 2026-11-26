@@ -20,6 +20,7 @@
         /// What VoiceOver reads for the ring module.
         let spokenStatus: String
         let togglePause: () -> Void
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         public init(
             modules: MenuBarModules, currentName: String?, currentPhase: String?, pauseText: String?,
@@ -105,7 +106,8 @@
             Button(action: togglePause) {
                 VStack(alignment: .leading, spacing: 0) {
                     Image(systemName: modules.pauseSymbol)
-                        .contentTransition(.symbolEffect(.replace))
+                        .contentTransition(
+                            reduceMotion ? .identity : .symbolEffect(.replace))
                     Spacer(minLength: 4)
                     Text(modules.pauseTitle).font(.callout.weight(.semibold))
                 }
@@ -143,7 +145,6 @@
                     .accessibilityHint("Opens a window to choose videos to convert, instead of dropping them here")
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
             .controlModule()
             .overlay {
                 if isTargeted {

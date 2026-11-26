@@ -114,6 +114,8 @@ First public release.
 
 ### Changed
 
+- **Cross-app UI, chart, layout, and accessibility polish:** fixed `MediaTile` corner clipping and opposing badge/size-label overlap at Dynamic Type sizes; capped `@ScaledMetric` grid spacing so Accessibility text sizes stay usable; restored Photos thumbnails in Mac Queue and Completed lists; fixed Mac/iOS Overview charts (`SavingsHero` empty slice, `MiniBars` dimming, `BeforeAfterChart`/`GroupSavingsChart` axis/padding/heights, `ThroughputChart` integer ticks); kept Mac `SettingsView` fixed-size across tabs; fixed unresolvable folder bookmark recovery across Mac and iOS; hid the iOS bottom queue bar while multi-selecting; kept `IOSVideoDetailView` fallback lookup so Search navigation doesn't flash empty; separated interactive controls from button labels on queued iOS rows; fixed iOS `IOSInsightCards` two-column adaptive width; and added launch-settlement synchronization in `BackgroundTaskTests`.
+
 - **Photos and Files grids scroll smoothly on large libraries:** posters that scroll out of view are no longer fetched, posters decode off the main thread and come back from memory, a library change that touches no video no longer rebuilds the list, and the swipe-to-select gesture no longer sits on the grid while you browse.
 
 - **Convert naming and Mac polish:** the first tool is named **Convert**; controls, menus, alerts and Settings follow

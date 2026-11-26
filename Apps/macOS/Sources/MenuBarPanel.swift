@@ -92,9 +92,13 @@ struct MenuBarPanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(board.lines.enumerated()), id: \.offset) { _, line in
                     Text(line)
+                        .font(.callout)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 if let notice = board.notice {
                     Text(notice.text)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 if !board.reviewRunIDs.isEmpty {

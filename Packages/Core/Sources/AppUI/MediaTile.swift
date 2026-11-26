@@ -42,14 +42,24 @@ public struct MediaTile: View {
             .background(.background)
             .aspectRatio(4 / 3, contentMode: .fit)
             .overlay { poster }
+            .overlay(alignment: .top) {
+                HStack(alignment: .top, spacing: 4) {
+                    badgeRow
+                    Spacer(minLength: 4)
+                    missingBadge
+                }
+                .padding(5)
+            }
+            .overlay(alignment: .bottom) {
+                HStack(alignment: .bottom, spacing: 4) {
+                    if let note { TileLabel(note) }
+                    Spacer(minLength: 4)
+                    TileLabel(sizeLabel)
+                }
+                .padding(5)
+            }
             .clipShape(.rect(cornerRadius: Self.cornerRadius))
             .opacity(isAvailable ? 1 : 0.4)
-            .overlay(alignment: .topLeading) { badgeRow }
-            .overlay(alignment: .bottomTrailing) { TileLabel(sizeLabel).padding(5) }
-            .overlay(alignment: .bottomLeading) {
-                if let note { TileLabel(note).padding(5) }
-            }
-            .overlay(alignment: .topTrailing) { missingBadge }
             .background {
                 // Finder's and Photos' selection: the system's selection colour around the poster, grey when the
                 // window is in the background or the grid doesn't have focus.
@@ -104,7 +114,6 @@ public struct MediaTile: View {
                 TileLabel(badge).fontWeight(.semibold)
             }
         }
-        .padding(5)
     }
 
     @ViewBuilder private var missingBadge: some View {
@@ -112,18 +121,17 @@ public struct MediaTile: View {
             Text(savingsBadge)
                 .font(.caption2.weight(.semibold))
                 .monospacedDigit()
+                .lineLimit(1)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(.green.gradient, in: .capsule)
-                .padding(5)
                 .help("Converting could make this video \(savingsBadge.dropFirst()) smaller")
                 .accessibilityHidden(true)
         } else if !isAvailable {
             Image(systemName: "exclamationmark.circle.fill")
                 .symbolRenderingMode(.multicolor)
                 .font(.title3)
-                .padding(5)
                 .help("The file is missing or its drive isn't connected")
         }
     }

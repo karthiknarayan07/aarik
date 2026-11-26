@@ -241,16 +241,14 @@
                 .sheet(isPresented: $model.isCompressPresented) {
                     CompressSheet(model: model)
                 }
-                .sheet(isPresented: lossReviewShown) {
-                    if let review = model.lossReview {
-                        LossConfirmationSheet(
-                            review: Binding {
-                                model.lossReview ?? review
-                            } set: {
-                                model.lossReview = $0
-                            },
-                            cancel: model.cancelLossReview, convert: model.confirmLossReview)
-                    }
+                .sheet(item: $model.lossReview) { review in
+                    LossConfirmationSheet(
+                        review: Binding {
+                            model.lossReview ?? review
+                        } set: {
+                            model.lossReview = $0
+                        },
+                        cancel: model.cancelLossReview, convert: model.confirmLossReview)
                 }
         }
     }

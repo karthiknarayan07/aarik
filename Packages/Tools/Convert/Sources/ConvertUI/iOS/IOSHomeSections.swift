@@ -87,6 +87,7 @@
     struct IOSReadySection: View {
         let model: ConvertModel
         @Environment(\.openToolRoute) private var openRoute
+        @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 170
 
         private var buckets: [SavingsBucket] {
             model.assistant.smartPicks.buckets.filter { $0.couldFree > 0 }.prefix(6).map { $0 }
@@ -116,7 +117,8 @@
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                     }
-                                    .frame(width: 170, alignment: .leading)
+                                    .frame(width: min(cardWidth, 240))
+                                    .frame(maxHeight: .infinity, alignment: .topLeading)
                                     .padding(12)
                                     .background(.fill.tertiary, in: .rect(cornerRadius: 16))
                                 }
@@ -124,7 +126,6 @@
                                 .accessibilityElement(children: .combine)
                             }
                         }
-                        .padding(.horizontal)
                     }
                     .scrollClipDisabled()
                     .listRowInsets(EdgeInsets())
@@ -148,17 +149,18 @@
                         Button {
                             openRoute(model.route(to: .completed))
                         } label: {
-                            HStack {
+                            HStack(spacing: 8) {
                                 Text(entry.job.displayName)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                     .foregroundStyle(.primary)
-                                Spacer()
-                                Text(
-                                    "Saved \(ByteFormat.string(max(0, entry.outcome.bytesBefore - entry.outcome.bytesAfter)))"
-                                )
-                                .font(.callout)
-                                .foregroundStyle(.green)
+                                Spacer(minLength: 8)
+                                Text("Saved \(ByteFormat.string(entry.outcome.savedBytes))")
+                                    .font(.callout)
+                                    .foregroundStyle(.green)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                         .accessibilityElement(children: .combine)

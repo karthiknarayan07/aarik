@@ -70,7 +70,10 @@
                 dismiss()
                 return .handled
             }
-            .task {
+            .task(id: target.id) {
+                before = nil
+                after = nil
+                isLoading = true
                 async let original = CompareFrames.frame(of: target.original)
                 async let converted = CompareFrames.frame(of: target.outcome.output)
                 before = await original
@@ -86,6 +89,7 @@
         let before: CGImage?
         let after: CGImage
         @State private var split = CompareSplit()
+        @FocusState private var isFocused: Bool
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         private var aspect: CGFloat { CGFloat(after.width) / CGFloat(max(1, after.height)) }
@@ -122,10 +126,13 @@
                 .contentShape(.rect)
                 .gesture(
                     DragGesture(minimumDistance: 0).onChanged { value in
+                        isFocused = true
                         split.drag(to: value.location.x, width: width)
                     }
                 )
                 .focusable(before != nil)
+                .focused($isFocused)
+                .focusEffectDisabled()
                 .onKeyPress(.leftArrow) { move(-1) }
                 .onKeyPress(.rightArrow) { move(1) }
                 .accessibilityElement(children: .ignore)

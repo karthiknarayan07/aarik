@@ -192,25 +192,26 @@
         var body: some View {
             let photos = matches(model.photos.items)
             let files = matches(model.library.items)
-            List {
-                if !photos.isEmpty {
-                    Section("Photos") {
-                        ForEach(photos) { row($0, isPhoto: true) }
-                    }
-                }
-                if !files.isEmpty {
-                    Section("Files") {
-                        ForEach(files) { row($0, isPhoto: false) }
-                    }
-                }
-            }
-            .overlay {
+            Group {
                 if query.isEmpty {
                     ContentUnavailableView(
                         "Search Your Videos", systemImage: "magnifyingglass",
                         description: Text("Find a video by name in Photos or Files."))
                 } else if photos.isEmpty && files.isEmpty {
                     ContentUnavailableView.search(text: query)
+                } else {
+                    List {
+                        if !photos.isEmpty {
+                            Section("Photos") {
+                                ForEach(photos) { row($0, isPhoto: true) }
+                            }
+                        }
+                        if !files.isEmpty {
+                            Section("Files") {
+                                ForEach(files) { row($0, isPhoto: false) }
+                            }
+                        }
+                    }
                 }
             }
             .task { await model.photos.start() }

@@ -102,13 +102,10 @@
         let addFiles: () -> Void
 
         var body: some View {
-            VStack {
-                welcome
-                if let error {
-                    StatusLabel(error, systemImage: "exclamationmark.triangle", tint: .orange)
-                        .padding()
+            welcome
+                .safeAreaBar(edge: .bottom) {
+                    if let error { LibraryProblemNote(text: error) }
                 }
-            }
         }
 
         private var welcome: some View {
@@ -132,6 +129,10 @@
         let model: ConvertModel
         let item: VideoItem
 
+        private var hasAvailableTarget: Bool {
+            model.contextTargets(clicked: item).contains(where: \.isAvailable)
+        }
+
         var body: some View {
             Button("Add to Queue", systemImage: "plus") { model.addToQueue(clicked: item) }
                 .disabled(!model.canAddToQueue(clicked: item))
@@ -143,19 +144,19 @@
                 Divider()
             }
             Button("Open", systemImage: "arrow.up.forward.app") { model.openLocal(clicked: item) }
-                .disabled(!item.isAvailable)
+                .disabled(!hasAvailableTarget)
             Button("Show in Finder", systemImage: "folder") {
                 let urls = model.contextTargets(clicked: item).filter(\.isAvailable).compactMap(\.fileURL)
                 model.host.reveal(urls)
             }
-            .disabled(!item.isAvailable)
+            .disabled(!hasAvailableTarget)
             // Space does the same for the selection (the grid's own key handling).
             Button("Quick Look", systemImage: "eye") { model.quickLook(clicked: item) }
-                .disabled(!item.isAvailable)
+                .disabled(!hasAvailableTarget)
             ShareLink(items: model.shareURLs(clicked: item)) {
                 Label("Share…", systemImage: "square.and.arrow.up")
             }
-            .disabled(!item.isAvailable)
+            .disabled(!hasAvailableTarget)
             Divider()
             Button("Remove from Library", systemImage: "minus.circle") { model.removeFromLibrary(clicked: item) }
         }

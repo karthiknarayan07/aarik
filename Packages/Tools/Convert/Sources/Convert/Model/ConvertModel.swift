@@ -61,6 +61,8 @@ public final class ConvertModel {
     public var isInspectorPresented: Bool {
         didSet { services.defaults.set(isInspectorPresented, forKey: Keys.inspector) }
     }
+    /// iOS library grids set this while multi-select mode is active so the root shell can hide overlapping bars.
+    public var isSelecting = false
     public var isImporterPresented = false
     public var quickLookURL: URL?
 
@@ -220,6 +222,11 @@ public final class ConvertModel {
     /// Puts the stored default conversion options (resolution, bit rate, frame rate, format) into the inspector.
     public func applyDefaultAdvancedOptions() {
         advanced = AppSettings.defaultAdvancedOptions(defaults)
+    }
+
+    /// Finds a loaded Photos or Local Files item by its library `id`.
+    public func item(withID id: UUID) -> LibraryItem? {
+        photos.items.first { $0.id == id } ?? library.items.first { $0.id == id }
     }
 }
 

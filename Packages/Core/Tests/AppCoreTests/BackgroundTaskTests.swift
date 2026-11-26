@@ -164,11 +164,13 @@ struct BackgroundTaskTests {
         await starts.next()
 
         coordinator.update(isRunning: true, title: "clip.mov", subtitle: "Item 1 of 1", progress: 0.5)
+        await scheduler.settleLaunches()
         let task = try #require(scheduler.launchOrder.last)
         #expect(coordinator.isActive)
 
         await runner.finish()
         coordinator.update(isRunning: false, title: "", subtitle: "", progress: 0)
+        await scheduler.settleLaunches()
         #expect(task.completedResults == [true])
         #expect(!coordinator.isActive)
 

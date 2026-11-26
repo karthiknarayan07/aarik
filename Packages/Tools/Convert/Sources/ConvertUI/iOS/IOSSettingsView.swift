@@ -65,14 +65,14 @@
                             Text(SaveLocation.Choice.documents.title).tag(SaveLocation.Choice.documents)
                             Text(SaveLocation.Choice.folder.title).tag(SaveLocation.Choice.folder)
                         }
-                        if saveTo == .folder, let folder = saveFolder.flatMap(AppSettings.resolve) {
+                        if saveTo == .folder {
                             LabeledContent("Folder") {
-                                HStack {
-                                    Text(folder.lastPathComponent)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .foregroundStyle(.secondary)
-                                    Button("Choose…") { isChoosingFolder = true }
+                                FolderStatusRow(
+                                    folder: saveFolder.flatMap(AppSettings.resolve),
+                                    buttonTitle: "Choose…",
+                                    accessibilityLabel: "Choose the output folder"
+                                ) {
+                                    isChoosingFolder = true
                                 }
                             }
                         }

@@ -120,6 +120,7 @@
                         // a state of its own.
                         if photos.hasLoaded, photos.authorization != .limited {
                             PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
+                                .padding(.top, 8)
                         }
                         if photos.hasLoaded, photos.loadError == nil, photos.authorization == .limited {
                             PhotosAccessLimited()
@@ -371,15 +372,13 @@
                         }
                         .labelsHidden()
                         .accessibilityLabel("Save To")
-                        if model.photosSaveLocation.choice == .folder, let folder = model.photosSaveLocation.folder {
-                            HStack {
-                                Label(folder.lastPathComponent, systemImage: "folder")
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .help(folder.path)
-                                Spacer()
-                                Button("Change…") { isChoosingFolder = true }
-                                    .accessibilityLabel("Change the output folder")
+                        if model.photosSaveLocation.choice == .folder {
+                            FolderStatusRow(
+                                folder: model.photosSaveLocation.folder,
+                                buttonTitle: "Change…",
+                                accessibilityLabel: "Change the output folder"
+                            ) {
+                                isChoosingFolder = true
                             }
                         }
                     } header: {

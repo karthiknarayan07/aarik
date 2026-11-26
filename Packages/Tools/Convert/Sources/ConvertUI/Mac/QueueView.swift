@@ -55,7 +55,6 @@
 
         var body: some View {
             let jobs = model.queuedJobs
-            let items = model.library.items + model.photos.items
             Group {
                 if jobs.isEmpty {
                     VideoPage.queue.emptyState
@@ -69,10 +68,12 @@
                         Divider()
                         List(selection: $selection) {
                             ForEach(jobs) { job in
+                                let item = model.libraryItem(for: job)
                                 QueueRow(
                                     job: job, pauseText: model.queuePause.statusText,
                                     thumbnails: model.thumbnailSource.cache,
-                                    sizes: QueueSizes.sizes(for: job, in: items),
+                                    thumbnailSource: model.thumbnailSource,
+                                    sizes: item.flatMap { QueueSizes.sizes(for: job, in: [$0]) },
                                     remaining: timeline.remaining(for: job.id)
                                 ) {
                                     model.cancel(job)
@@ -162,6 +163,8 @@
                 VStack(alignment: .leading, spacing: 2) {
                     Text(timeLeft)
                         .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                        .lineLimit(1)
                         .contentTransition(.numericText())
                         .animation(Motion.animation(reduceMotion: reduceMotion), value: timeLeft)
                     Text("\(ActivityText.videos(jobs.count)) in the queue")
@@ -189,6 +192,7 @@
         /// "Paused", or why the queue stopped itself; nil while it runs.
         let pauseText: String?
         let thumbnails: ThumbnailCache
+        var thumbnailSource: ThumbnailSource? = nil
         var sizes: QueueSizes?
         /// Seconds this video has left, once there is enough to estimate.
         var remaining: TimeInterval?
@@ -196,12 +200,13 @@
         let cancel: () -> Void
 
         init(
-            job: Job, pauseText: String?, thumbnails: ThumbnailCache, sizes: QueueSizes? = nil,
-            remaining: TimeInterval? = nil, cancel: @escaping () -> Void
+            job: Job, pauseText: String?, thumbnails: ThumbnailCache, thumbnailSource: ThumbnailSource? = nil,
+            sizes: QueueSizes? = nil, remaining: TimeInterval? = nil, cancel: @escaping () -> Void
         ) {
             self.job = job
             self.pauseText = pauseText
             self.thumbnails = thumbnails
+            self.thumbnailSource = thumbnailSource
             self.sizes = sizes
             self.remaining = remaining
             self.cancel = cancel
@@ -223,7 +228,9 @@
 
         var body: some View {
             HStack(spacing: 12) {
-                JobThumbnail(url: job.source, thumbnails: thumbnails, size: CGSize(width: 64, height: 44))
+                JobThumbnail(
+                    url: job.source, thumbnails: thumbnails, thumbnailSource: thumbnailSource,
+                    size: CGSize(width: 64, height: 44))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(job.displayName)
                         .lineLimit(1)

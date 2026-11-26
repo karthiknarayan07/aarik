@@ -32,15 +32,12 @@ struct SaveDestinationPicker: View {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             try? location.setFolder(url)
         }
-        if location.choice == .folder, let folder = location.folder {
-            HStack {
-                Label(folder.lastPathComponent, systemImage: "folder")
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(folder.path)
-                Spacer()
-                Button("Change…") { isChoosingFolder = true }
-                    .accessibilityLabel("Change the output folder")
+        if location.choice == .folder {
+            FolderStatusRow(
+                folder: location.folder, buttonTitle: "Change…",
+                accessibilityLabel: "Change the output folder"
+            ) {
+                isChoosingFolder = true
             }
         }
         if location.choice == .documents {
@@ -73,6 +70,32 @@ extension PhotosSaveLocation.Choice {
                 + orderNote
         case .folder:
             return "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos."
+        }
+    }
+}
+
+/// Shows the picked folder (or an unavailable recovery prompt when its bookmark failed to resolve) next to a
+/// Choose / Change button.
+struct FolderStatusRow: View {
+    let folder: URL?
+    let buttonTitle: String
+    let accessibilityLabel: String
+    let choose: () -> Void
+
+    var body: some View {
+        HStack {
+            if let folder {
+                Label(folder.lastPathComponent, systemImage: "folder")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(folder.path)
+            } else {
+                Label("Folder unavailable", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            }
+            Spacer()
+            Button(folder == nil ? "Choose Folder…" : buttonTitle, action: choose)
+                .accessibilityLabel(accessibilityLabel)
         }
     }
 }

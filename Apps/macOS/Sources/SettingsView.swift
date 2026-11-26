@@ -15,8 +15,7 @@ struct SettingsView: View {
             Tab("General", systemImage: "gearshape") { GeneralSettings(shell: shell, updater: updater) }
             Tab("Output", systemImage: "square.and.arrow.down") { OutputSettings(shell: shell) }
         }
-        .frame(minWidth: 450)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 480, height: 420)
     }
 }
 
@@ -111,8 +110,13 @@ private struct OutputSettings: View {
                     Text(SaveLocation.Choice.nextToOriginal.title).tag(SaveLocation.Choice.nextToOriginal)
                     Text(SaveLocation.Choice.folder.title).tag(SaveLocation.Choice.folder)
                 }
-                if saveTo == .folder, let folder = saveFolder.flatMap(AppSettings.resolve) {
-                    FolderRow(folder: folder, accessibilityName: "output folder") { chooseFolder(for: .output) }
+                if saveTo == .folder {
+                    FolderRow(
+                        folder: saveFolder.flatMap(AppSettings.resolve),
+                        accessibilityName: "output folder"
+                    ) {
+                        chooseFolder(for: .output)
+                    }
                 }
             }
             Section {
@@ -162,18 +166,23 @@ private struct OutputSettings: View {
 }
 
 private struct FolderRow: View {
-    let folder: URL
+    let folder: URL?
     let accessibilityName: String
     let change: () -> Void
 
     var body: some View {
         LabeledContent("Folder") {
             HStack {
-                Text(folder.lastPathComponent)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundStyle(.secondary)
-                    .help(folder.path)
+                if let folder {
+                    Text(folder.lastPathComponent)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(.secondary)
+                        .help(folder.path)
+                } else {
+                    Label("Unavailable", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
                 Button("Choose…", action: change)
                     .accessibilityLabel("Choose the \(accessibilityName)")
             }

@@ -212,9 +212,13 @@
         @ViewBuilder private var photosRow: some View {
             switch model.photos.isAuthorizationKnown ? model.photos.authorization : nil {
             case nil:
-                ProgressView()
-                    .controlSize(.small)
-                    .accessibilityLabel("Checking access to Photos")
+                LabeledContent {
+                    ProgressView()
+                        .controlSize(.small)
+                } label: {
+                    Label("Photos", systemImage: "photo.on.rectangle")
+                }
+                .accessibilityLabel("Checking access to Photos")
             case .authorized, .limited:
                 LabeledContent {
                     Text(Self.detail(summary.videos))
@@ -277,30 +281,30 @@
 
         var body: some View {
             if !store.buckets.isEmpty {
-                if store.isShowingPicks {
+                if case .picks(let picks) = store.state {
                     OverviewGroup(title: "Smart Picks", systemImage: "sparkles") {
-                        if case .picks(let picks) = store.state {
-                            VStack(alignment: .leading) {
-                                ForEach(Array(picks.enumerated()), id: \.element.id) { index, pick in
-                                    if index > 0 { Divider() }
-                                    SmartPickRow(
-                                        pick: pick, canAdd: model.canAddToQueue(pick.bucket),
-                                        show: { model.show(pick.bucket) }, add: { model.addToQueue(pick.bucket) })
-                                }
-                                Text("Suggested on this Mac. Nothing is added until you choose.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                UndatedNote(count: store.undatedCount)
+                        VStack(alignment: .leading) {
+                            ForEach(Array(picks.enumerated()), id: \.element.id) { index, pick in
+                                if index > 0 { Divider() }
+                                SmartPickRow(
+                                    pick: pick, canAdd: model.canAddToQueue(pick.bucket),
+                                    show: { model.show(pick.bucket) }, add: { model.addToQueue(pick.bucket) })
                             }
-                        } else if store.state == .loading {
-                            HStack {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Finding where to start…")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .accessibilityElement(children: .combine)
+                            Text("Suggested on this Mac. Nothing is added until you choose.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            UndatedNote(count: store.undatedCount)
                         }
+                    }
+                } else if store.isShowingPicks, store.state == .loading {
+                    OverviewGroup(title: "Smart Picks", systemImage: "sparkles") {
+                        HStack {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Finding where to start…")
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
                     }
                 } else {
                     OverviewGroup(title: "Biggest Groups") {
@@ -413,7 +417,7 @@
                     "Include the videos in your Photos library.", "Allow Access to Photos…",
                     { model.allowPhotos() }
                 )
-            case .denied:
+            case .denied, .restricted:
                 return (
                     "Access to Photos is off, so its videos aren't included.", "Open System Settings…",
                     { PrivacySettings.open(PrivacySettings.photos) }

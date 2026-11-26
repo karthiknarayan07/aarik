@@ -14,7 +14,7 @@
         }
 
         var body: some View {
-            IOSLibraryInspector(model: model, isCompact: false, dismiss: {})
+            IOSLibraryInspector(model: model, isCompact: false, itemID: id, dismiss: {})
                 .navigationTitle(name)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -31,7 +31,6 @@
                         Button("Convert Now") {
                             model.convertSelectionNow()
                         }
-                        .buttonStyle(.glassProminent)
                         .disabled(!model.canAddSelectionToQueue)
                         .accessibilityIdentifier("detail.convertNow")
                     }

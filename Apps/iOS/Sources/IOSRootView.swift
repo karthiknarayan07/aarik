@@ -49,7 +49,8 @@ struct IOSRootView: View {
         .modifier(
             IOSJobAccessoryModifier(
                 model: shell.convert,
-                isHidden: tab == .browse && toolsPath.last?.page == IOSPage.queue.rawValue
+                isHidden: (tab == .browse && toolsPath.last?.page == IOSPage.queue.rawValue)
+                    || shell.convert.isSelecting
             ) {
                 open(ToolRoute(toolID: shell.convert.tool.id, page: IOSPage.queue.rawValue))
             }
@@ -185,7 +186,7 @@ private struct IOSSearchTab: View {
                 }
             }
             .navigationTitle("Search")
-            .searchable(text: $query, prompt: "Videos in Photos and Files")
+            .searchable(text: $query, prompt: "Search your videos")
             .routeDestinations(scenes)
         }
     }

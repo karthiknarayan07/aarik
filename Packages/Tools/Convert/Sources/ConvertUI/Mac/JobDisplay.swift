@@ -78,27 +78,28 @@ struct JobThumbnail: View {
     @State private var image: CGImage?
 
     var body: some View {
-        Group {
-            if let image {
-                Image(decorative: image, scale: 1).resizable().scaledToFill()
-            } else {
-                Image(systemName: "film").foregroundStyle(.secondary)
+        Color.clear
+            .frame(width: size.width, height: size.height)
+            .background(.quaternary)
+            .overlay {
+                if let image {
+                    Image(decorative: image, scale: 1).resizable().scaledToFill()
+                } else {
+                    Image(systemName: "film").foregroundStyle(.secondary)
+                }
             }
-        }
-        .frame(width: size.width, height: size.height)
-        .background(.quaternary)
-        .clipShape(.rect(cornerRadius: 4))
-        .accessibilityHidden(true)
-        .task(id: url) {
-            let maxPixel = Int(max(size.width, size.height) * 3)
-            if let thumbnailSource {
-                image = await thumbnailSource.image(forJobURL: url, maxPixel: maxPixel)
-            } else if url.isFileURL {
-                image = await thumbnails.thumbnail(for: url, maxPixel: maxPixel)
-            } else {
+            .clipShape(.rect(cornerRadius: 4))
+            .contentShape(.rect)
+            .accessibilityHidden(true)
+            .task(id: url) {
                 image = nil
+                let maxPixel = Int(max(size.width, size.height) * 3)
+                if let thumbnailSource {
+                    image = await thumbnailSource.image(forJobURL: url, maxPixel: maxPixel)
+                } else if url.isFileURL {
+                    image = await thumbnails.thumbnail(for: url, maxPixel: maxPixel)
+                }
             }
-        }
     }
 }
 

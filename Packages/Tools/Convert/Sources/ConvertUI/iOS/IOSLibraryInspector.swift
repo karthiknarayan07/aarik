@@ -12,6 +12,7 @@
     struct IOSLibraryInspector: View {
         @Bindable var model: ConvertModel
         let isCompact: Bool
+        var itemID: UUID? = nil
         var onQueued: (() -> Void)? = nil
         let dismiss: () -> Void
 
@@ -27,27 +28,14 @@
                             }
                         }
                         .safeAreaInset(edge: .bottom) {
-                            HStack(spacing: 12) {
-                                Button {
-                                    queue(startsQueue: false)
-                                } label: {
-                                    Text("Add to Queue").frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.glass)
-                                .accessibilityIdentifier("addSelectionToQueue")
-                                Button {
-                                    queue(startsQueue: true)
-                                } label: {
-                                    Text("Convert Now").frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.glassProminent)
-                                .accessibilityIdentifier("convertSelection")
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 12) { compactButtons }
+                                VStack(spacing: 8) { compactButtons }
                             }
                             .controlSize(.large)
                             .disabled(!model.canAddSelectionToQueue)
                             .padding(.horizontal)
-                            .padding(.vertical, 10)
-                            .background(.bar)
+                            .padding(.bottom, 4)
                         }
                 }
             } else {
@@ -55,18 +43,44 @@
             }
         }
 
+        @ViewBuilder private var compactButtons: some View {
+            Button {
+                queue(startsQueue: false)
+            } label: {
+                Text("Add to Queue").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            .accessibilityIdentifier("addSelectionToQueue")
+            Button {
+                queue(startsQueue: true)
+            } label: {
+                Text("Convert Now").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .accessibilityIdentifier("convertSelection")
+        }
+
         private func queue(startsQueue: Bool) {
             dismiss()
-            model.requestAddSelectionToQueue(startsQueue: startsQueue)
-            // Keep selection visible when metadata loss confirmation opens; otherwise finish select mode.
-            if model.lossReview == nil && !model.isConfirmingReplace {
-                onQueued?()
+            // Wait until the options sheet has dismissed before triggering any ancestor loss sheet or replace alert.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                model.requestAddSelectionToQueue(startsQueue: startsQueue)
+                if model.lossReview == nil && !model.isConfirmingReplace {
+                    onQueued?()
+                }
             }
         }
 
         private var selectedItems: [VideoItem] {
-            if model.isPhotosPage { return model.selectedPhotoItems }
-            return model.selection?.showsLibrary == true ? model.selectedItems : []
+            let items =
+                model.isPhotosPage
+                ? model.selectedPhotoItems
+                : (model.selection?.showsLibrary == true ? model.selectedItems : [])
+            if items.isEmpty, let itemID, let fallback = model.item(withID: itemID) {
+                return [fallback]
+            }
+            return items
         }
 
         private var optionsBinding: Binding<AdvancedOptions> {
@@ -454,14 +468,13 @@
                 Picker("Save to", selection: choice) {
                     ForEach(PhotosSaveLocation.Choice.allCases) { Text($0.title).tag($0) }
                 }
-                if location.choice == .folder, let folder = location.folder {
-                    HStack {
-                        Label(folder.lastPathComponent, systemImage: "folder")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Button("Change…") { isChoosingFolder = true }
-                            .accessibilityLabel("Change the output folder")
+                if location.choice == .folder {
+                    FolderStatusRow(
+                        folder: location.folder,
+                        buttonTitle: "Change…",
+                        accessibilityLabel: "Change the output folder"
+                    ) {
+                        isChoosingFolder = true
                     }
                 }
             } header: {
@@ -493,7 +506,7 @@
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if !item.badges.isEmpty {
-                    HStack(spacing: 4) {
+                    BadgeFlowLayout(spacing: 4) {
                         ForEach(MediaBadge.ordered(item.badges), id: \.self) { badge in
                             Text(badge.displayName)
                                 .font(.caption)
@@ -527,8 +540,48 @@
                         Image(systemName: "film").font(.largeTitle).foregroundStyle(.secondary)
                     }
                 }
+                .contentShape(.rect)
                 .clipShape(.rect(cornerRadius: 6))
                 .accessibilityHidden(true)
+        }
+    }
+
+    private struct BadgeFlowLayout: Layout {
+        var spacing: CGFloat = 4
+
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+            let maxWidth = proposal.width ?? .infinity
+            var x: CGFloat = 0
+            var y: CGFloat = 0
+            var rowHeight: CGFloat = 0
+            for view in subviews {
+                let size = view.sizeThatFits(.unspecified)
+                if x > 0, x + size.width > maxWidth {
+                    x = 0
+                    y += rowHeight + spacing
+                    rowHeight = 0
+                }
+                x += size.width + spacing
+                rowHeight = max(rowHeight, size.height)
+            }
+            return CGSize(width: maxWidth.isFinite ? maxWidth : x, height: y + rowHeight)
+        }
+
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+            var x = bounds.minX
+            var y = bounds.minY
+            var rowHeight: CGFloat = 0
+            for view in subviews {
+                let size = view.sizeThatFits(.unspecified)
+                if x > bounds.minX, x + size.width > bounds.maxX {
+                    x = bounds.minX
+                    y += rowHeight + spacing
+                    rowHeight = 0
+                }
+                view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+                rowHeight = max(rowHeight, size.height)
+            }
         }
     }
 #endif

@@ -115,8 +115,14 @@ public struct MediaGrid<Item: Identifiable, Header: View, Tile: View>: View wher
             opensOnTap: opensOnTap, header: { EmptyView() }, tile: tile)
     }
 
+    private var effectiveSpacing: CGFloat { min(spacing, 18) }
+    private var effectivePadding: CGFloat { min(padding, 24) }
+    private var effectiveTileWidth: CGFloat { min(minimumTileWidth, 200) }
+
     private var columns: Int {
-        max(1, Int((viewport.width - 2 * padding + spacing) / (minimumTileWidth + spacing)))
+        max(
+            1, Int((viewport.width - 2 * effectivePadding + effectiveSpacing) / (effectiveTileWidth + effectiveSpacing))
+        )
     }
 
     private var ids: [[Item.ID]] { sections.map { $0.items.map(\.id) } }
@@ -135,8 +141,8 @@ public struct MediaGrid<Item: Identifiable, Header: View, Tile: View>: View wher
                 VStack(alignment: .leading, spacing: 0) {
                     header
                     LazyVGrid(
-                        columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns),
-                        alignment: .leading, spacing: spacing, pinnedViews: [.sectionHeaders]
+                        columns: Array(repeating: GridItem(.flexible(), spacing: effectiveSpacing), count: columns),
+                        alignment: .leading, spacing: effectiveSpacing, pinnedViews: [.sectionHeaders]
                     ) {
                         ForEach(sections) { section in
                             Section {
@@ -144,20 +150,24 @@ public struct MediaGrid<Item: Identifiable, Header: View, Tile: View>: View wher
                                     cell(item)
                                 }
                             } header: {
-                                SectionHeader(title: section.title, subtitle: section.subtitle)
-                                    .onGeometryChange(for: CGRect.self) {
-                                        $0.frame(in: .named(mediaGridSpace))
-                                    } action: { [headerFrames] in
-                                        headerFrames.values[section.id] = $0
-                                    }
-                                    .onDisappear { [headerFrames] in headerFrames.values[section.id] = nil }
+                                SectionHeader(
+                                    title: section.title, subtitle: section.subtitle,
+                                    horizontalPadding: effectivePadding
+                                )
+                                .padding(.horizontal, -effectivePadding)
+                                .onGeometryChange(for: CGRect.self) {
+                                    $0.frame(in: .named(mediaGridSpace))
+                                } action: { [headerFrames] in
+                                    headerFrames.values[section.id] = $0
+                                }
+                                .onDisappear { [headerFrames] in headerFrames.values[section.id] = nil }
                             }
                         }
                     }
                     .modifier(
                         DragOutContainer(isEnabled: dragFile != nil, selection: selection, payload: dragItems(for:))
                     )
-                    .padding(padding)
+                    .padding(effectivePadding)
                     // Empty space below the last row still belongs to the grid: a click there clears the selection.
                     .frame(minHeight: viewport.height, alignment: .top)
                     .coordinateSpace(.named(mediaGridSpace))
@@ -544,16 +554,27 @@ private struct MarqueeOverlay<ID: Hashable>: View {
 private struct SectionHeader: View {
     let title: String
     let subtitle: String
+    let horizontalPadding: CGFloat
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if !title.isEmpty {
-                Text(title).font(.headline)
-                Text(verbatim: "·").foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if !title.isEmpty {
+                    Text(title).font(.headline)
+                    Text(verbatim: "·").foregroundStyle(.secondary)
+                }
+                Text(subtitle).foregroundStyle(.secondary)
+                Spacer()
             }
-            Text(subtitle).foregroundStyle(.secondary)
-            Spacer()
+            VStack(alignment: .leading, spacing: 2) {
+                if !title.isEmpty {
+                    Text(title).font(.headline)
+                }
+                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, horizontalPadding)
         .padding(.vertical, 6)
         // A translucent header, like Photos' date headers: tiles scroll under it and the toolbar's edge effect shows.
         .background(.regularMaterial)

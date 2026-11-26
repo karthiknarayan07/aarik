@@ -28,10 +28,10 @@
                 Part(name: "Saved", bytes: snapshot.savedBytes),
                 Part(name: "Could Free", bytes: snapshot.couldFree),
                 Part(name: "Stays", bytes: stays),
-            ]
+            ].filter { $0.bytes > 0 }
         }
 
-        private var hasData: Bool { parts.contains { $0.bytes > 0 } }
+        private var hasData: Bool { !parts.isEmpty }
 
         var body: some View {
             VStack(spacing: 20) {
@@ -79,11 +79,16 @@
                     VStack(spacing: 2) {
                         Text(ByteFormat.string(snapshot?.savedBytes ?? 0))
                             .font(.title2.bold())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
                             .contentTransition(.numericText())
                         Text("Saved")
                             .font(.subheadline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(.secondary)
                     }
+                    .padding(14)
                     .accessibilityHidden(true)
                 }
             }
@@ -149,7 +154,7 @@
                         .accessibilityHidden(true)
                 }
                 .padding(14)
-                .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 150, maxHeight: .infinity, alignment: .topLeading)
                 .background(.background.secondary, in: .rect(cornerRadius: 20))
                 .contentShape(.rect(cornerRadius: 20))
             }
@@ -166,6 +171,7 @@
     struct IOSInsightCards: View {
         let snapshot: OverviewCharts?
         let activity: ActivitySummary
+        var groupsPage: IOSPage = .photos
         let open: (IOSPage) -> Void
 
         private struct Count: Identifiable {
@@ -190,21 +196,31 @@
         }
 
         var body: some View {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 12)], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 12)], spacing: 12) {
                 IOSInsightCard(
                     title: "Space Saved", systemImage: "arrow.down.circle.fill", tint: .green,
                     value: ByteFormat.string(snapshot?.savedBytes ?? 0),
                     caption: activity.completed == 1 ? "1 conversion" : "\(activity.completed) conversions",
                     identifier: "card.saved", open: { open(.completed) }
                 ) {
-                    Chart(snapshot?.throughput ?? []) { day in
-                        BarMark(x: .value("Day", day.day, unit: .day), y: .value("Saved", day.savedBytes))
+                    if let history = snapshot?.throughput, !history.isEmpty {
+                        Chart(history) { day in
+                            BarMark(
+                                x: .value("Day", day.day, unit: .day), y: .value("Saved", day.savedBytes),
+                                width: history.count == 1 ? .fixed(14) : .automatic
+                            )
                             .foregroundStyle(.green)
                             .cornerRadius(3)
+                        }
+                        .chartYScale(domain: 0...ChartCeiling.of(history.map(\.savedBytes)))
+                        .chartXAxis(.hidden)
+                        .chartYAxis(.hidden)
+                    } else {
+                        Text("No conversions yet")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     }
-                    .chartYScale(domain: 0...ChartCeiling.of(snapshot?.throughput.map(\.savedBytes) ?? []))
-                    .chartXAxis(.hidden)
-                    .chartYAxis(.hidden)
                 }
                 IOSInsightCard(
                     title: "Could Free", systemImage: "sparkles", tint: .blue,
@@ -215,22 +231,34 @@
                         open(couldFree(of: Self.photosName) >= couldFree(of: Self.filesName) ? .photos : .files)
                     }
                 ) {
-                    Chart {
-                        BarMark(x: .value("Freed", couldFree(of: Self.photosName)), y: .value("Library", "Photos"))
-                            .foregroundStyle(.blue)
-                        BarMark(x: .value("Freed", couldFree(of: Self.filesName)), y: .value("Library", "Files"))
-                            .foregroundStyle(.cyan)
+                    if (snapshot?.couldFree ?? 0) > 0 {
+                        Chart {
+                            BarMark(x: .value("Freed", couldFree(of: Self.photosName)), y: .value("Library", "Photos"))
+                                .foregroundStyle(.blue)
+                                .cornerRadius(3)
+                            BarMark(x: .value("Freed", couldFree(of: Self.filesName)), y: .value("Library", "Files"))
+                                .foregroundStyle(.cyan)
+                                .cornerRadius(3)
+                        }
+                        .chartXScale(
+                            domain:
+                                0...ChartCeiling.of([couldFree(of: Self.photosName), couldFree(of: Self.filesName)])
+                        )
+                        .chartXAxis(.hidden)
+                        .chartYAxis(.hidden)
+                    } else {
+                        Text("Nothing smaller yet")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     }
-                    .chartXScale(
-                        domain: 0...ChartCeiling.of([couldFree(of: Self.photosName), couldFree(of: Self.filesName)])
-                    )
-                    .chartXAxis(.hidden)
-                    .chartYAxis(.hidden)
                 }
                 IOSInsightCard(
                     title: "Queue", systemImage: "list.bullet.rectangle.fill", tint: .orange,
                     value: activity.queue == 0 ? "Idle" : "\(activity.queue) Left",
-                    caption: activity.failed > 0 ? "\(activity.failed) failed" : "Converting on this device",
+                    caption: activity.failed > 0
+                        ? "\(activity.failed) failed"
+                        : (activity.queue > 0 ? "Converting on this device" : "Nothing queued right now"),
                     identifier: "card.queue", open: { open(.queue) }
                 ) {
                     Chart(counts) { count in
@@ -251,16 +279,26 @@
                     value: snapshot?.groups.first?.title ?? "None Yet",
                     caption: snapshot?.groups.first.map { "Could free \(ByteFormat.string($0.bytes))" }
                         ?? "Groups appear once videos load",
-                    identifier: "card.groups", open: { open(.files) }
+                    identifier: "card.groups", open: { open(groupsPage) }
                 ) {
-                    Chart(snapshot?.groups.prefix(4).map { $0 } ?? []) { group in
-                        BarMark(x: .value("Freed", group.bytes), y: .value("Group", group.title))
+                    if let groups = snapshot?.groups, !groups.isEmpty {
+                        Chart(groups.prefix(4).map { $0 }) { group in
+                            BarMark(
+                                x: .value("Freed", group.bytes), y: .value("Group", group.title),
+                                height: groups.count == 1 ? .fixed(14) : .automatic
+                            )
                             .foregroundStyle(.purple)
                             .cornerRadius(3)
+                        }
+                        .chartXScale(domain: 0...ChartCeiling.of(groups.prefix(4).map(\.bytes)))
+                        .chartXAxis(.hidden)
+                        .chartYAxis(.hidden)
+                    } else {
+                        Text("No groups yet")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     }
-                    .chartXScale(domain: 0...ChartCeiling.of(snapshot?.groups.prefix(4).map(\.bytes) ?? []))
-                    .chartXAxis(.hidden)
-                    .chartYAxis(.hidden)
                 }
             }
             .accessibilityIdentifier("overview.cards")
@@ -283,18 +321,21 @@
                     Text("Space Saved by Day")
                         .font(.headline)
                     Chart(history) { day in
-                        BarMark(x: .value("Day", day.day, unit: .day), y: .value("Saved", day.savedBytes))
-                            .foregroundStyle(.green.gradient)
-                            .cornerRadius(4)
-                            .accessibilityLabel(day.day.formatted(Self.dayFormat))
-                            .accessibilityValue(ByteFormat.string(day.savedBytes))
+                        BarMark(
+                            x: .value("Day", day.day, unit: .day), y: .value("Saved", day.savedBytes),
+                            width: history.count == 1 ? .fixed(18) : .automatic
+                        )
+                        .foregroundStyle(.green.gradient)
+                        .cornerRadius(4)
+                        .accessibilityLabel(day.day.formatted(Self.dayFormat))
+                        .accessibilityValue(ByteFormat.string(day.savedBytes))
                     }
                     .chartYScale(domain: 0...ChartCeiling.of(history.map(\.savedBytes)))
                     .chartYAxis {
                         AxisMarks { value in
                             AxisGridLine()
                             AxisValueLabel {
-                                if let bytes = value.as(Int64.self) { Text(ByteFormat.string(bytes)) }
+                                if let raw = value.as(Double.self) { Text(ByteFormat.string(Int64(raw.rounded()))) }
                             }
                         }
                     }
@@ -312,30 +353,35 @@
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Savings by Group")
                         .font(.headline)
-                    Chart(groups.prefix(6).map { $0 }) { group in
-                        BarMark(x: .value("Could free", group.bytes), y: .value("Group", group.title))
-                            .foregroundStyle(.purple.gradient)
-                            .cornerRadius(4)
-                            .annotation(position: .top, alignment: .leading, spacing: 2) {
-                                Text(group.title)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .accessibilityLabel(group.title)
-                            .accessibilityValue("Could free \(ByteFormat.string(group.bytes))")
+                    let visibleGroups = Array(groups.prefix(6))
+                    Chart(visibleGroups) { group in
+                        BarMark(
+                            x: .value("Could free", group.bytes), y: .value("Group", group.title),
+                            height: visibleGroups.count == 1 ? .fixed(22) : .automatic
+                        )
+                        .foregroundStyle(.purple.gradient)
+                        .cornerRadius(4)
+                        .annotation(position: .top, alignment: .leading, spacing: 2) {
+                            Text(group.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .accessibilityLabel(group.title)
+                        .accessibilityValue("Could free \(ByteFormat.string(group.bytes))")
                     }
-                    .chartXScale(domain: 0...ChartCeiling.of(groups.prefix(6).map(\.bytes)))
+                    .chartXScale(domain: 0...ChartCeiling.of(visibleGroups.map(\.bytes)))
                     .chartXAxis {
                         AxisMarks { value in
                             AxisGridLine()
                             AxisValueLabel {
-                                if let bytes = value.as(Int64.self) { Text(ByteFormat.string(bytes)) }
+                                if let raw = value.as(Double.self) { Text(ByteFormat.string(Int64(raw.rounded()))) }
                             }
                         }
                     }
                     .chartYAxis(.hidden)
-                    .frame(height: CGFloat(min(groups.count, 6)) * 56 + 36)
+                    .chartPlotStyle { $0.padding(.top, 22).padding(.bottom, 6) }
+                    .frame(height: CGFloat(visibleGroups.count) * 58 + 44)
                     .accessibilityChartDescriptor(
                         BarChartDescriptor(
                             title: "Savings by Group",

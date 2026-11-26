@@ -95,27 +95,22 @@
         @ViewBuilder
         fileprivate func row(for job: Job, waitingText: String?) -> some View {
             if job.state == .queued {
-                Button {
-                    editingJob = job
-                } label: {
-                    HStack(spacing: 8) {
-                        IOSQueueRow(
-                            job: job, pauseText: waitingText, thumbnails: model.thumbnailSource
-                        ) {
-                            model.cancel(job)
-                        }
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
+                HStack(spacing: 10) {
+                    Button {
+                        editingJob = job
+                    } label: {
+                        IOSQueueRowSummary(job: job, pauseText: waitingText, thumbnails: model.thumbnailSource)
                     }
-                    .contentShape(.rect)
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Edits selected video and conversion settings")
+                    if let lost = job.predictedLost { PredictedLossBadge(lost: lost) }
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Edits selected video and conversion settings")
             } else {
-                IOSQueueRow(
-                    job: job, pauseText: waitingText, thumbnails: model.thumbnailSource
-                ) {
+                IOSQueueRow(job: job, pauseText: waitingText, thumbnails: model.thumbnailSource) {
                     model.cancel(job)
                 }
             }
@@ -142,20 +137,23 @@
         }
     }
 
-    private struct IOSQueueRow: View {
+    private struct IOSQueueRowSummary: View {
         let job: Job
         let pauseText: String?
         let thumbnails: ThumbnailSource
-        let cancel: () -> Void
 
-        private var progress: Double? {
+        var progress: Double? {
             if case .running(let progress) = job.state { return progress }
             return nil
         }
 
-        private var stateText: String {
+        var stateText: String {
             if let progress { return "\(job.phase ?? "Converting") · \(Int((progress * 100).rounded()))%" }
             return pauseText ?? "Waiting"
+        }
+
+        var subtitle: String {
+            [job.presetLabel, stateText].compactMap { $0 }.joined(separator: " · ")
         }
 
         var body: some View {
@@ -166,22 +164,39 @@
                     Text(job.displayName)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        if let preset = job.presetLabel { Text(preset) }
-                        Text("·")
-                        Text(stateText)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     if let progress {
                         ProgressView(value: progress)
                             .progressViewStyle(.linear)
                             .accessibilityLabel("Progress")
                     }
                 }
-                Spacer()
+                Spacer(minLength: 0)
+            }
+            .contentShape(.rect)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private struct IOSQueueRow: View {
+        let job: Job
+        let pauseText: String?
+        let thumbnails: ThumbnailSource
+        let cancel: () -> Void
+
+        private var isRunning: Bool {
+            if case .running = job.state { return true }
+            return false
+        }
+
+        var body: some View {
+            let summary = IOSQueueRowSummary(job: job, pauseText: pauseText, thumbnails: thumbnails)
+            HStack(spacing: 12) {
+                summary
                 if let lost = job.predictedLost { PredictedLossBadge(lost: lost) }
-                if progress != nil {
+                if isRunning {
                     Button("Cancel Conversion", systemImage: "xmark.circle.fill", action: cancel)
                         .labelStyle(.iconOnly)
                         .buttonStyle(.borderless)
@@ -189,9 +204,8 @@
                         .accessibilityLabel("Cancel conversion: \(job.displayName)")
                 }
             }
-            .padding(.vertical, 2)
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("\(job.displayName), \(stateText)")
+            .accessibilityLabel("\(job.displayName), \(summary.stateText)")
         }
     }
 
@@ -312,17 +326,18 @@
                     Text(outcome.output.isFileURL ? outcome.output.lastPathComponent : job.displayName)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        Text(ActivityText.sizeChange(outcome))
-                        Text("·")
-                        Text(ActivityText.saved(outcome))
-                        if outcome.replacedOriginal {
-                            Text("·")
-                            Text("Original in Recently Deleted")
-                        }
-                    }
+                    Text(
+                        [
+                            ActivityText.sizeChange(outcome),
+                            ActivityText.saved(outcome),
+                            outcome.replacedOriginal ? "Original in Recently Deleted" : nil,
+                        ]
+                        .compactMap { $0 }
+                        .joined(separator: " · ")
+                    )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
                     ForEach(outcome.notes, id: \.self) { note in
                         Text(note)
                             .font(.caption)
@@ -510,7 +525,6 @@
                                 replacement: replacement)
                             dismiss()
                         }
-                        .buttonStyle(.glassProminent)
                         .disabled(!canSave)
                         .accessibilityIdentifier("saveJobSettings")
                     }
@@ -553,15 +567,21 @@
             let photosItems = filter(model.photos.items)
             let fileItems = filter(model.library.items.filter(\.isAvailable))
             NavigationStack {
-                List {
-                    if !photosItems.isEmpty {
-                        Section("Photos") {
-                            ForEach(photosItems) { row($0) }
-                        }
-                    }
-                    if !fileItems.isEmpty {
-                        Section("Files") {
-                            ForEach(fileItems) { row($0) }
+                Group {
+                    if photosItems.isEmpty && fileItems.isEmpty {
+                        ContentUnavailableView.search(text: search)
+                    } else {
+                        List {
+                            if !photosItems.isEmpty {
+                                Section("Photos") {
+                                    ForEach(photosItems) { row($0) }
+                                }
+                            }
+                            if !fileItems.isEmpty {
+                                Section("Files") {
+                                    ForEach(fileItems) { row($0) }
+                                }
+                            }
                         }
                     }
                 }
@@ -578,12 +598,18 @@
 
         private func row(_ item: VideoItem) -> some View {
             let busy = isBusyElsewhere(item)
+            let thumbnailURL =
+                item.photosIdentifier.map { PhotoAssetURL.url(for: $0) }
+                ?? item.fileURL
+                ?? URL(filePath: "/\(item.name)")
             return Button {
                 selection = item
                 dismiss()
             } label: {
                 HStack(spacing: 12) {
-                    IOSPickerThumbnail(item: item, thumbnails: model.thumbnailSource)
+                    JobThumbnail(
+                        url: thumbnailURL, thumbnails: model.thumbnailSource.cache,
+                        thumbnailSource: model.thumbnailSource)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.name)
                             .lineLimit(1)
@@ -604,29 +630,6 @@
             .buttonStyle(.plain)
             .disabled(busy)
             .opacity(busy ? 0.5 : 1)
-        }
-    }
-
-    private struct IOSPickerThumbnail: View {
-        let item: VideoItem
-        let thumbnails: ThumbnailSource
-        @State private var image: CGImage?
-
-        var body: some View {
-            Group {
-                if let image {
-                    Image(decorative: image, scale: 1).resizable().scaledToFill()
-                } else {
-                    Image(systemName: "film").foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 48, height: 32)
-            .background(.quaternary)
-            .clipShape(.rect(cornerRadius: 4))
-            .accessibilityHidden(true)
-            .task(id: item.id) {
-                image = await thumbnails.image(for: item, maxPixel: 144)
-            }
         }
     }
 #endif

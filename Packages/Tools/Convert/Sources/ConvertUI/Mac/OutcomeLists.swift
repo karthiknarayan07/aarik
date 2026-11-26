@@ -1,6 +1,7 @@
 #if os(macOS)
     import Convert
     import AppCore
+    import AppServices
     import AppUI
     import Assistant
     import Charts
@@ -31,7 +32,9 @@
                                     ForEach(day.rows, id: \.job.id) { row in
                                         CompletedRow(
                                             job: row.job, outcome: row.outcome,
-                                            thumbnails: model.thumbnailSource.cache, assistant: model.assistant
+                                            thumbnails: model.thumbnailSource.cache,
+                                            thumbnailSource: model.thumbnailSource,
+                                            assistant: model.assistant
                                         ) {
                                             compareTarget = CompareTarget(job: row.job, outcome: row.outcome)
                                         }
@@ -121,7 +124,7 @@
                 // Labels sit under the plot, so they never cover a bar.
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .day)) { _ in
-                        AxisValueLabel(format: .dateTime.weekday(.abbreviated), anchor: .top)
+                        AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true, anchor: .top)
                     }
                 }
                 .chartYAxis(.hidden)
@@ -141,18 +144,22 @@
         let job: Job
         let outcome: JobOutcome
         let thumbnails: ThumbnailCache
+        var thumbnailSource: ThumbnailSource? = nil
         let assistant: AssistantServices
         /// Opens the before/after compare; nil leaves the button out.
         var onCompare: (() -> Void)?
         @State private var isWhyShown = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         init(
-            job: Job, outcome: JobOutcome, thumbnails: ThumbnailCache, assistant: AssistantServices,
+            job: Job, outcome: JobOutcome, thumbnails: ThumbnailCache,
+            thumbnailSource: ThumbnailSource? = nil, assistant: AssistantServices,
             onCompare: (() -> Void)? = nil
         ) {
             self.job = job
             self.outcome = outcome
             self.thumbnails = thumbnails
+            self.thumbnailSource = thumbnailSource
             self.assistant = assistant
             self.onCompare = onCompare
         }
@@ -161,7 +168,8 @@
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 12) {
                     JobThumbnail(
-                        url: outcome.output, thumbnails: thumbnails, size: CGSize(width: 64, height: 44))
+                        url: outcome.output, thumbnails: thumbnails, thumbnailSource: thumbnailSource,
+                        size: CGSize(width: 64, height: 44))
                     VStack(alignment: .leading, spacing: 3) {
                         Text(outcome.output.isFileURL ? outcome.output.lastPathComponent : job.displayName)
                             .lineLimit(1)
@@ -202,7 +210,7 @@
                 }
             }
             .padding(.vertical, 4)
-            .animation(.smooth, value: isWhyShown)
+            .animation(Motion.animation(reduceMotion: reduceMotion), value: isWhyShown)
         }
     }
 
@@ -241,6 +249,7 @@
                                 ForEach(day.rows, id: \.job.id) { row in
                                     ReasonRow(
                                         job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
+                                        thumbnailSource: model.thumbnailSource,
                                         assistant: model.assistant, badge: "Kept as Is")
                                 }
                             } header: {
@@ -272,6 +281,7 @@
                         ForEach(rows, id: \.job.id) { row in
                             ReasonRow(
                                 job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
+                                thumbnailSource: model.thumbnailSource,
                                 assistant: model.assistant
                             ) {
                                 Button("Retry") { model.retry(row.job) }
@@ -300,16 +310,20 @@
         let job: Job
         let reason: String
         let thumbnails: ThumbnailCache
+        var thumbnailSource: ThumbnailSource? = nil
         let assistant: AssistantServices
         /// A capsule at the trailing edge naming the outcome, when the list wants one.
         var badge: String?
         @ViewBuilder var actions: Actions
         @State private var isWhyShown = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 12) {
-                    JobThumbnail(url: job.source, thumbnails: thumbnails, size: CGSize(width: 64, height: 44))
+                    JobThumbnail(
+                        url: job.source, thumbnails: thumbnails, thumbnailSource: thumbnailSource,
+                        size: CGSize(width: 64, height: 44))
                     VStack(alignment: .leading, spacing: 3) {
                         Text(job.displayName)
                             .lineLimit(1)
@@ -337,17 +351,18 @@
                 }
             }
             .padding(.vertical, 4)
-            .animation(.smooth, value: isWhyShown)
+            .animation(Motion.animation(reduceMotion: reduceMotion), value: isWhyShown)
         }
     }
 
     extension ReasonRow where Actions == EmptyView {
         init(
-            job: Job, reason: String, thumbnails: ThumbnailCache, assistant: AssistantServices,
-            badge: String? = nil
+            job: Job, reason: String, thumbnails: ThumbnailCache, thumbnailSource: ThumbnailSource? = nil,
+            assistant: AssistantServices, badge: String? = nil
         ) {
             self.init(
-                job: job, reason: reason, thumbnails: thumbnails, assistant: assistant, badge: badge
+                job: job, reason: reason, thumbnails: thumbnails, thumbnailSource: thumbnailSource,
+                assistant: assistant, badge: badge
             ) { EmptyView() }
         }
     }

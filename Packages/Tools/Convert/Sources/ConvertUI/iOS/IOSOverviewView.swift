@@ -71,6 +71,7 @@
                         Section {
                             IOSInsightCards(
                                 snapshot: charts, activity: model.activity,
+                                groupsPage: model.photos.items.isEmpty ? .files : .photos,
                                 open: { open($0) })
                         } header: {
                             Text("Pinned")
@@ -78,8 +79,10 @@
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.hidden)
-                        Section("Trends") {
-                            IOSTrendCharts(snapshot: charts)
+                        if let charts, !charts.throughput.isEmpty || !charts.groups.isEmpty {
+                            Section("Trends") {
+                                IOSTrendCharts(snapshot: charts)
+                            }
                         }
                         if let summary {
                             IOSSmartPicksSection(model: model)
@@ -261,15 +264,27 @@
                                     Text(pick.bucket.detail)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    HStack {
-                                        Button("Show") {
-                                            model.show(pick.bucket)
-                                            openRoute(model.routeToSelection())
+                                    ViewThatFits(in: .horizontal) {
+                                        HStack {
+                                            Button("Show") {
+                                                model.show(pick.bucket)
+                                                openRoute(model.routeToSelection())
+                                            }
+                                            .buttonStyle(.bordered)
+                                            Button("Add These to the Queue…") { model.addToQueue(pick.bucket) }
+                                                .buttonStyle(.borderedProminent)
+                                                .disabled(!model.canAddToQueue(pick.bucket))
                                         }
-                                        .buttonStyle(.bordered)
-                                        Button("Add These to the Queue…") { model.addToQueue(pick.bucket) }
-                                            .buttonStyle(.borderedProminent)
-                                            .disabled(!model.canAddToQueue(pick.bucket))
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Button("Show") {
+                                                model.show(pick.bucket)
+                                                openRoute(model.routeToSelection())
+                                            }
+                                            .buttonStyle(.bordered)
+                                            Button("Add These to the Queue…") { model.addToQueue(pick.bucket) }
+                                                .buttonStyle(.borderedProminent)
+                                                .disabled(!model.canAddToQueue(pick.bucket))
+                                        }
                                     }
                                     .padding(.top, 2)
                                 }
@@ -310,6 +325,7 @@
                                     openRoute(model.routeToSelection())
                                 }
                                 .buttonStyle(.bordered)
+                                .accessibilityLabel("Show \(bucket.title)")
                             }
                         }
                     } header: {
@@ -348,23 +364,36 @@
                         Button {
                             reveal(entry)
                         } label: {
-                            HStack {
-                                Image(systemName: entry.library == .photos ? "photo.on.rectangle" : "folder")
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 2) {
+                            ViewThatFits(in: .horizontal) {
+                                HStack {
+                                    Image(systemName: entry.library == .photos ? "photo.on.rectangle" : "folder")
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityHidden(true)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(entry.name)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                        Text("\(libraryName) · \(ByteFormat.string(entry.bytes))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text("about \(ByteFormat.string(entry.couldFree))")
+                                        .font(.callout)
+                                        .foregroundStyle(.tint)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text(entry.name)
                                         .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
+                                        .lineLimit(2)
                                     Text("\(libraryName) · \(ByteFormat.string(entry.bytes))")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                    Text("Could free about \(ByteFormat.string(entry.couldFree))")
+                                        .font(.callout)
+                                        .foregroundStyle(.tint)
                                 }
-                                Spacer()
-                                Text("about \(ByteFormat.string(entry.couldFree))")
-                                    .font(.callout)
-                                    .foregroundStyle(.tint)
                             }
                         }
                         .accessibilityLabel(
@@ -372,18 +401,6 @@
                                 + "\(ByteFormat.string(entry.couldFree))")
                     }
                 }
-            }
-        }
-    }
-
-    private struct IOSSavedSoFarSection: View {
-        let savedBytes: Int64
-        let conversions: Int
-
-        var body: some View {
-            Section("Saved So Far") {
-                LabeledContent("Space Saved", value: ByteFormat.string(savedBytes))
-                LabeledContent("Conversions", value: conversions.formatted())
             }
         }
     }
@@ -402,6 +419,10 @@
             } actions: {
                 if model.photos.isAuthorizationKnown, model.photos.authorization == .notDetermined {
                     Button("Allow Access to Photos…") { model.allowPhotos() }
+                        .buttonStyle(.borderedProminent)
+                }
+                if model.photos.authorization == .limited {
+                    Button("Choose More Photos…") { openRoute(model.route(to: .photos)) }
                         .buttonStyle(.borderedProminent)
                 }
                 if model.photos.authorization == .denied {

@@ -22,7 +22,8 @@
                         detail: "at the \(presetName) preset"
                     ) {
                         MiniBars(
-                            values: charts.sizes.flatMap { [$0.now, $0.after] }.map(Double.init), tint: .blue)
+                            values: charts.sizes.flatMap { [$0.now, $0.after] }.map(Double.init), tint: .blue,
+                            dimsFirst: true)
                     }
                     SummaryCard(
                         title: "Saved So Far", systemImage: "checkmark.circle.fill", tint: .green,
@@ -76,7 +77,8 @@
         }
 
         private var slices: [Slice] {
-            [
+            guard charts.totalBytes > 0 else { return [] }
+            return [
                 Slice(name: "Could free", bytes: Double(charts.couldFree)),
                 Slice(name: "Stays", bytes: Double(max(0, charts.totalBytes - charts.couldFree))),
             ]
@@ -104,7 +106,6 @@
                 }
                 .padding(8)
             }
-            .accessibilityElement(children: .combine)
         }
 
         private var words: some View {
@@ -138,10 +139,17 @@
         }
 
         private var ring: some View {
-            Chart(slices) { slice in
-                SectorMark(angle: .value("Size", slice.bytes), innerRadius: .ratio(0.72), angularInset: 1.5)
-                    .cornerRadius(5)
-                    .foregroundStyle(by: .value("Part", slice.name))
+            Chart {
+                if slices.isEmpty {
+                    SectorMark(angle: .value("Empty", 1), innerRadius: .ratio(0.72))
+                        .foregroundStyle(Color(nsColor: .quaternaryLabelColor))
+                } else {
+                    ForEach(slices) { slice in
+                        SectorMark(angle: .value("Size", slice.bytes), innerRadius: .ratio(0.72), angularInset: 1.5)
+                            .cornerRadius(5)
+                            .foregroundStyle(by: .value("Part", slice.name))
+                    }
+                }
             }
             .chartForegroundStyleScale(["Could free": Color.blue, "Stays": Color(nsColor: .quaternaryLabelColor)])
             .chartLegend(.hidden)
@@ -203,6 +211,7 @@
     private struct MiniBars: View {
         let values: [Double]
         let tint: Color
+        var dimsFirst = false
         var singleCaption: String?
 
         var body: some View {
@@ -227,7 +236,7 @@
                     ForEach(Array(values.enumerated()), id: \.offset) { entry in
                         GeometryReader { proxy in
                             Capsule()
-                                .fill(tint.opacity(entry.offset == 0 && values.count == 2 ? 0.4 : 1))
+                                .fill(tint.opacity(dimsFirst && entry.offset == 0 && values.count == 2 ? 0.4 : 1))
                                 .frame(width: max(6, proxy.size.width * entry.element / top))
                         }
                         .frame(height: 10)
@@ -343,27 +352,30 @@
                 emptyText: "Add videos or allow access to Photos to compare sizes."
             ) {
                 Chart(bars) { bar in
-                    BarMark(x: .value("Size", bar.bytes), y: .value("Library", bar.library))
-                        .foregroundStyle(by: .value("When", bar.kind))
-                        .position(by: .value("When", bar.kind))
-                        .cornerRadius(3)
-                        .annotation(position: .top, alignment: .leading, spacing: 4) {
-                            // The library's name once, above its first bar, never over the plot.
-                            if bar.kind == "Now" {
-                                Text(bar.library)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
+                    BarMark(
+                        x: .value("Size", bar.bytes), y: .value("Library", bar.library),
+                        height: sizes.count == 1 ? .fixed(18) : .automatic
+                    )
+                    .foregroundStyle(by: .value("When", bar.kind))
+                    .position(by: .value("When", bar.kind))
+                    .cornerRadius(3)
+                    .annotation(position: .top, alignment: .leading, spacing: 4) {
+                        // The library's name once, above its first bar, never over the plot.
+                        if bar.kind == "Now" {
+                            Text(bar.library)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
-                        .accessibilityLabel("\(bar.library), \(bar.kind)")
-                        .accessibilityValue(ByteFormat.string(bar.bytes))
+                    }
+                    .accessibilityLabel("\(bar.library), \(bar.kind)")
+                    .accessibilityValue(ByteFormat.string(bar.bytes))
                 }
                 .chartForegroundStyleScale(["Now": Color.indigo.opacity(0.45), "After": Color.indigo])
                 .chartXAxis { byteAxisMarks() }
                 .chartYAxis(.hidden)
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
-                .chartPlotStyle { $0.padding(.vertical, 6).padding(.trailing, 12) }
+                .chartPlotStyle { $0.padding(.top, 22).padding(.bottom, 6).padding(.trailing, 12) }
                 .accessibilityLabel("Size now and after converting")
                 .accessibilityValue(
                     sizes.map {
@@ -399,7 +411,7 @@
                 }
                 .chartXAxis { byteAxisMarks() }
                 .chartYAxis(.hidden)
-                .chartPlotStyle { $0.padding(.vertical, 4).padding(.trailing, 12) }
+                .chartPlotStyle { $0.padding(.top, 22).padding(.bottom, 6).padding(.trailing, 12) }
                 .accessibilityLabel("What each group of videos could free")
                 .accessibilityValue(
                     groups.map { "\($0.title): about \(ByteFormat.string($0.bytes))" }.joined(separator: ". "))
@@ -463,9 +475,13 @@
                         .accessibilityValue(day.videos == 1 ? "1 video converted" : "\(day.videos) videos converted")
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { _ in
-                        AxisGridLine()
-                        AxisValueLabel(horizontalSpacing: 10)
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                        if let count = value.as(Double.self), count == count.rounded() {
+                            AxisGridLine()
+                            AxisValueLabel(horizontalSpacing: 10) {
+                                Text(Int(count), format: .number)
+                            }
+                        }
                     }
                 }
                 .chartPlotStyle { $0.padding(.top, 10).padding(.horizontal, 8) }
@@ -482,7 +498,10 @@
         AxisMarks(position: position, values: .automatic(desiredCount: 3)) { value in
             AxisGridLine()
             AxisValueLabel(horizontalSpacing: 10, verticalSpacing: 6) {
-                if let bytes = value.as(Int64.self) { Text(bytes == 0 ? "0" : ByteFormat.string(bytes)) }
+                if let raw = value.as(Double.self) {
+                    let bytes = Int64(raw.rounded())
+                    Text(bytes == 0 ? "0" : ByteFormat.string(bytes))
+                }
             }
         }
     }
