@@ -39,6 +39,30 @@ private func video(name: String = "Beach Day.mov") -> LibraryItem {
         #expect(!MacSidebarModel(showsAsk: false, tool: tool).selectablePages.contains(.ask))
     }
 
+    @Test func aToolsPagesAreListedOnlyInsideItsGroup() {
+        let state = VideoSidebarState(
+            photosCount: 3, localCount: 2, badgeCounts: [.k4: 1], activity: .init(jobs: []))
+        let sections = VideoSidebar.sections(state)
+        // The tool's group holds its own pages and none of the app's.
+        let owned = sections.flatMap(\.items).compactMap(\.destination)
+        #expect(!owned.contains(.overview) && !owned.contains(.ask))
+        let sidebar = MacSidebarModel(showsAsk: true, tool: sections)
+        #expect(sidebar.toolRows.compactMap(\.tag) == owned)
+        // Everything after Home and Ask is a page of the tool, in the tool's order.
+        let pages = sidebar.selectablePages
+        #expect(Array(pages.prefix(2)) == [.home, .ask])
+        #expect(pages.dropFirst(2).compactMap(\.destination) == owned)
+        #expect(pages.dropFirst(2).allSatisfy { $0.destination != nil })
+    }
+
+    @Test func appLevelPageTitlesNeverNameATool() {
+        for page in [VideoPage.overview, .ask] {
+            for noun in ["Convert", "Shrink", "Compress"] {
+                #expect(!page.title.localizedCaseInsensitiveContains(noun), "\(page.title) names a tool")
+            }
+        }
+    }
+
     @Test func askSitsRightAfterHome() {
         #expect(MacSidebarModel(showsAsk: true, tool: tool).selectablePages.prefix(2) == [.home, .ask])
         #expect(VideoPage.ask.title == "Ask")
