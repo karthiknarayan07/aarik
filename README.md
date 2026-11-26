@@ -48,7 +48,9 @@ The Videos page lists the videos in your Photos library, in the same grid, filte
   video is downloaded from iCloud only when its turn in the queue comes.
 - **iCloud space and timing:** if your originals live in iCloud Photos, each video is downloaded first (the queue shows
   "Downloading from iCloud" with its own progress, and you can cancel it), then converted, then saved to Photos as a
-  new video with the same date, location, favorite and albums. Downloading is usually the longest step, so a large
+  new video with the same date, location, favorite, hidden state, caption and albums (Photos still gives new imports
+  today's added date, so sort by Date Captured to see copies in their original spot). Downloading is usually the longest
+  step, so a large
   batch takes a while on a slow connection. The Mac needs room for the download and the converted copy (the app checks
   before it starts). Your original is untouched unless you choose Replace Original in Photos; then, once the new
   video is saved and checked, Photos asks you to confirm before the originals move to Recently Deleted. iCloud space

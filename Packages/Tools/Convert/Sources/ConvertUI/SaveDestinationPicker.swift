@@ -57,3 +57,22 @@ struct SaveDestinationPicker: View {
         }
     }
 }
+
+extension PhotosSaveLocation.Choice {
+    /// Explanation shown under the Photos "Save to" picker on Mac and iOS.
+    var footerNote: String {
+        let orderNote =
+            "Saved copies keep their capture date and albums; sort Photos by Date Captured to see them in their "
+            + "original spot."
+        switch self {
+        case .replace:
+            return "Each video is downloaded from iCloud when its turn comes. When the queue finishes, Photos asks "
+                + "you to move the originals to Recently Deleted. \(orderNote)"
+        case .newAsset:
+            return "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos. "
+                + orderNote
+        case .folder:
+            return "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos."
+        }
+    }
+}

@@ -149,12 +149,7 @@
                     } header: {
                         Text("Save to")
                     } footer: {
-                        Text(
-                            model.photosSaveLocation.choice == .replace
-                                ? "Each video is downloaded from iCloud when its turn comes. When the queue finishes, "
-                                    + "Photos asks you to move the originals to Recently Deleted."
-                                : "Each video is downloaded from iCloud when its turn comes. Your original stays in Photos."
-                        )
+                        Text(model.photosSaveLocation.choice.footerNote)
                     }
                 }
                 .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
