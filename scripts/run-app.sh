@@ -5,7 +5,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-args=(-project App/App.xcodeproj -scheme App -configuration Debug -derivedDataPath .build/xcode)
+args=(-workspace Aarik.xcworkspace -scheme App -configuration Debug -derivedDataPath .build/xcode)
 
 xcodebuild "${args[@]}" build
 

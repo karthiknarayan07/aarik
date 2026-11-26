@@ -10,14 +10,14 @@ PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_ID_PREFIX).app
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 
-// Info.plist: generated keys plus App/Info.plist, which carries the keys Xcode has no INFOPLIST_KEY_ setting for
+// Info.plist: generated keys plus Apps/macOS/Info.plist, which carries the keys Xcode has no INFOPLIST_KEY_ setting for
 GENERATE_INFOPLIST_FILE = YES
 INFOPLIST_FILE = Info.plist
 INFOPLIST_KEY_CFBundleDisplayName = $(APP_DISPLAY_NAME)
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.photography
 INFOPLIST_KEY_NSPhotoLibraryUsageDescription = Lets the app list the videos in your Photos library, shrink the ones you choose, and save the smaller copies back.
 
-// Updates (Sparkle): App/Info.plist turns these into SUFeedURL and SUPublicEDKey.
+// Updates (Sparkle): Apps/macOS/Info.plist turns these into SUFeedURL and SUPublicEDKey.
 // The updater starts only when both are set, so Debug builds never touch the network.
 // `/$()/` keeps the `//` of the URL from starting an xcconfig comment.
 APP_UPDATE_FEED_URL[config=Debug] =
@@ -25,7 +25,7 @@ APP_UPDATE_FEED_URL[config=Release] = https:/$()/$(APP_GITHUB_OWNER).github.io/$
 // EdDSA public key for update signatures: set by the owner, see docs/RELEASING.md. Never put the private key here.
 APP_UPDATE_PUBLIC_KEY =
 
-// Help menu: the project's page, whose README is the help. App/Info.plist turns this into AppHelpURL.
+// Help menu: the project's page, whose README is the help. Apps/macOS/Info.plist turns this into AppHelpURL.
 APP_HELP_URL = https:/$()/github.com/$(APP_GITHUB_OWNER)/$(APP_GITHUB_REPO)
 
 // Platform: macOS 26+, Apple silicon only

@@ -18,7 +18,7 @@
                BlueprintIdentifier = "A10000000000000000000701"
                BuildableName = "App.app"
                BlueprintName = "App"
-               ReferencedContainer = "container:App.xcodeproj">
+               ReferencedContainer = "container:Aarik.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -51,7 +51,7 @@
             BlueprintIdentifier = "A10000000000000000000701"
             BuildableName = "App.app"
             BlueprintName = "App"
-            ReferencedContainer = "container:App.xcodeproj">
+            ReferencedContainer = "container:Aarik.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -68,7 +68,7 @@
             BlueprintIdentifier = "A10000000000000000000701"
             BuildableName = "App.app"
             BlueprintName = "App"
-            ReferencedContainer = "container:App.xcodeproj">
+            ReferencedContainer = "container:Aarik.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -20,7 +20,7 @@
 
 /* Begin PBXFileReference section */
 		A10000000000000000000301 /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000000000000000000302 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+		A10000000000000000000302 /* macOS.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = macOS.xcconfig; sourceTree = "<group>"; };
 		A10000000000000000000303 /* Brand.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Brand.xcconfig; sourceTree = "<group>"; };
 		A10000000000000000000304 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -72,11 +72,11 @@
 		A10000000000000000000602 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000302 /* App.xcconfig */,
+				A10000000000000000000302 /* macOS.xcconfig */,
 				A10000000000000000000303 /* Brand.xcconfig */,
 			);
 			name = Config;
-			path = ../Config;
+			path = ../../Config;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000603 /* Products */ = {
@@ -137,7 +137,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A10000000000000000000A01 /* Build configuration list for PBXProject "App" */;
+			buildConfigurationList = A10000000000000000000A01 /* Build configuration list for PBXProject "Aarik" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -147,7 +147,7 @@
 			mainGroup = A10000000000000000000601;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A10000000000000000000B01 /* XCLocalSwiftPackageReference "../Packages/AppModules" */,
+				A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/AppModules" */,
 				A10000000000000000000B02 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -195,14 +195,14 @@
 		};
 		A10000000000000000000903 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000000000000000000302 /* App.xcconfig */;
+			baseConfigurationReference = A10000000000000000000302 /* macOS.xcconfig */;
 			buildSettings = {
 			};
 			name = Debug;
 		};
 		A10000000000000000000904 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000000000000000000302 /* App.xcconfig */;
+			baseConfigurationReference = A10000000000000000000302 /* macOS.xcconfig */;
 			buildSettings = {
 			};
 			name = Release;
@@ -210,7 +210,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A10000000000000000000A01 /* Build configuration list for PBXProject "App" */ = {
+		A10000000000000000000A01 /* Build configuration list for PBXProject "Aarik" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A10000000000000000000901 /* Debug */,
@@ -231,9 +231,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A10000000000000000000B01 /* XCLocalSwiftPackageReference "../Packages/AppModules" */ = {
+		A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/AppModules" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../Packages/AppModules;
+			relativePath = ../../Packages/AppModules;
 		};
 /* End XCLocalSwiftPackageReference section */
 

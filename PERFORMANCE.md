@@ -51,7 +51,7 @@ engine time and memory are caught by the performance tests below.
 
 1. State the symptom with a number ("launch 1.8 s", "RAM 600 MB after 30 videos").
 2. Measure a **Release** build only. Debug is `-Onone` and tells you nothing about speed:
-   `xcodebuild -project App/App.xcodeproj -scheme App -configuration Release -derivedDataPath .build/xcode-p6 build`.
+   `xcodebuild -workspace Aarik.xcworkspace -scheme App -configuration Release -derivedDataPath .build/xcode-p6 build`.
 3. Profile with Instruments (Time Profiler, Allocations, Hangs, Points of Interest) or time the engine without the
    UI: `cd Packages/AppModules && swift run -c release devtool downscale <in> <out>` (`devtool fixture <path>`
    makes a test clip; `devtool inspect <file>` prints metadata).
@@ -100,7 +100,7 @@ The names are stable; `PipelineStage` is the list and a test pins it. Adding a s
   - **Who enforces it.** The 20 % rule is enforced locally, on the release Mac, as a step of the release checklist
     (`docs/RELEASING.md`). The CI job `performance-report` only runs the benchmark in Release, prints the numbers
     and uploads them as a JSON artifact (`PERF_REPORT_PATH`); hosted runners are too varied to hold a baseline.
-- Launch time: `App/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines; set "Max %
+- Launch time: `Apps/macOS/UITests/LaunchPerformanceTests.swift` (`XCTApplicationLaunchMetric`, Xcode baselines; set "Max %
   Regression" to 20, Xcode's default is 10) belongs in the `AppUITests` target of the `ui-tests` branch; the target is
   not on this branch, so it doesn't build yet. Running UI tests needs automation permission.
 
