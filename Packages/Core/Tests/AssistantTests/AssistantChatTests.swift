@@ -256,7 +256,10 @@ struct AssistantChatTests {
         }
     }
 
-    @Test(arguments: ["search_library{}", "  search_library{library:any}  ", "Sure. search_library{} done"])
+    @Test(arguments: [
+        "search_library{}", "  search_library{library:any}  ", "Sure. search_library{} done", "search_library",
+        "search_library()",
+    ])
     func aToolCallWrittenAsTextIsNeverShownAndIsRetriedOnceWithANudge(written: String) async {
         let calls = Calls()
         let client = ScriptedChatClient { _ in
@@ -271,9 +274,10 @@ struct AssistantChatTests {
         #expect(chat.items.map(\.content) == [.user("How many videos do I have?"), .assistant("You have 3 videos.")])
     }
 
-    @Test func aToolCallWrittenAsTextTwiceIsRunByTheChatAndAnsweredFromItsOutput() async {
+    @Test(arguments: ["search_library{library:any}", "search_library", "search_library()"])
+    func aToolCallWrittenAsTextTwiceIsRunByTheChatAndAnsweredFromItsOutput(written: String) async {
         let tool = CountingTool(name: "search_library", requiresConfirmation: false)
-        let client = ScriptedChatClient { _ in [.text("search_library{library:any}")] }
+        let client = ScriptedChatClient { _ in [.text(written)] }
         let chat = makeChat(client: client, tools: [tool])
         chat.send("How much space do my videos take up?")
         await chat.waitUntilIdle()
@@ -307,12 +311,26 @@ struct AssistantChatTests {
         #expect(chat.items.last?.content == .notice(AssistantChat.emptyReplyMessage))
     }
 
-    @Test func aReplyThatIsEmptyShowsTheRetryNotice() async {
-        let client = ScriptedChatClient { _ in [] }
+    @Test(arguments: ["", "   \n\t  "])
+    func aReplyThatIsEmptyShowsTheRetryNotice(reply: String) async {
+        let client = ScriptedChatClient { _ in reply.isEmpty ? [] : [.text(reply)] }
         let chat = makeChat(client: client)
         chat.send("Hi")
         await chat.waitUntilIdle()
         #expect(chat.items.map(\.content) == [.user("Hi"), .notice(AssistantChat.emptyReplyMessage)])
+        #expect(chat.canRegenerate)
+    }
+
+    @Test func parseToolCallHandlesEmptyAndJSONArguments() {
+        let tools = [CountingTool(name: "search_library", requiresConfirmation: false)]
+        let empty = AssistantChat.parseToolCall("search_library{}", tools: tools)
+        #expect(empty?.name == "search_library")
+        #expect(empty?.arguments.values == [:])
+        let json = AssistantChat.parseToolCall(
+            #"Sure: search_library {"library": "photos", "minimum_size_mb": 500}"#, tools: tools)
+        #expect(json?.name == "search_library")
+        #expect(json?.arguments.string("library") == "photos")
+        #expect(json?.arguments.integer("minimum_size_mb") == 500)
     }
 
     @Test func ordinaryAnswersAreNotTakenForToolCalls() {

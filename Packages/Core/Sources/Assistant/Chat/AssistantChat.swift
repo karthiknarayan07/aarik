@@ -85,27 +85,41 @@ public final class AssistantChat {
     static let toolNudge =
         "\nCall the tool itself. Never write a tool's name or braces in your reply; write only the answer."
 
-    /// Whether a reply is a tool call written out as text, such as `search_library{}`, not an answer.
+    /// Whether a reply is a tool call written out as text, such as `search_library{}`, `search_library()` or just
+    /// `search_library`, not an answer.
     static func looksLikeToolCall(_ text: String, toolNames: [String]) -> Bool {
         if text.range(of: #"^\s*\w+\s*\{.*\}\s*$"#, options: .regularExpression) != nil { return true }
-        return toolNames.contains { text.contains("\($0){") || text.contains("\($0) {") }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return toolNames.contains {
+            trimmed == $0 || trimmed == "\($0)()" || text.contains("\($0){") || text.contains("\($0) {")
+                || text.contains("\($0)()")
+        }
     }
 
     static let emptyReplyMessage = "I couldn't come up with an answer. Try again."
 
     /// The call a reply wrote out as text, if it names one of these tools that only reads and its arguments parse:
-    /// `search_library{}`, `search_library{library:any}` or `search_library {"library": "any"}`.
+    /// `search_library{}`, `search_library{library:any}`, `search_library {"library": "any"}` or `search_library`.
     static func parseToolCall(_ text: String, tools: [any AssistantTool]) -> (
         name: String, arguments: AssistantArguments
     )? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         for tool in tools where !tool.requiresConfirmation {
-            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: tool.name))\\s*\\{([^{}]*)\\}"
-            guard let match = text.range(of: pattern, options: .regularExpression) else { continue }
-            let call = String(text[match])
-            guard let open = call.firstIndex(of: "{"), let close = call.lastIndex(of: "}") else { continue }
-            let body = String(call[call.index(after: open)..<close]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let values = parseArguments(body) else { return nil }
-            return (tool.name, AssistantArguments(values))
+            let escaped = NSRegularExpression.escapedPattern(for: tool.name)
+            let pattern = "\\b\(escaped)\\s*\\{([^{}]*)\\}"
+            if let match = text.range(of: pattern, options: .regularExpression) {
+                let call = String(text[match])
+                guard let open = call.firstIndex(of: "{"), let close = call.lastIndex(of: "}") else { continue }
+                let body = String(call[call.index(after: open)..<close]).trimmingCharacters(
+                    in: .whitespacesAndNewlines)
+                guard let values = parseArguments(body) else { return nil }
+                return (tool.name, AssistantArguments(values))
+            }
+            if trimmed == tool.name
+                || text.range(of: "\\b\(escaped)\\s*\\(\\s*\\)", options: .regularExpression) != nil
+            {
+                return (tool.name, AssistantArguments([:]))
+            }
         }
         return nil
     }
@@ -120,7 +134,7 @@ public final class AssistantChat {
         var values: [String: String] = [:]
         for pair in body.split(separator: ",") {
             guard let split = pair.firstIndex(where: { $0 == ":" || $0 == "=" }) else { return nil }
-            let quotes = CharacterSet(charactersIn: "\"' \n")
+            let quotes = CharacterSet(charactersIn: "\"'").union(.whitespacesAndNewlines)
             let key = pair[..<split].trimmingCharacters(in: quotes)
             let value = pair[pair.index(after: split)...].trimmingCharacters(in: quotes)
             guard !key.isEmpty else { return nil }
@@ -288,7 +302,7 @@ public final class AssistantChat {
                     if wroteToolCall { continue }
                     if let existing = replyID {
                         update(existing) { $0.content = .assistant(text) }
-                    } else if !text.isEmpty {
+                    } else if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         replyID = append(.assistant(text), in: id)
                     }
                 }
@@ -311,7 +325,13 @@ public final class AssistantChat {
         if replyID == nil, failure == nil, !Task.isCancelled, epoch == self.epoch {
             if let hiddenCall, let call = Self.parseToolCall(hiddenCall, tools: tools()) {
                 let answer = await handleToolCall(call.name, call.arguments, in: id)
-                if !Task.isCancelled { replyID = append(.assistant(answer), in: id) }
+                if !Task.isCancelled {
+                    if answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        append(.notice(Self.emptyReplyMessage), in: id)
+                    } else {
+                        replyID = append(.assistant(answer), in: id)
+                    }
+                }
             } else if !Task.isCancelled, !hasReplyAfterLastUser, !hasPendingConfirmation {
                 append(.notice(Self.emptyReplyMessage), in: id)
             }
