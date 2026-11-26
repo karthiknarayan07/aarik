@@ -189,6 +189,7 @@
                     opensOnTap: !isSelecting
                 ) { item, state in
                     LibraryTile(item: item, state: state, thumbnails: model.thumbnailSource)
+                        .equatable()
                         .matchedTransitionSource(id: item.id, in: zoom)
                         .contextMenu {
                             Button("Add to Queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }

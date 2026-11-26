@@ -20,11 +20,18 @@ public struct ThumbnailSource: Sendable {
         case .photos(let identifier):
             let size = Self.size(for: item.pixelSize, maxPixel: maxPixel)
             let photos = photos
-            let key = PhotoItemBuilder.thumbnailKey(for: item) ?? "photos:\(identifier)"
-            return await cache.thumbnail(forKey: key, maxPixel: maxPixel) {
+            // The identifier and modification date are the key (an edited video gets a fresh poster); no string is built.
+            return await cache.thumbnail(forKey: identifier, modified: item.modifiedDate, maxPixel: maxPixel) {
                 await photos.thumbnail(for: identifier, size: size)
             }
         }
+    }
+
+    /// The poster when it is already in memory, without waiting: a tile that scrolls back in shows it at once.
+    /// Only Photos videos are kept under a key that needs no file access, so a file's poster is nil here.
+    public func cachedImage(for item: LibraryItem, maxPixel: Int) -> CGImage? {
+        guard case .photos(let identifier) = item.source else { return nil }
+        return cache.cachedImage(forKey: identifier, modified: item.modifiedDate, maxPixel: maxPixel)
     }
 
     /// The video's shape with its longer side at `maxPixel`; a square when its size isn't known.

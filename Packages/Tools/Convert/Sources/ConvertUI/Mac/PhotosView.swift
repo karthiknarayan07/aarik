@@ -183,8 +183,8 @@
                     LibraryTile(
                         item: item, state: state, thumbnails: model.thumbnailSource,
                         savingsBadge: LibraryInsight.savingsBadge(for: item, preset: model.effectivePreset(for: item))
-                    )
-                    .contextMenu { PhotoTileMenu(model: model, item: item) }
+                    ).equatable()
+                        .contextMenu { PhotoTileMenu(model: model, item: item) }
                 }
             }
         }

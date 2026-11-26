@@ -2,9 +2,10 @@
 # One command for the whole base gate: package tests, warnings-as-errors build, lint, Mac and iOS builds,
 # iOS tests, brand-neutral and stale-path checks. Prints a pass/fail table; exits non-zero on any failure.
 #
-#   scripts/verify.sh [--only GROUP[,GROUP...]] [--repeat N]
+#   scripts/verify.sh [--only GROUP[,GROUP...]] [--repeat N] [--perf]
 #
-# Groups: mac ios packages lint hygiene brand stale   (default: everything)
+# Groups: mac ios packages lint hygiene brand stale   (default: everything); --perf also runs the Photos scroll
+#         performance test on the Simulator (opt-in, slow; a device run is scripts/device-perf.sh)
 # Env:    SIM_UDID (force a simulator), MAC_SCHEME (default App), IOS_SCHEME (default App-iOS),
 #         VERIFY_DIR (logs and derived data, default .build/verify),
 #         IOS_SKIP_TESTING (space-separated -skip-testing identifiers for "iOS app test", e.g. "AppUITests")
@@ -14,21 +15,23 @@ cd "$(dirname "$0")/.."
 VERIFY_DIR=${VERIFY_DIR:-$PWD/.build/verify}
 ONLY=""
 REPEAT=1
+PERF=0
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
   case $1 in
     --only) ONLY=${2:?--only needs a group}; shift 2 ;;
     --only=*) ONLY=${1#--only=}; shift ;;
     --repeat) REPEAT=${2:?--repeat needs a number}; shift 2 ;;
     --repeat=*) REPEAT=${1#--repeat=}; shift ;;
+    --perf) PERF=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "verify: unknown option $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 [[ $REPEAT =~ ^[1-9][0-9]*$ ]] || { echo "verify: --repeat needs a positive integer" >&2; exit 2; }
 for g in ${ONLY//,/ }; do
-  case $g in mac|ios|packages|lint|hygiene|brand|stale) ;; *) echo "verify: unknown group '$g'" >&2; exit 2 ;; esac
+  case $g in mac|ios|packages|lint|hygiene|brand|stale|perf) ;; *) echo "verify: unknown group '$g'" >&2; exit 2 ;; esac
 done
 
 mkdir -p "$VERIFY_DIR/logs"
@@ -141,6 +144,10 @@ mac_build() { # CONFIG
   xcodebuild -workspace "$WORKSPACE" -scheme "$MAC_SCHEME" -configuration "$1" -derivedDataPath "$VERIFY_DIR/derived-mac" \
     -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 }
+ios_scroll_perf() { # the Photos grid scrolled on the Simulator with a 2,500-video synthetic library; opt-in (--perf)
+  scripts/ios-ui-tests.sh --udid "$SIM" --perf --only PhotosScrollPerformanceTests || return 1
+  scripts/scroll-perf-report.sh ".build/ios-ui/results/$SIM.xcresult"
+}
 ios_xcode() { # ACTION
   local skip=() t
   if [[ $1 == test ]]; then for t in ${IOS_SKIP_TESTING:-}; do skip+=("-skip-testing:$t"); done; fi
@@ -185,6 +192,7 @@ for ((n = 1; n <= REPEAT; n++)); do
   elif [[ -n $SIM ]]; then
     run $n "iOS app build" ios ios_xcode build
     run $n "iOS app test" ios ios_xcode test
+    if [[ $PERF -eq 1 ]]; then run $n "iOS scroll performance" "ios perf" ios_scroll_perf; fi
   fi
 
   run $n "brand-neutral" "mac hygiene brand" brand_check

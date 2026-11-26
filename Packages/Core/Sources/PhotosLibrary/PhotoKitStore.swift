@@ -12,6 +12,20 @@ public final class PhotoKitStore: PhotoStore {
     private static let batchSize = 256
 
     private let includeHidden: Bool
+    /// What the last listing fetched: the assets by local identifier (so a thumbnail request doesn't fetch the asset
+    /// again) and the fetch result (so a library change that touches no video is told apart from one that does).
+    private final class Listing: Sendable {
+        struct State: @unchecked Sendable {
+            var assets: [String: PHAsset] = [:]
+            var result: PHFetchResult<PHAsset>?
+        }
+
+        let state = Mutex(State())
+    }
+
+    private let listing = Listing()
+    /// One caching manager for every poster: it shares work between requests for the same asset.
+    private let imageManager = PHCachingImageManager()
 
     /// Hidden videos are left out unless `includeHidden` is true, as in Photos' own Library view.
     public init(includeHidden: Bool = false) {
@@ -53,13 +67,20 @@ public final class PhotoKitStore: PhotoStore {
         let result = PHAsset.fetchAssets(with: .video, options: options)
         let count = result.count
         let batchSize = Self.batchSize
+        listing.state.withLock { $0.result = result }
+        let objects = Mutex<[String: PHAsset]>([:])
+        defer { listing.state.withLock { $0.assets = objects.withLock { $0 } } }
         return try await withThrowingTaskGroup(of: (Int, [PhotoAsset]).self) { group in
             for start in stride(from: 0, to: count, by: batchSize) {
                 group.addTask {
                     try Task.checkCancellation()
                     let range = start..<min(start + batchSize, count)
                     let assets = autoreleasepool {
-                        result.objects(at: IndexSet(integersIn: range)).map(Self.makeAsset)
+                        let fetched = result.objects(at: IndexSet(integersIn: range))
+                        objects.withLock { map in
+                            for asset in fetched { map[asset.localIdentifier] = asset }
+                        }
+                        return fetched.map(Self.makeAsset)
                     }
                     return (start, assets)
                 }
@@ -140,7 +161,12 @@ public final class PhotoKitStore: PhotoStore {
             continuation.finish()
             return stream
         }
-        let observer = ChangeObserver(continuation)
+        let observer = ChangeObserver(continuation) { [listing] change in
+            // Before the first listing every change counts. After it, only a change to the videos does: an
+            // unrelated edit would otherwise rebuild the whole list.
+            guard let result = listing.state.withLock({ $0.result }) else { return true }
+            return change.changeDetails(for: result) != nil
+        }
         PHPhotoLibrary.shared().register(observer)
         continuation.onTermination = { _ in PHPhotoLibrary.shared().unregisterChangeObserver(observer) }
         return stream
@@ -166,7 +192,8 @@ public final class PhotoKitStore: PhotoStore {
     /// The best image Photos has on this Mac: the final image, else the last low-quality one it delivered.
     @concurrent
     public func thumbnail(for id: String, size: CGSize) async -> CGImage? {
-        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+        let known = listing.state.withLock { $0.assets[id] }
+        guard let asset = known ?? PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
             return nil
         }
         let options = PHImageRequestOptions()
@@ -175,8 +202,8 @@ public final class PhotoKitStore: PhotoStore {
         options.resizeMode = .fast
         options.version = .current
         let request = ThumbnailRequest()
-        let manager = PHImageManager.default()
-        return await withTaskCancellationHandler {
+        let manager = imageManager
+        let image = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 guard request.start(continuation) else { return }
                 let requestID = manager.requestImage(
@@ -191,19 +218,37 @@ public final class PhotoKitStore: PhotoStore {
         } onCancel: {
             if let requestID = request.cancel() { manager.cancelImageRequest(requestID) }
         }
+        // Photos hands back an image that is decoded when first drawn, which would happen on the main thread in the
+        // middle of a scroll; decode it here, off the main thread.
+        return image.flatMap { $0.predecoded() }
+    }
+}
+
+extension CGImage {
+    /// The same picture as an image whose pixels are already in memory (itself when a bitmap can't be made).
+    fileprivate func predecoded() -> CGImage {
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return self }
+        context.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage() ?? self
     }
 }
 
 /// Bridges PhotoKit's change callback (called on a PhotoKit queue) to an async stream.
 private final class ChangeObserver: NSObject, PHPhotoLibraryChangeObserver, Sendable {
     private let continuation: AsyncStream<Void>.Continuation
+    private let isRelevant: @Sendable (PHChange) -> Bool
 
-    init(_ continuation: AsyncStream<Void>.Continuation) {
+    init(_ continuation: AsyncStream<Void>.Continuation, isRelevant: @escaping @Sendable (PHChange) -> Bool) {
         self.continuation = continuation
+        self.isRelevant = isRelevant
     }
 
     func photoLibraryDidChange(_ changeInstance: PHChange) {
-        continuation.yield()
+        if isRelevant(changeInstance) { continuation.yield() }
     }
 }
 

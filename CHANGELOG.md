@@ -105,6 +105,8 @@ First public release.
 
 ### Changed
 
+- **Photos and Files grids scroll smoothly on large libraries:** posters that scroll out of view are no longer fetched, posters decode off the main thread and come back from memory, a library change that touches no video no longer rebuilds the list, and the swipe-to-select gesture no longer sits on the grid while you browse.
+
 - **Convert naming and Mac polish:** the first tool is named **Convert**; controls, menus, alerts and Settings follow
   Title Case and ellipsis conventions across the Mac app; disabled "Soon" placeholder rows and the single-item Tools
   sidebar section are removed; pressing Delete on a running conversion in the Queue asks first; the menu bar popover

@@ -60,8 +60,8 @@
                                 for: item.id, default: model.preset)?.displayName,
                             savingsBadge: LibraryInsight.savingsBadge(
                                 for: item, preset: model.effectivePreset(for: item))
-                        )
-                        .contextMenu { TileMenu(model: model, item: item) }
+                        ).equatable()
+                            .contextMenu { TileMenu(model: model, item: item) }
                     }
                     .onDeleteCommand { model.removeSelectionFromLibrary() }
                 }
