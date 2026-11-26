@@ -55,7 +55,7 @@ public final class PressureCoordinator {
     }
 
     public func pause(isPausedByUser: Bool) -> QueuePause {
-        QueuePause(isPausedByUser: isPausedByUser, automatic: effect.automaticPause)
+        QueuePause(isPausedByUser: isPausedByUser, automatic: effect.automaticPause, lowBattery: effect.lowBattery)
     }
 
     private func thermalChanged() {

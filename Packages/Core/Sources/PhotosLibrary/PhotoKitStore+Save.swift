@@ -12,7 +12,7 @@ private final class PlaceholderBox: Sendable {
 
 extension PhotoKitStore {
     /// One `performChanges` that adds the asset (`.video` resource, `shouldMoveFile = false`), sets date,
-    /// location, favorite and hidden, and adds it to the albums that still exist, through its placeholder.
+    /// location, favorite, hidden and the caption (where the OS has it), and adds it to the albums that still exist, through its placeholder.
     @concurrent
     public func saveVideo(_ request: PhotoSaveRequest) async throws -> String {
         guard await authorization().allowsReading else { throw PhotoStoreError.notAuthorized }
@@ -38,6 +38,9 @@ extension PhotoKitStore {
                 }
                 creation.isFavorite = request.isFavorite
                 creation.isHidden = request.isHidden
+                if #available(macOS 27, iOS 27, *), let caption = request.caption, !caption.isEmpty {
+                    creation.caption = caption
+                }
                 guard let created = creation.placeholderForCreatedAsset else { return }
                 placeholder.set(created.localIdentifier)
                 for collection in existing {
@@ -58,7 +61,7 @@ extension PhotoKitStore {
     @concurrent
     public func deleteAssets(ids: [String]) async throws {
         guard await authorization().allowsReading else { throw PhotoStoreError.notAuthorized }
-        let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: Self.idFetchOptions())
         // Nothing is deleted, and the caller hears of it, when any asset can't be found.
         guard assets.count == Set(ids).count else {
             var found: Set<String> = []

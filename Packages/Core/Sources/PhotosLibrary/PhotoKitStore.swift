@@ -172,11 +172,20 @@ public final class PhotoKitStore: PhotoStore {
         return stream
     }
 
+    /// Options for fetching a known asset by local identifier, including hidden ones so verifying or deleting a
+    /// hidden copy works.
+    static func idFetchOptions() -> PHFetchOptions {
+        let options = PHFetchOptions()
+        options.includeHiddenAssets = true
+        return options
+    }
+
     // MARK: - Albums
 
     @concurrent
     public func albums(containing id: String) async throws -> [String] {
-        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: Self.idFetchOptions()).firstObject
+        else {
             throw PhotoStoreError.notInLibrary(id)
         }
         let collections = PHAssetCollection.fetchAssetCollectionsContaining(asset, with: .album, options: nil)
@@ -193,7 +202,10 @@ public final class PhotoKitStore: PhotoStore {
     @concurrent
     public func thumbnail(for id: String, size: CGSize) async -> CGImage? {
         let known = listing.state.withLock { $0.assets[id] }
-        guard let asset = known ?? PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+        guard
+            let asset = known
+                ?? PHAsset.fetchAssets(withLocalIdentifiers: [id], options: Self.idFetchOptions()).firstObject
+        else {
             return nil
         }
         let options = PHImageRequestOptions()

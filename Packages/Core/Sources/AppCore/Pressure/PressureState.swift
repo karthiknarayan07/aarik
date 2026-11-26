@@ -36,29 +36,29 @@ public struct PowerSnapshot: Sendable, Equatable {
     public static let pluggedIn = PowerSnapshot(onBattery: false, percent: nil)
 }
 
-/// Why the queue paused itself.
+/// Why the queue paused itself. Only heat: a low battery warns (`PressureState.isBatteryLow`) and never pauses.
 public enum AutoPauseReason: Sendable, Equatable {
     case thermal
-    case batteryLow
 }
 
-/// The automatic decisions: when to pause for heat or a low battery, and how many videos may convert at once. Pure:
-/// feed it readings and read the result.
+/// The automatic decisions: when to pause for heat, when to warn about a low battery, and how many videos may convert
+/// at once. Pure: feed it readings and read the result.
 ///
 /// - Thermal: `.critical` pauses; it resumes only at `.fair` or better, so `.serious` on the way down stays paused.
 ///   `.serious` alone (not paused) limits conversion to one video at a time.
-/// - Low Power Mode: one video at a time, whatever the speed.
-/// - Battery: conversion continues on battery. It pauses at 20 % or less, and resumes when the Mac is plugged in or
-///   above 25 %. A Mac that reports no percentage never pauses.
+/// - Low Power Mode: one video at a time, whatever the speed. It never pauses and never warns: it already saves power.
+/// - Battery: conversion continues on battery and never pauses for it. At 20 % or less on battery `isBatteryLow` is
+///   true, so the app shows a warning; it clears when plugged in or above 25 %. A device that reports no percentage
+///   never warns.
 public struct PressureState: Sendable, Equatable {
-    public static let batteryPausePercent = 20
-    public static let batteryResumePercent = 25
+    public static let batteryWarnPercent = 20
+    public static let batteryClearPercent = 25
 
     public private(set) var thermal = ThermalLevel.nominal
     public private(set) var power = PowerSnapshot.pluggedIn
     public var speed: SpeedSetting
     private var isHotPaused = false
-    private var isBatteryPaused = false
+    public private(set) var isBatteryLow = false
 
     public init(speed: SpeedSetting = .default) {
         self.speed = speed
@@ -76,22 +76,18 @@ public struct PressureState: Sendable, Equatable {
     public mutating func update(power snapshot: PowerSnapshot) {
         power = snapshot
         guard snapshot.onBattery, let percent = snapshot.percent else {
-            isBatteryPaused = false
+            isBatteryLow = false
             return
         }
-        if percent <= Self.batteryPausePercent {
-            isBatteryPaused = true
-        } else if percent > Self.batteryResumePercent {
-            isBatteryPaused = false
+        if percent <= Self.batteryWarnPercent {
+            isBatteryLow = true
+        } else if percent > Self.batteryClearPercent {
+            isBatteryLow = false
         }
     }
 
-    /// Why the queue should be paused now; heat before battery.
-    public var automaticPause: AutoPauseReason? {
-        if isHotPaused { return .thermal }
-        if isBatteryPaused { return .batteryLow }
-        return nil
-    }
+    /// Why the queue should be paused now: only heat.
+    public var automaticPause: AutoPauseReason? { isHotPaused ? .thermal : nil }
 
     /// How many videos may convert at once (the queue's concurrency, once it runs several; today the downscale
     /// limit). Quiet: 1. Balanced: half the cores, at least 2. Fastest: the performance cores, never fewer than
@@ -112,7 +108,7 @@ public struct PressureState: Sendable, Equatable {
     public func effect(cores: CoreCounts) -> PressureEffect {
         PressureEffect(
             automaticPause: automaticPause, concurrencyLimit: concurrencyLimit(cores: cores),
-            runsInBackground: speed.runsInBackground)
+            runsInBackground: speed.runsInBackground, lowBattery: isBatteryLow)
     }
 }
 
@@ -121,6 +117,8 @@ public struct PressureEffect: Sendable, Equatable {
     public var automaticPause: AutoPauseReason?
     public var concurrencyLimit: Int
     public var runsInBackground: Bool
+    /// The battery is low: a warning to show, never a reason to pause.
+    public var lowBattery = false
 }
 
 /// Why the queue is paused, for the status line. A pause the user chose wins over an automatic one: an automatic
@@ -133,11 +131,19 @@ public struct QueuePause: Sendable, Equatable {
 
     public var isPausedByUser: Bool
     public var automatic: AutoPauseReason?
+    /// The battery is low. A warning only: it does not make `isPaused` true.
+    public var lowBattery: Bool
 
-    public init(isPausedByUser: Bool, automatic: AutoPauseReason?) {
+    public init(isPausedByUser: Bool, automatic: AutoPauseReason?, lowBattery: Bool = false) {
         self.isPausedByUser = isPausedByUser
         self.automatic = automatic
+        self.lowBattery = lowBattery
     }
+
+    public static let lowBatteryWarning = "Battery is low. Converting uses more power."
+
+    /// The non-blocking warning to show beside the run status; nil when the battery is fine.
+    public var warningText: String? { lowBattery ? Self.lowBatteryWarning : nil }
 
     public var isPaused: Bool { isPausedByUser || automatic != nil }
 
@@ -157,7 +163,6 @@ public struct QueuePause: Sendable, Equatable {
             #else
                 "Paused while your Mac cools down"
             #endif
-        case .automatic(.batteryLow): "Paused: battery low"
         }
     }
 }

@@ -17,11 +17,17 @@ extension PhotoKitStore {
 
     @concurrent
     public func asset(id: String) async throws -> PhotoAsset {
-        Self.makeAsset(try Self.fetchAsset(id))
+        let phAsset = try Self.fetchAsset(id)
+        let asset = Self.makeAsset(phAsset)
+        // The caption is the one attribute a listing doesn't carry; it is read here, for a single asset.
+        guard #available(macOS 27, iOS 27, *), let caption = phAsset.extendedMetadata.caption, !caption.isEmpty else {
+            return asset
+        }
+        return asset.withCaption(caption)
     }
 
     private static func fetchAsset(_ id: String) throws -> PHAsset {
-        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: idFetchOptions()).firstObject else {
             throw PhotoStoreError.notInLibrary(id)
         }
         return asset

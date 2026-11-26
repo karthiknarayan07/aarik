@@ -310,7 +310,7 @@ public final class FakePhotoStore: PhotoStore {
                 // Photos marks a new asset with a subtype bit that has no name.
                 subtypes: PhotoSubtypes(rawValue: 1 << 20), originalFileName: request.file.lastPathComponent,
                 originalByteSize: state.savedByteSize ?? size ?? 1, isLocallyAvailable: true,
-                modificationDate: request.creationDate)
+                modificationDate: request.creationDate, caption: request.caption)
             if let adjust = state.adjustSaved { asset = adjust(asset) }
             state.assets.append(asset)
             state.albums[id] = added

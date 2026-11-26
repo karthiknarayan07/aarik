@@ -116,18 +116,23 @@ struct PressureCoordinatorTests {
         #expect(rig.effects.all.last?.concurrencyLimit == 4)
     }
 
-    @Test func batteryPausesAtTwentyAndResumesAboveTwentyFiveOrPluggedIn() {
+    @Test func aLowBatteryWarnsAndNeverPausesTheQueue() {
         let rig = Rig()
-        rig.power.set(PowerSnapshot(onBattery: true, percent: 20))
-        #expect(rig.effects.all.last?.automaticPause == .batteryLow)
-        rig.power.set(PowerSnapshot(onBattery: true, percent: 24))
-        #expect(rig.effects.all.last?.automaticPause == .batteryLow)
+        for percent in [20, 24, 12, 3] {
+            rig.power.set(PowerSnapshot(onBattery: true, percent: percent))
+            #expect(rig.effects.all.last?.automaticPause == nil)
+            #expect(rig.effects.all.last?.lowBattery == true)
+            let pause = rig.coordinator.pause(isPausedByUser: false)
+            #expect(!pause.isPaused)
+            #expect(pause.warningText == "Battery is low. Converting uses more power.")
+        }
         rig.power.set(PowerSnapshot(onBattery: true, percent: 26))
-        #expect(rig.effects.all.last?.automaticPause == nil)
+        #expect(rig.effects.all.last?.lowBattery == false)
         rig.power.set(PowerSnapshot(onBattery: true, percent: 12))
-        #expect(rig.effects.all.last?.automaticPause == .batteryLow)
+        #expect(rig.effects.all.last?.lowBattery == true)
         rig.power.set(PowerSnapshot(onBattery: false, percent: 12))
-        #expect(rig.effects.all.last?.automaticPause == nil)
+        #expect(rig.effects.all.last?.lowBattery == false)
+        #expect(rig.effects.all.allSatisfy { $0.automaticPause == nil })
     }
 
     @Test func onlyRealChangesAreReported() {
@@ -172,10 +177,10 @@ struct PressureCoordinatorTests {
 
     @Test func theUsersResumeDoesNotOverrideAnAutomaticPause() {
         let rig = Rig()
-        rig.power.set(PowerSnapshot(onBattery: true, percent: 10))
+        rig.thermal.set(.critical)
         let pause = rig.coordinator.pause(isPausedByUser: false)
         #expect(pause.isPaused)
-        #expect(pause.statusText == "Paused: battery low")
+        #expect(pause.automatic == .thermal)
     }
 
     // MARK: Staying awake

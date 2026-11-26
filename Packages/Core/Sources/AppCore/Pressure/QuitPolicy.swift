@@ -49,9 +49,6 @@ public enum QuitPolicy {
         case .thermal:
             return head + " It and the rest of the queue continue the next time you open \(appName), once your Mac "
                 + "has cooled down."
-        case .batteryLow:
-            return head + " It and the rest of the queue continue the next time you open \(appName), once your Mac "
-                + "is plugged in or charged."
         }
     }
 

@@ -55,12 +55,15 @@ public struct PhotoAsset: Sendable, Hashable, Identifiable {
     public let isLocallyAvailable: Bool?
     /// When the asset last changed in Photos (an edit changes it); nil when Photos doesn't say.
     public let modificationDate: Date?
+    /// The caption (description) the person wrote in Photos. Read for a single asset (`PhotoStore.asset(id:)`) and
+    /// only where the OS offers it (version 27); nil in listings and when there is none.
+    public let caption: String?
 
     public init(
         id: String, creationDate: Date? = nil, location: PhotoLocation? = nil, pixelSize: CGSize,
         duration: Double, isFavorite: Bool = false, isHidden: Bool = false, hasAdjustments: Bool = false,
         subtypes: PhotoSubtypes = [], originalFileName: String, originalByteSize: Int64? = nil,
-        isLocallyAvailable: Bool? = nil, modificationDate: Date? = nil
+        isLocallyAvailable: Bool? = nil, modificationDate: Date? = nil, caption: String? = nil
     ) {
         self.id = id
         self.creationDate = creationDate
@@ -75,6 +78,16 @@ public struct PhotoAsset: Sendable, Hashable, Identifiable {
         self.originalByteSize = originalByteSize
         self.isLocallyAvailable = isLocallyAvailable
         self.modificationDate = modificationDate
+        self.caption = caption
+    }
+
+    /// The same asset with a caption.
+    func withCaption(_ caption: String) -> PhotoAsset {
+        PhotoAsset(
+            id: id, creationDate: creationDate, location: location, pixelSize: pixelSize, duration: duration,
+            isFavorite: isFavorite, isHidden: isHidden, hasAdjustments: hasAdjustments, subtypes: subtypes,
+            originalFileName: originalFileName, originalByteSize: originalByteSize,
+            isLocallyAvailable: isLocallyAvailable, modificationDate: modificationDate, caption: caption)
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -142,18 +155,21 @@ public struct PhotoSaveRequest: Sendable, Equatable {
     public let location: PhotoLocation?
     public let isFavorite: Bool
     public let isHidden: Bool
+    /// The source's caption; nil or empty sets none.
+    public let caption: String?
     /// Local identifiers of the albums to add the new asset to. An album that no longer exists is skipped.
     public let albums: [String]
 
     public init(
         file: URL, creationDate: Date?, location: PhotoLocation?, isFavorite: Bool, isHidden: Bool,
-        albums: [String]
+        caption: String? = nil, albums: [String]
     ) {
         self.file = file
         self.creationDate = creationDate
         self.location = location
         self.isFavorite = isFavorite
         self.isHidden = isHidden
+        self.caption = caption
         self.albums = albums
     }
 

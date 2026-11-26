@@ -44,7 +44,7 @@ public final class ICloudOnlyPhotoStore: PhotoStore {
             duration: asset.duration, isFavorite: asset.isFavorite, isHidden: asset.isHidden,
             hasAdjustments: asset.hasAdjustments, subtypes: asset.subtypes, originalFileName: asset.originalFileName,
             originalByteSize: asset.originalByteSize, isLocallyAvailable: local,
-            modificationDate: asset.modificationDate)
+            modificationDate: asset.modificationDate, caption: asset.caption)
     }
 
     // MARK: - PhotoStore

@@ -69,7 +69,7 @@ public struct PhotoSaver: Sendable {
     ///
     /// - Parameters:
     ///   - file: the converted video; it stays where it is.
-    ///   - source: the asset it was made from; its date, location, favorite and hidden flags are copied.
+    ///   - source: the asset it was made from; its date, location, favorite and hidden flags and caption are copied.
     ///   - albums: local identifiers of the albums the source is in.
     ///   - expectedPixelSize: the size the converted video should have, as Photos shows it (turned upright). A
     ///     width and height swapped around still counts as a match.
@@ -80,7 +80,7 @@ public struct PhotoSaver: Sendable {
         if Task.isCancelled { throw PhotoSaveError.cancelled }
         let request = PhotoSaveRequest(
             file: file, creationDate: source.creationDate, location: source.location,
-            isFavorite: source.isFavorite, isHidden: source.isHidden, albums: albums)
+            isFavorite: source.isFavorite, isHidden: source.isHidden, caption: source.caption, albums: albums)
         let newID: String
         do {
             newID = try await store.saveVideo(request)
@@ -89,7 +89,8 @@ public struct PhotoSaver: Sendable {
         } catch {
             throw PhotoSaveError.saveFailed(error.localizedDescription)
         }
-        let problems = await problems(with: newID, source: source, expectedPixelSize: expectedPixelSize)
+        let problems = await problems(
+            with: newID, source: source, albums: albums, expectedPixelSize: expectedPixelSize)
         guard problems.isEmpty else {
             throw PhotoSaveError.verifyFailed(reasons: problems, cleanup: await remove(newID))
         }
@@ -98,7 +99,9 @@ public struct PhotoSaver: Sendable {
 
     /// What is wrong with the new asset, in plain words; empty when it checks out. Subtypes are not compared: a
     /// new asset carries a subtype bit Photos gives no name.
-    private func problems(with id: String, source: PhotoAsset, expectedPixelSize: CGSize) async -> [String] {
+    private func problems(
+        with id: String, source: PhotoAsset, albums: [String], expectedPixelSize: CGSize
+    ) async -> [String] {
         let stored: PhotoAsset
         do {
             stored = try await store.asset(id: id)
@@ -124,7 +127,24 @@ public struct PhotoSaver: Sendable {
         if let expected = source.location, !Self.matches(stored.location, expected) {
             problems.append("its location differs from the original's")
         }
+        if stored.isFavorite != source.isFavorite { problems.append("its favorite flag differs from the original's") }
+        if stored.isHidden != source.isHidden { problems.append("its hidden flag differs from the original's") }
+        if let caption = source.caption, !caption.isEmpty, stored.caption != caption {
+            problems.append("its caption differs from the original's")
+        }
+        problems += await albumProblems(newID: id, source: source, requested: albums)
         return problems
+    }
+
+    /// The new asset must be in every requested album that still exists (one the source is still in). A read that
+    /// fails proves nothing either way, so it adds no problem.
+    private func albumProblems(newID: String, source: PhotoAsset, requested: [String]) async -> [String] {
+        guard !requested.isEmpty, let stillThere = try? await store.albums(containing: source.id),
+            let actual = try? await store.albums(containing: newID)
+        else { return [] }
+        let expected = Set(requested).intersection(stillThere)
+        let missing = expected.subtracting(actual)
+        return missing.isEmpty ? [] : ["it is not in \(missing.count) of the original's albums"]
     }
 
     private static func matches(_ actual: PhotoLocation?, _ expected: PhotoLocation) -> Bool {

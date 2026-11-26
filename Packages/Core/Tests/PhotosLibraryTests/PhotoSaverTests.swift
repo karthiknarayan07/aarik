@@ -139,7 +139,7 @@ import Testing
             PhotoAsset(
                 id: asset.id, creationDate: asset.creationDate?.addingTimeInterval(0.4),
                 location: asset.location, pixelSize: asset.pixelSize, duration: asset.duration,
-                originalFileName: "x", originalByteSize: 1)
+                isFavorite: asset.isFavorite, isHidden: asset.isHidden, originalFileName: "x", originalByteSize: 1)
         }
         _ = try await save(store)
         #expect(store.deletedIDs.isEmpty)
@@ -151,7 +151,7 @@ import Testing
             PhotoAsset(
                 id: asset.id, creationDate: asset.creationDate?.addingTimeInterval(2),
                 location: asset.location, pixelSize: asset.pixelSize, duration: asset.duration,
-                originalFileName: "x", originalByteSize: 1)
+                isFavorite: asset.isFavorite, isHidden: asset.isHidden, originalFileName: "x", originalByteSize: 1)
         }
         guard case .verifyFailed? = await verifyFailure(store) else {
             Issue.record("expected verifyFailed")
@@ -204,14 +204,16 @@ import Testing
             store.adjustSaved = { asset in
                 PhotoAsset(
                     id: asset.id, creationDate: Date(timeIntervalSince1970: 5), location: asset.location,
-                    pixelSize: asset.pixelSize, duration: asset.duration, originalFileName: "x",
+                    pixelSize: asset.pixelSize, duration: asset.duration, isFavorite: asset.isFavorite,
+                    isHidden: asset.isHidden, originalFileName: "x",
                     originalByteSize: 1)
             }
         default:
             store.adjustSaved = { asset in
                 PhotoAsset(
                     id: asset.id, creationDate: asset.creationDate, location: nil, pixelSize: asset.pixelSize,
-                    duration: asset.duration, originalFileName: "x", originalByteSize: 1)
+                    duration: asset.duration, isFavorite: asset.isFavorite, isHidden: asset.isHidden,
+                    originalFileName: "x", originalByteSize: 1)
             }
         }
         let error = await verifyFailure(store)
@@ -284,4 +286,112 @@ import Testing
         await #expect(throws: PhotoSaveError.cancelled) { try await task.value }
         #expect(store.operations.isEmpty)
     }
+
+    // MARK: - Every attribute of the original is carried over
+
+    private func captioned(_ caption: String?) -> PhotoAsset {
+        PhotoAsset(
+            id: "src", creationDate: date, location: place, pixelSize: CGSize(width: 3840, height: 2160),
+            duration: 10, isFavorite: true, isHidden: true, originalFileName: "IMG_1.MOV", originalByteSize: 5_000,
+            caption: caption)
+    }
+
+    @Test func carriesDateLocationFavoriteHiddenCaptionAndEveryAlbum() async throws {
+        let store = FakePhotoStore(assets: [captioned("Birthday")])
+        store.existingAlbums = ["a", "b"]
+        store.albums["src"] = ["a", "b"]
+        let id = try await save(store, like: captioned("Birthday"), albums: ["a", "b"])
+        let stored = try await store.asset(id: id)
+        #expect(stored.creationDate == date)
+        #expect(stored.location == place)
+        #expect(stored.isFavorite)
+        #expect(stored.isHidden)
+        #expect(stored.caption == "Birthday")
+        #expect(try await store.albums(containing: id) == ["a", "b"])
+    }
+
+    @Test func noCaptionStaysNoCaption() async throws {
+        let store = makeStore()
+        let id = try await save(store, like: captioned(nil))
+        #expect(try await store.asset(id: id).caption == nil)
+    }
+
+    @Test func aMissingAlbumFailsTheCheckAndRemovesTheCopy() async {
+        let store = FakePhotoStore(assets: [source()])
+        // The source is in "b", but the store cannot add to it (as a refused add would).
+        store.existingAlbums = ["a"]
+        store.albums["src"] = ["a", "b"]
+        do {
+            _ = try await save(store, albums: ["a", "b"])
+            Issue.record("expected the check to fail")
+        } catch let PhotoSaveError.verifyFailed(reasons, cleanup) {
+            #expect(cleanup == .removed)
+            #expect(reasons.contains { $0.contains("albums") })
+        } catch {
+            Issue.record("unexpected \(error)")
+        }
+        #expect(store.assets.map(\.id) == ["src"])
+    }
+
+    @Test func anAlbumTheSourceLeftInTheMeantimeIsNotRequired() async throws {
+        let store = makeStore(albums: ["a"])
+        store.albums["src"] = ["a"]
+        _ = try await save(store, albums: ["a", "gone"])
+    }
+
+    @Test func aDroppedFavoriteHiddenOrCaptionFailsTheCheck() async {
+        for change in [
+            { (a: PhotoAsset) in with(a, favorite: false) },
+            { (a: PhotoAsset) in with(a, hidden: false) },
+            { (a: PhotoAsset) in with(a, caption: "other") },
+        ] as [@Sendable (PhotoAsset) -> PhotoAsset] {
+            let store = FakePhotoStore(assets: [captioned("Birthday")])
+            store.adjustSaved = change
+            do {
+                _ = try await save(store, like: captioned("Birthday"))
+                Issue.record("expected the check to fail")
+            } catch {
+                #expect(error is PhotoSaveError)
+            }
+            #expect(store.assets.map(\.id) == ["src"])
+        }
+    }
+
+    @Test func anUnsetFavoriteOrHiddenFlagThatGetsTurnedOnFailsTheCheck() async {
+        for change in [
+            { (a: PhotoAsset) in with(a, favorite: true) },
+            { (a: PhotoAsset) in with(a, hidden: true) },
+        ] as [@Sendable (PhotoAsset) -> PhotoAsset] {
+            let plain = source(favorite: false, hidden: false)
+            let store = FakePhotoStore(assets: [plain])
+            store.adjustSaved = change
+            do {
+                _ = try await save(store, like: plain)
+                Issue.record("expected the check to fail")
+            } catch {
+                #expect(error is PhotoSaveError)
+            }
+            #expect(store.assets.map(\.id) == ["src"])
+        }
+    }
+
+    @Test func anEmptyCaptionIsNotRequiredOnTheCopy() async throws {
+        let empty = captioned("")
+        let store = FakePhotoStore(assets: [empty])
+        store.adjustSaved = { a in
+            PhotoAsset(
+                id: a.id, creationDate: a.creationDate, location: a.location, pixelSize: a.pixelSize,
+                duration: a.duration, isFavorite: a.isFavorite, isHidden: a.isHidden,
+                originalFileName: a.originalFileName, originalByteSize: a.originalByteSize, caption: nil)
+        }
+        _ = try await save(store, like: empty)
+        #expect(store.deletedIDs.isEmpty)
+    }
+}
+
+private func with(_ a: PhotoAsset, favorite: Bool? = nil, hidden: Bool? = nil, caption: String? = nil) -> PhotoAsset {
+    PhotoAsset(
+        id: a.id, creationDate: a.creationDate, location: a.location, pixelSize: a.pixelSize, duration: a.duration,
+        isFavorite: favorite ?? a.isFavorite, isHidden: hidden ?? a.isHidden, originalFileName: a.originalFileName,
+        originalByteSize: a.originalByteSize, caption: caption ?? a.caption)
 }
