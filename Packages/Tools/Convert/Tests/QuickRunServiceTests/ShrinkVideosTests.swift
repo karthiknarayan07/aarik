@@ -85,7 +85,7 @@ private enum Calendars {
             quickRun = QuickRun(
                 queue: queue, store: store, notifier: notifier, inspector: FakeInspector(sources: sourcesByURL),
                 settings: {
-                    QuickRunSettings(preset: .balanced, saveLocation: SaveLocation(), startsQueue: startsQueue)
+                    QuickRunSettings(preset: .balanced, saveLocation: SaveLocation(platform: .macOS), startsQueue: startsQueue)
                 },
                 now: { clock.now })
             shrink = ShrinkVideos(
@@ -134,9 +134,7 @@ private enum Calendars {
         #expect(try ShrinkVideosRequest().overrides().codec == nil)
     }
 
-    // Mac-only entry point: its default `SaveLocation` is next to the original only on macOS (Documents on iOS).
-    @Test(.enabled(if: ToolPlatforms.current.contains(.macOS)))
-    func nextToOriginalOverridesASavedFolder() throws {
+    @Test func nextToOriginalOverridesASavedFolder() throws {
         let location = try ShrinkVideosRequest(destination: .nextToOriginal).overrides().saveLocation
         #expect(location?.choice == .nextToOriginal)
         #expect(location?.destination == .nextToOriginal)
@@ -249,10 +247,7 @@ private enum Calendars {
         #expect(jobs.map(\.source.lastPathComponent) == ["a.mov"])
     }
 
-    // The Shortcuts and Services entry points ship only in the Mac app; a default `SaveLocation` is Documents on iOS,
-    // so tests that expect the Mac default (next to the original) run only where the Mac default applies.
-    @Test(.enabled(if: ToolPlatforms.current.contains(.macOS)))
-    func parametersReachTheJobs() async throws {
+    @Test func parametersReachTheJobs() async throws {
         var url: URL!
         let harness = try Harness(local: { fixture in
             let item = try Self.fileItem(fixture, "a.mov")
