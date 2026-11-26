@@ -84,7 +84,7 @@
                         : "Allow access to Photos in System Settings to see your videos here.")
             } actions: {
                 if !isRestricted {
-                    Button("Open Photos Settings") { PrivacySettings.open(PrivacySettings.photos) }
+                    Button("Open System Settings…") { PrivacySettings.open(PrivacySettings.photos) }
                         .accessibilityHint("Opens System Settings, where you can allow access")
                 }
             }
@@ -101,7 +101,7 @@
                     "You gave \(AppInfo.displayName) access to some of your photos only, and none of them is a video. "
                         + "Choose more in System Settings to see your videos here.")
             } actions: {
-                Button("Open Photos Settings") { PrivacySettings.open(PrivacySettings.photos) }
+                Button("Open System Settings…") { PrivacySettings.open(PrivacySettings.photos) }
                     .accessibilityHint("Opens System Settings, where you can choose more photos")
             }
         }
@@ -178,8 +178,6 @@
                     LibraryTile(item: item, state: state, thumbnails: model.thumbnailSource)
                         .contextMenu { PhotoTileMenu(model: model, item: item) }
                 }
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel("Videos in Photos")
             }
         }
 
@@ -249,13 +247,13 @@
             if authorization == .limited {
                 note(
                     "You gave access to some of your photos only, so other videos aren't listed.",
-                    button: "Open Photos Settings", url: PrivacySettings.photos)
+                    button: "Open System Settings…", url: PrivacySettings.photos)
             }
             switch indexStatus {
             case .noAccess:
                 note(
                     "Frame rate and codec filters need Full Disk Access. Everything else works without it.",
-                    button: "Open Full Disk Access", url: PrivacySettings.fullDiskAccess)
+                    button: "Open System Settings…", url: PrivacySettings.fullDiskAccess)
             case .notFound, .unreadable:
                 note("Frame rate and codec aren't available for this Photos library.", button: nil, url: nil)
             default:
@@ -349,11 +347,11 @@
                         Text("Details are checked when each video is converted.")
                     }
                     Section {
-                        Picker("Save to", selection: choice) {
+                        Picker("Save To", selection: choice) {
                             ForEach(PhotosSaveLocation.Choice.allCases) { Text($0.title).tag($0) }
                         }
                         .labelsHidden()
-                        .accessibilityLabel("Save to")
+                        .accessibilityLabel("Save To")
                         if model.photosSaveLocation.choice == .folder, let folder = model.photosSaveLocation.folder {
                             HStack {
                                 Label(folder.lastPathComponent, systemImage: "folder")
@@ -366,7 +364,7 @@
                             }
                         }
                     } header: {
-                        Text("Save to")
+                        Text("Save To")
                     } footer: {
                         Text(
                             model.photosSaveLocation.choice == .replace

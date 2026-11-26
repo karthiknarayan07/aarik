@@ -8,8 +8,8 @@ extension VideoPage {
         switch self {
         case .overview:
             EmptyState(
-                "Coming with Photos", systemImage: systemImage,
-                message: "A summary of the space you could free arrives with Photos library support.")
+                title, systemImage: systemImage,
+                message: "See how much space your videos take and what converting them could free.")
         case .photosVideos:
             EmptyState(
                 "Videos", systemImage: systemImage,

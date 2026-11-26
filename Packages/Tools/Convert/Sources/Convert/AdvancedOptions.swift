@@ -21,7 +21,7 @@ public struct AdvancedOptions: Sendable, Equatable {
             case .p720: "720p"
             case .p1080: "1080p"
             case .p1440: "1440p"
-            case .keep: "Keep original"
+            case .keep: "Keep Original"
             }
         }
     }
@@ -39,7 +39,7 @@ public struct AdvancedOptions: Sendable, Equatable {
         }
         public var title: String {
             switch self {
-            case .keep: "Keep original"
+            case .keep: "Keep Original"
             case .fps30: "Up to 30 fps"
             case .fps60: "Up to 60 fps"
             }
@@ -105,9 +105,9 @@ public struct SaveLocation: Sendable, Equatable {
         public var id: Self { self }
         public var title: String {
             switch self {
-            case .nextToOriginal: "Next to original"
+            case .nextToOriginal: "Next to Original"
             case .folder: "Folder…"
-            case .replace: "Replace original"
+            case .replace: "Replace Original"
             }
         }
     }

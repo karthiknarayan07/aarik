@@ -70,6 +70,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     @State private var viewport = CGSize.zero
     @State private var typeSelect = TypeSelectBuffer()
     @State private var frames = TileFrames<Item.ID>()
+    @State private var headerFrames = TileFrames<String>()
     @State private var marquee = MarqueeState<Item.ID>()
     @FocusState private var isFocused: Bool
     #if os(macOS)
@@ -123,6 +124,12 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                             }
                         } header: {
                             SectionHeader(title: section.title, subtitle: section.subtitle)
+                                .onGeometryChange(for: CGRect.self) {
+                                    $0.frame(in: .named(mediaGridSpace))
+                                } action: { [headerFrames] in
+                                    headerFrames.values[section.id] = $0
+                                }
+                                .onDisappear { [headerFrames] in headerFrames.values[section.id] = nil }
                         }
                     }
                 }
@@ -223,7 +230,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                         at: value.startLocation, base: selection,
                         mode: Self.currentMarqueeMode(),
                         startsOnEmptySpace: MarqueeSelection.startsOnEmptySpace(
-                            value.startLocation, frames: frames.values))
+                            value.startLocation, frames: frames.values, excluding: headerFrames.values.values))
                 }
                 guard marquee.startsOnEmptySpace,
                     MarqueeSelection.isDrag(from: value.startLocation, to: value.location) || marquee.rect != nil

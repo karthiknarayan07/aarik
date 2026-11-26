@@ -13,7 +13,7 @@ public struct PhotosSaveLocation: Equatable {
         public var id: Self { self }
         public var title: String {
             switch self {
-            case .newAsset: "Photos, as a new video"
+            case .newAsset: "Photos, as a New Video"
             case .replace: "Replace Original in Photos"
             case .folder: "Folder…"
             }

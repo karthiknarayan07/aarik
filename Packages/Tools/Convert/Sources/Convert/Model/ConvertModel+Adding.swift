@@ -167,6 +167,6 @@ extension ConvertModel {
         guard
             let notice = ActivityText.addNotice(alreadyQueued: alreadyQueued, unreadable: unreadable, missing: missing)
         else { return }
-        alert = AppAlert(title: "Some videos weren't added", message: notice)
+        alert = AppAlert(title: "Some Videos Weren't Added", message: notice)
     }
 }

@@ -20,11 +20,11 @@ struct SaveDestinationPicker: View {
     }
 
     var body: some View {
-        Picker("Save to", selection: choice) {
+        Picker("Save To", selection: choice) {
             ForEach(SaveLocation.Choice.allCases) { Text($0.title).tag($0) }
         }
         .labelsHidden()
-        .accessibilityLabel("Save to")
+        .accessibilityLabel("Save To")
         .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
             guard case .success(let url) = result else { return }
             let scoped = url.startAccessingSecurityScopedResource()

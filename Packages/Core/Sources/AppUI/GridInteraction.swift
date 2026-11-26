@@ -20,9 +20,11 @@ enum MarqueeSelection {
             x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
     }
 
-    /// A marquee starts only on empty space; a drag that starts on a tile belongs to the tile (drag-out).
-    static func startsOnEmptySpace<ID>(_ point: CGPoint, frames: [ID: CGRect]) -> Bool {
-        !frames.values.contains { $0.contains(point) }
+    /// A marquee starts only on empty space; a drag that starts on a tile (drag-out) or on a section header does not.
+    static func startsOnEmptySpace<ID>(
+        _ point: CGPoint, frames: [ID: CGRect], excluding: some Collection<CGRect> = EmptyCollection()
+    ) -> Bool {
+        !frames.values.contains { $0.contains(point) } && !excluding.contains { $0.contains(point) }
     }
 
     static func isDrag(from start: CGPoint, to end: CGPoint) -> Bool {

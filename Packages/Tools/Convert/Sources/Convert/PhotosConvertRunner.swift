@@ -213,9 +213,8 @@ public struct PhotosConvertRunner: JobRunner {
     ) async throws -> FetchedInput {
         let first = asset.isLocallyAvailable == true ? Self.copyingPhase : Self.downloadingPhase
         let last = Mutex<String?>(first)
-        phase(await downloads.isBusy ? Self.waitingPhase : first)
-        // Only one fetch at a time; a job waiting for its turn can still be cancelled.
-        return try await downloads.run {
+        // Only one fetch at a time; a job waiting for its turn reports waiting inside the gate and can still cancel.
+        return try await downloads.run(onWait: { phase(Self.waitingPhase) }) {
             phase(first)
             return try await Signposts.interval(.download) {
                 try await fetcher.fetch(id: id, into: folder) { event in

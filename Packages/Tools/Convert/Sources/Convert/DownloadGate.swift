@@ -7,20 +7,23 @@ actor DownloadGate {
     private var busy = false
     private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, any Error>)] = []
 
-    /// Runs `body` once the gate is this caller's, then hands it on. Throws `CancellationError` if cancelled while
-    /// waiting.
-    func run<T: Sendable>(_ body: @Sendable () async throws -> T) async throws -> T {
-        try await acquire()
+    /// Runs `body` once the gate is this caller's, then hands it on. Calls `onWait` atomically inside the actor if
+    /// another fetch already holds the gate. Throws `CancellationError` if cancelled while waiting.
+    func run<T: Sendable>(
+        onWait: (@Sendable () -> Void)? = nil, _ body: @Sendable () async throws -> T
+    ) async throws -> T {
+        try await acquire(onWait: onWait)
         defer { release() }
         return try await body()
     }
 
-    private func acquire() async throws {
+    private func acquire(onWait: (@Sendable () -> Void)?) async throws {
         try Task.checkCancellation()
         guard busy else {
             busy = true
             return
         }
+        onWait?()
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

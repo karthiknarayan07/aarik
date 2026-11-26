@@ -11,7 +11,7 @@
 
         private var title: String {
             review.entries.count == 1
-                ? "1 video will lose metadata" : "\(review.entries.count) videos will lose metadata"
+                ? "1 Video Will Lose Metadata" : "\(review.entries.count) Videos Will Lose Metadata"
         }
 
         var body: some View {

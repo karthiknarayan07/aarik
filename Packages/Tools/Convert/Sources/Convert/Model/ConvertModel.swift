@@ -152,7 +152,7 @@ public final class ConvertModel {
     public func start() async {
         await services.start()
         if let message = services.queueLoadError, alert == nil {
-            alert = AppAlert(title: "Couldn't read the queue", message: message)
+            alert = AppAlert(title: "Couldn't Read the Queue", message: message)
         }
     }
 

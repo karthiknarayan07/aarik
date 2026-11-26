@@ -36,10 +36,13 @@ import Testing
 
     @Test func marqueeOnlyStartsOnEmptySpace() {
         #expect(!MarqueeSelection.startsOnEmptySpace(CGPoint(x: 50, y: 50), frames: frames))
+        // A click or drag on a section header is not empty space.
+        let headers = [CGRect(x: 0, y: -32, width: 300, height: 24)]
+        #expect(!MarqueeSelection.startsOnEmptySpace(CGPoint(x: 40, y: -20), frames: frames, excluding: headers))
         // The gap between tiles, and the margin, are empty.
-        #expect(MarqueeSelection.startsOnEmptySpace(CGPoint(x: 105, y: 50), frames: frames))
-        #expect(MarqueeSelection.startsOnEmptySpace(CGPoint(x: -8, y: 50), frames: frames))
-        #expect(MarqueeSelection.startsOnEmptySpace(CGPoint(x: 50, y: 500), frames: frames))
+        #expect(MarqueeSelection.startsOnEmptySpace(CGPoint(x: 105, y: 50), frames: frames, excluding: headers))
+        #expect(MarqueeSelection.startsOnEmptySpace(CGPoint(x: -8, y: 50), frames: frames, excluding: headers))
+        #expect(MarqueeSelection.startsOnEmptySpace(CGPoint(x: 50, y: 500), frames: frames, excluding: headers))
     }
 
     @Test func aSmallMovementIsAClickNotAMarquee() {
