@@ -21,9 +21,9 @@ final class PhotosRig: Sendable {
 
     init(
         subtypes: PhotoSubtypes = [], hasAdjustments: Bool = false, savedDuration: Double? = nil,
-        albums: [String] = []
+        albums: [String] = [], audio: Bool = true
     ) async throws {
-        let clip = try await RunnerFixture.source(name: "IMG_0001.MOV")
+        let clip = try await RunnerFixture.source(name: "IMG_0001.MOV", audio: audio)
         directory = clip.deletingLastPathComponent()
         self.clip = clip
         workFolder = WorkFolder(root: directory.appending(path: "Work", directoryHint: .isDirectory))
@@ -47,7 +47,7 @@ final class PhotosRig: Sendable {
 
     deinit { try? FileManager.default.removeItem(at: directory) }
 
-    func runner(core: DownscaleRunner = DownscaleRunner(), backup: Bool = false) -> PhotosDownscaleRunner {
+    func runner(core: DownscaleRunner = RunnerFixture.runner(), backup: Bool = false) -> PhotosDownscaleRunner {
         let folder = self.backup
         return PhotosDownscaleRunner(
             store: store, workFolder: workFolder, pendingDeletions: pending, core: core,

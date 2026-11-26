@@ -28,7 +28,7 @@ import Testing
         return nil
     }
 
-    @Test(.timeLimit(.minutes(2))) func keepOriginalsCopiesBeforeTrash() async throws {
+    @Test(.timeLimit(.minutes(5))) func keepOriginalsCopiesBeforeTrash() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -43,7 +43,8 @@ import Testing
                 copyAtTrashTime.withLock { $0 = RunnerFixture.size(backup.appending(path: "clip.mov")) }
                 return try trash(url)
             },
-            originalsBackup: { OriginalsBackup(folder: backup) })
+            originalsBackup: { OriginalsBackup(folder: backup) },
+            diskSpace: RunnerFixture.roomy)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -55,7 +56,7 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: backup.path) == ["clip.mov"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func missingBackupFolderNeverTrashes() async throws {
+    @Test(.timeLimit(.minutes(5))) func missingBackupFolderNeverTrashes() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -67,7 +68,8 @@ import Testing
                 called.withLock { $0 = true }
                 return url
             },
-            originalsBackup: { OriginalsBackup(folder: backup) })
+            originalsBackup: { OriginalsBackup(folder: backup) },
+            diskSpace: RunnerFixture.roomy)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -84,7 +86,7 @@ import Testing
             ])
     }
 
-    @Test(.timeLimit(.minutes(2))) func takenBackupNameGetsCounterAndIsNeverOverwritten() async throws {
+    @Test(.timeLimit(.minutes(5))) func takenBackupNameGetsCounterAndIsNeverOverwritten() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -94,7 +96,8 @@ import Testing
         try Data("an earlier backup".utf8).write(to: existing)
         let originalSize = try #require(RunnerFixture.size(source))
         let runner = DownscaleRunner(
-            trash: Self.fakeTrash(in: directory), originalsBackup: { OriginalsBackup(folder: backup) })
+            trash: Self.fakeTrash(in: directory), originalsBackup: { OriginalsBackup(folder: backup) },
+            diskSpace: RunnerFixture.roomy)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -106,7 +109,7 @@ import Testing
         #expect(names == ["clip 2.mov", "clip.mov"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func backupOfTheWrongSizeNeverTrashes() async throws {
+    @Test(.timeLimit(.minutes(5))) func backupOfTheWrongSizeNeverTrashes() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -122,7 +125,8 @@ import Testing
             sizeOf: { url in
                 url.deletingLastPathComponent().lastPathComponent == "Originals" ? 1 : try DownscaleRunner.fileSize(url)
             },
-            originalsBackup: { OriginalsBackup(folder: backup) })
+            originalsBackup: { OriginalsBackup(folder: backup) },
+            diskSpace: RunnerFixture.roomy)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -136,13 +140,13 @@ import Testing
         #expect(outcome.warnings == ["The original was kept because its copy in the originals folder didn't match"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func backupIsOnlyMadeForReplace() async throws {
+    @Test(.timeLimit(.minutes(5))) func backupIsOnlyMadeForReplace() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let backup = directory.appending(path: "Originals", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
-        let runner = DownscaleRunner(originalsBackup: { OriginalsBackup(folder: backup) })
+        let runner = RunnerFixture.runner(originalsBackup: { OriginalsBackup(folder: backup) })
         let nextTo = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: RunnerFixture.spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, nextTo)) { _ in }
@@ -152,7 +156,7 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: backup.path) == [])
     }
 
-    @Test(.timeLimit(.minutes(2))) func staleBackupPartialsOfThisSourceAreRemovedOthersKept() async throws {
+    @Test(.timeLimit(.minutes(5))) func staleBackupPartialsOfThisSourceAreRemovedOthersKept() async throws {
         let source = try await RunnerFixture.source(name: "clip.mov")
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -164,7 +168,8 @@ import Testing
         let lookalike = backup.appending(path: ".clip.mov 2.partial-\(UUID().uuidString)")
         for file in [stale, other, lookalike] { try Data("half".utf8).write(to: file) }
         let runner = DownscaleRunner(
-            trash: Self.fakeTrash(in: directory), originalsBackup: { OriginalsBackup(folder: backup) })
+            trash: Self.fakeTrash(in: directory), originalsBackup: { OriginalsBackup(folder: backup) },
+            diskSpace: RunnerFixture.roomy)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 

@@ -28,6 +28,7 @@ func friendlyMessage(for error: Error) -> String {
     case .sourceAlreadySmall?: return "Source is already at or below the target size; nothing to do."
     case .unsupportedSource(let reason)?: return "This kind of video is not supported (\(reason))."
     case .encoderFailed(let reason)?: return "The video encoder failed: \(reason)"
+    case .stalled?: return "The encoder stopped responding."
     case nil: return "\(error.localizedDescription)"
     }
 }

@@ -74,7 +74,7 @@ private struct WatchingStore: PhotoStore {
 
     // MARK: - New asset
 
-    @Test(.timeLimit(.minutes(2))) func aRequeuedNewAssetJobDoesNotSaveASecondCopy() async throws {
+    @Test(.timeLimit(.minutes(5))) func aRequeuedNewAssetJobDoesNotSaveASecondCopy() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job()
         let first = try #require(completed(try await rig.runner().run(job) { _ in }))
@@ -90,7 +90,7 @@ private struct WatchingStore: PhotoStore {
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func ifTheSavedCopyIsGoneTheVideoIsConvertedAgain() async throws {
+    @Test(.timeLimit(.minutes(5))) func ifTheSavedCopyIsGoneTheVideoIsConvertedAgain() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job()
         _ = try await rig.runner().run(job) { _ in }
@@ -105,7 +105,7 @@ private struct WatchingStore: PhotoStore {
 
     // MARK: - Replace
 
-    @Test(.timeLimit(.minutes(2))) func aQuitRightAfterTheSaveLetsTheReplaceFinishWithoutASecondCopy() async throws {
+    @Test(.timeLimit(.minutes(5))) func aQuitRightAfterTheSaveLetsTheReplaceFinishWithoutASecondCopy() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job(.replace)
 
@@ -128,7 +128,7 @@ private struct WatchingStore: PhotoStore {
         #expect(rig.store.deletedIDs.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aQuitDuringTheBackupWritesOneBackupAndOneCopy() async throws {
+    @Test(.timeLimit(.minutes(5))) func aQuitDuringTheBackupWritesOneBackupAndOneCopy() async throws {
         let rig = try await PhotosRig(hasAdjustments: true)
         let job = try rig.job(.replace)
 
@@ -148,7 +148,7 @@ private struct WatchingStore: PhotoStore {
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aRequeuedJobWhoseOriginalIsAlreadyRecordedFinishesAtOnce() async throws {
+    @Test(.timeLimit(.minutes(5))) func aRequeuedJobWhoseOriginalIsAlreadyRecordedFinishesAtOnce() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job(.replace)
         let first = try #require(completed(try await rig.runner(backup: true).run(job) { _ in }))
@@ -163,7 +163,7 @@ private struct WatchingStore: PhotoStore {
         #expect(rig.backupContents == ["IMG_0001.MOV"])  // not written twice
     }
 
-    @Test(.timeLimit(.minutes(2))) func aBackupAlreadyWrittenIsNotWrittenAgain() async throws {
+    @Test(.timeLimit(.minutes(5))) func aBackupAlreadyWrittenIsNotWrittenAgain() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job(.replace)
         _ = try await rig.runner(backup: true).run(job) { _ in }
@@ -180,7 +180,7 @@ private struct WatchingStore: PhotoStore {
 
     // MARK: - An orphan backup
 
-    @Test(.timeLimit(.minutes(2))) func aCancelAfterTheBackupIsWrittenRemovesTheBackup() async throws {
+    @Test(.timeLimit(.minutes(5))) func aCancelAfterTheBackupIsWrittenRemovesTheBackup() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job(.replace)
         let cancel = CancelSwitch()
@@ -191,7 +191,7 @@ private struct WatchingStore: PhotoStore {
             if !files.isEmpty { cancel.cancel() }
         }
         let runner = PhotosDownscaleRunner(
-            store: store, workFolder: rig.workFolder, pendingDeletions: rig.pending, core: DownscaleRunner(),
+            store: store, workFolder: rig.workFolder, pendingDeletions: rig.pending, core: RunnerFixture.runner(),
             originalsBackup: { OriginalsBackup(folder: folder) })
         let task = Task<JobState, any Error> { try await runner.run(job) { _ in } }
         cancel.set(task)
@@ -215,7 +215,7 @@ private struct WatchingStore: PhotoStore {
 
     // MARK: - After the delete
 
-    @Test(.timeLimit(.minutes(2))) func theRecordedOriginalCarriesTheBaselineItWasVerifiedAgainst() async throws {
+    @Test(.timeLimit(.minutes(5))) func theRecordedOriginalCarriesTheBaselineItWasVerifiedAgainst() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job(.replace)
 

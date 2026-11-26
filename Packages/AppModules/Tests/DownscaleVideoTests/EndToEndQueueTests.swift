@@ -17,7 +17,7 @@ import Testing
             try? FileManager.default.removeItem(at: storeDirectory)
         }
         let queue = JobQueue(
-            store: JobStore(directory: storeDirectory), runners: [DownscaleTool.toolID: DownscaleRunner()])
+            store: JobStore(directory: storeDirectory), runners: [DownscaleTool.toolID: RunnerFixture.runner()])
         // The generated clips are a second long, too short for a preset's estimate to promise a 10% saving, so the
         // jobs carry the runner tests' custom spec: a 1080p downscale. The 640x360 clip is already below it.
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: RunnerFixture.spec)

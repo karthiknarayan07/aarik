@@ -17,6 +17,11 @@ First public release.
   are selectable lists with a context menu, double-click and Delete; Show in Finder is in the menu, not on every
   row. Status colour is on the symbol only, so text keeps its contrast. The "Queue finished" notification has a Show
   Queue action.
+- **Stall protection:** a conversion whose encoder stops responding for a minute now fails with "The encoder stopped
+  responding" instead of staying at the same percentage for ever. The partial file is removed and Retry works.
+- **Free-space check:** before a conversion writes anything, the app checks that the disk has room for the converted
+  video (and, for a Photos video, its download) plus 1 GB to spare. If not, the video fails with "Not enough free space
+  on <disk> (needs about X, has Y)", nothing is written, and Retry works once there is room.
 - **Quick runs:** shrink videos without opening the window, from a Dock drop or Open With, a menu bar item (drop videos
   on the icon or its popover, or choose them), the Shrink Videos action and Finder's Services menu. A quick run never
   replaces an original, skips videos that would lose metadata and ends with one notification. The menu bar popover
