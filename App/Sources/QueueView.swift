@@ -13,7 +13,7 @@ struct QueueView: View {
         Group {
             if jobs.isEmpty {
                 SidebarDestination.queue.emptyState
-                    .action("Go to Local files") { model.selection = .localFiles }
+                    .action("Go to Local Files") { model.selection = .localFiles }
             } else {
                 List {
                     ForEach(jobs) { job in
@@ -30,14 +30,14 @@ struct QueueView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) { PauseResumeButton(model: model) }
             ToolbarItem(placement: .primaryAction) {
-                Button("Cancel all", systemImage: "xmark.circle") { isConfirmingCancelAll = true }
+                Button("Cancel All", systemImage: "xmark.circle") { isConfirmingCancelAll = true }
                     .disabled(jobs.isEmpty)
                     .help("Empty the queue and stop the current conversion")
             }
         }
         .confirmationDialog("Cancel all conversions?", isPresented: $isConfirmingCancelAll) {
-            Button("Cancel all", role: .destructive) { model.cancelAll() }
-            Button("Keep converting", role: .cancel) {}
+            Button("Cancel All", role: .destructive) { model.cancelAll() }
+            Button("Keep Converting", role: .cancel) {}
         } message: {
             Text("Waiting videos leave the queue and the current conversion stops. Originals aren't touched.")
         }

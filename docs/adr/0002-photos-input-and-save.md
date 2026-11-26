@@ -1,11 +1,12 @@
 # ADR 0002: Photos input and save
 
-Status: **Accepted** (spike run on the owner's real library, macOS 27.2.1, Apple silicon)
+Status: **Accepted, final** (spike run on the owner's real library, macOS 27.2.1, Apple silicon; Plan 3 built on it
+and its cleanup is done)
 
 ## Context
 
 Plan 3 builds the Photos features (list, fetch, shrink, save back, delete the original) on PhotoKit. Before building,
-a DEBUG-only spike (`-photosSpike` launch argument, `App/Sources/Debug/PhotosSpike*.swift`, removed in Plan 3 Task 8)
+a DEBUG-only spike (`-photosSpike` launch argument, `App/Sources/Debug/PhotosSpike*.swift`, removed in Plan 3 Task 8, see "Final state")
 ran every risky step once against the real library and logged each fact. This ADR records the numbers, the APIs
 chosen, and what they change in the plan. Personal clip names, locations and dates are not recorded here, only
 counts and technical facts.
@@ -191,3 +192,17 @@ These contradict or sharpen Tasks 4 to 8 of Plan 3.
   stays.
 - **Global constraint (never modify except...):** held. The only library writes were one generated test asset and its
   temporary album, both removed (the asset sits in Recently Deleted until Photos empties it, up to 30 days).
+
+## Final state
+
+Plan 3 followed the amendments above. At its end:
+
+- The spike is gone: `App/Sources/Debug/` and the `AppDelegate` DEBUG hook were removed, so nothing in the app reads
+  or writes the real Photos library except the paths in `PhotosLibrary` (`PhotoKitStore`, `PhotoSaver`,
+  `OriginalsDeleter`). Package tests use `FakePhotoStore`. The `devtool fixture` options stay for manual checks.
+- `INFOPLIST_KEY_NSPhotoLibraryUsageDescription` stays in `Config/App.xcconfig`.
+- The Videos page has a state of its own for each access outcome: not asked yet, denied or restricted, limited with no
+  videos shared, and no videos at all (system `ContentUnavailableView`s). Limited access with videos shows a note
+  above the grid.
+- Why a job ended is saved as a code (`OutcomeCode`) beside its sentence, so nothing reads wording.
+- Still unverified on a real library: limited access end to end, and the cancelled system delete confirmation.

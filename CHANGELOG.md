@@ -9,6 +9,14 @@ First public release.
 
 ### Added
 
+- **Photos videos:** a page for the videos in your Photos library, with the same grid, filters, presets and queue as
+  Local Files. Browsing never downloads from iCloud; a video is downloaded (with its own progress and a way to cancel)
+  only when its turn comes, and the converted copy is saved to Photos as a new video with the original's date,
+  location, favorite and albums. The Overview and the README explain the permission and the iCloud timing.
+- **Reasons are saved as codes:** each kept-as-is, failed, warning and note result now records a code beside its
+  sentence, so Why? explains a result from the code and never from the wording. Results saved by an earlier version
+  still open and read as "another detail". Errors from macOS are told by their kind, so the sentences are plain on a Mac
+  set to another language.
 - **Quick runs:** shrink videos without opening the window, from a Dock drop or Open With, a menu bar item (drop videos
   on the icon or its popover, or choose them), the Shrink Videos action and Finder's Services menu. A quick run never
   replaces an original, skips videos that would lose metadata and ends with one notification. The menu bar popover

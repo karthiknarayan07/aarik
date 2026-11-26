@@ -107,7 +107,7 @@ private struct DetailView: View {
                 destination.emptyState
                     .navigationTitle(destination.title)
             case nil:
-                EmptyState("Nothing selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar.")
+                EmptyState("Nothing Selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar.")
                     .navigationTitle(AppModel.displayName)
             }
         }

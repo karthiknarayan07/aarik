@@ -52,7 +52,7 @@ private struct GeneralSettings: View {
             }
             Section("Updates") {
                 if updater.isConfigured {
-                    Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
+                    Toggle("Check for Updates Automatically", isOn: $updater.automaticallyChecksForUpdates)
                     LabeledContent("Look for a new version now") {
                         Button("Check Now") { updater.checkForUpdates() }
                             .disabled(!updater.canCheckForUpdates)
@@ -108,7 +108,7 @@ private struct OutputSettings: View {
     var body: some View {
         Form {
             Section {
-                Picker("Save converted videos", selection: saveToChoice) {
+                Picker("Save Converted Videos", selection: saveToChoice) {
                     Text(SaveLocation.Choice.nextToOriginal.title).tag(SaveLocation.Choice.nextToOriginal)
                     Text(SaveLocation.Choice.folder.title).tag(SaveLocation.Choice.folder)
                 }

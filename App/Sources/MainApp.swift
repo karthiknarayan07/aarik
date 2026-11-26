@@ -51,13 +51,13 @@ private struct ViewCommands: Commands {
     }
 }
 
-/// File → Add files… (⌘O); Edit → Remove from library; Queue → Add to queue (⌘⏎) and Pause or Resume queue (⌘.).
+/// File → Add Files… (⌘O); Edit → Remove from Library; Queue → Add to Queue (⌘⏎) and Pause or Resume Queue (⌘.).
 private struct LibraryCommands: Commands {
     let model: AppModel
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("Add files…") {
+            Button("Add Files…") {
                 model.showMainWindow()
                 if model.selection?.showsLibrary != true { model.selection = .localFiles }
                 model.isImporterPresented = true
@@ -66,20 +66,20 @@ private struct LibraryCommands: Commands {
         }
         CommandGroup(after: .pasteboard) {
             // Only the library entries go; Delete in the grid does the same.
-            Button("Remove from library") {
+            Button("Remove from Library") {
                 model.showMainWindow()
                 model.removeSelectionFromLibrary()
             }
             .disabled(!model.canRemoveSelectionFromLibrary)
         }
         CommandMenu("Queue") {
-            Button("Add to queue") {
+            Button("Add to Queue") {
                 model.showMainWindow()
                 model.requestAddSelectionToQueue()
             }
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(!model.canAddSelectionToQueue)
-            Button(model.isQueuePaused ? "Resume queue" : "Pause queue") {
+            Button(model.isQueuePaused ? "Resume Queue" : "Pause Queue") {
                 model.showMainWindow()
                 model.toggleQueuePaused()
             }

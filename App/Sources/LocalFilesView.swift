@@ -25,7 +25,7 @@ struct LocalFilesView: View {
                         couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
                         availableCount: browser.snapshot.items.count(where: \.isAvailable)
                     ) {
-                        PresetPicker("Quality preset", selection: $model.preset, options: Preset.allCases) {
+                        PresetPicker("Quality Preset", selection: $model.preset, options: Preset.allCases) {
                             $0.displayName
                         }
                     }
@@ -61,7 +61,7 @@ struct LocalFilesView: View {
                 }
             }
         }
-        .navigationTitle(model.selection?.title ?? "Local files")
+        .navigationTitle(model.selection?.title ?? "Local Files")
         .navigationSubtitle(filteredSummary)
         .toolbar { LocalFilesToolbar(model: model) }
         .assistantSearchable(
@@ -104,7 +104,7 @@ private struct LocalFilesWelcome: View {
                 "An original goes to the Trash only after a verified copy exists, and only if you choose Replace.",
             ]
         ) {
-            Button("Add files…", action: addFiles)
+            Button("Add Files…", action: addFiles)
                 .buttonStyle(.borderedProminent)
                 .help("Choose videos or folders, or drag them into this window")
         }
@@ -117,7 +117,7 @@ private struct TileMenu: View {
     let item: VideoItem
 
     var body: some View {
-        Button("Add to queue", systemImage: "plus") { model.addToQueue(clicked: item) }
+        Button("Add to Queue", systemImage: "plus") { model.addToQueue(clicked: item) }
             .disabled(!model.canAddToQueue(clicked: item))
         Divider()
         Button("Show in Finder", systemImage: "folder") {
@@ -129,7 +129,7 @@ private struct TileMenu: View {
         Button("Quick Look", systemImage: "eye") { model.quickLook(clicked: item) }
             .disabled(!item.isAvailable)
         Divider()
-        Button("Remove from library", systemImage: "minus.circle") { model.removeFromLibrary(clicked: item) }
+        Button("Remove from Library", systemImage: "minus.circle") { model.removeFromLibrary(clicked: item) }
     }
 }
 
@@ -139,11 +139,11 @@ private struct NoMatchingVideos: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("No matching videos", systemImage: "line.3.horizontal.decrease.circle")
+            Label("No Matching Videos", systemImage: "line.3.horizontal.decrease.circle")
         } description: {
             Text("No videos here match these filters.")
         } actions: {
-            Button("Clear filters", action: clear)
+            Button("Clear Filters", action: clear)
         }
     }
 }

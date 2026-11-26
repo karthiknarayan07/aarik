@@ -92,7 +92,7 @@ struct KeptAsIsView: View {
                 }
             }
         }
-        .navigationTitle("Kept as is")
+        .navigationTitle("Kept as Is")
     }
 }
 
@@ -119,7 +119,7 @@ struct FailedView: View {
         .navigationTitle("Failed")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Retry all", systemImage: "arrow.clockwise") { model.retryAllFailed() }
+                Button("Retry All", systemImage: "arrow.clockwise") { model.retryAllFailed() }
                     .disabled(rows.isEmpty)
                     .help("Put every failed video back in the queue")
             }

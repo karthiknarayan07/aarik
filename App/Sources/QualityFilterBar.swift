@@ -72,7 +72,7 @@ private struct FilterMenu<Value: Hashable & Sendable & Comparable>: View {
                 }
                 if !selection.isEmpty {
                     Divider()
-                    Button("Show all") { selection = [] }
+                    Button("Show All") { selection = [] }
                 }
             } label: {
                 Label(label, systemImage: systemImage)
@@ -124,7 +124,7 @@ private struct SizeMenu: View {
         if !rows.isEmpty {
             Menu {
                 Picker("Size", selection: $selection) {
-                    Text("Any size").tag(SizeThreshold?.none)
+                    Text("Any Size").tag(SizeThreshold?.none)
                     ForEach(rows, id: \.value) { row in
                         Text(verbatim: optionTitle(row.value.title, row))
                             .tag(Optional(row.value))

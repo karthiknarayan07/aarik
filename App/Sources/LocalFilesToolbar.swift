@@ -1,7 +1,7 @@
 import LocalLibrary
 import SwiftUI
 
-/// Group by, sort and Add files for the library grid.
+/// Group By, Sort and Add Files for the library grid.
 struct LocalFilesToolbar: ToolbarContent {
     let model: AppModel
     @Bindable private var browser: LibraryBrowser
@@ -17,7 +17,7 @@ struct LocalFilesToolbar: ToolbarContent {
             Button {
                 model.isImporterPresented = true
             } label: {
-                Label("Add files…", systemImage: "plus")
+                Label("Add Files…", systemImage: "plus")
             }
             .help("Add videos or folders (⌘O)")
             .accessibilityLabel("Add files")
@@ -31,7 +31,7 @@ struct GridToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            Picker("Group by", selection: $browser.grouping) {
+            Picker("Group By", selection: $browser.grouping) {
                 Text("Years").tag(Grouping.year)
                 Text("Months").tag(Grouping.month)
                 Text("All").tag(Grouping.none)
@@ -42,8 +42,8 @@ struct GridToolbar: ToolbarContent {
         }
         ToolbarItem {
             Picker(selection: $browser.sort) {
-                Text("Biggest first").tag(Sort.biggestFirst)
-                Text("Newest first").tag(Sort.newestFirst)
+                Text("Biggest First").tag(Sort.biggestFirst)
+                Text("Newest First").tag(Sort.newestFirst)
             } label: {
                 Label("Sort", systemImage: "arrow.up.arrow.down")
             }

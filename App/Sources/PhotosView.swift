@@ -53,14 +53,16 @@ private struct PhotosAccessPrompt: View {
     let allow: () -> Void
 
     var body: some View {
-        WelcomeState(
-            "See your Photos videos", systemImage: "photo.on.rectangle",
-            lines: [
+        ContentUnavailableView {
+            Label("See Your Photos Videos", systemImage: "photo.on.rectangle")
+        } description: {
+            Text(
                 "\(AppModel.displayName) reads your video list on this Mac and changes nothing in Photos until you convert a video."
-            ]
-        ) {
-            Button("Allow access to Photos…", action: allow)
+            )
+        } actions: {
+            Button("Allow Access to Photos…", action: allow)
                 .buttonStyle(.borderedProminent)
+                .accessibilityHint("Asks macOS for permission to read your Photos library")
         }
     }
 }
@@ -70,7 +72,7 @@ private struct PhotosAccessDenied: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Photos access is off", systemImage: "lock")
+            Label("Photos Access Is Off", systemImage: "lock")
         } description: {
             Text(
                 isRestricted
@@ -78,8 +80,25 @@ private struct PhotosAccessDenied: View {
                     : "Allow access to Photos in System Settings to see your videos here.")
         } actions: {
             if !isRestricted {
-                Button("Open Photos settings") { PrivacySettings.open(PrivacySettings.photos) }
+                Button("Open Photos Settings") { PrivacySettings.open(PrivacySettings.photos) }
+                    .accessibilityHint("Opens System Settings, where you can allow access")
             }
+        }
+    }
+}
+
+/// Access is limited to a few photos and none of them is a video, so there is nothing to list.
+private struct PhotosAccessLimited: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label("No Videos Are Shared", systemImage: "photo.badge.exclamationmark")
+        } description: {
+            Text(
+                "You gave \(AppModel.displayName) access to some of your photos only, and none of them is a video. "
+                    + "Choose more in System Settings to see your videos here.")
+        } actions: {
+            Button("Open Photos Settings") { PrivacySettings.open(PrivacySettings.photos) }
+                .accessibilityHint("Opens System Settings, where you can choose more photos")
         }
     }
 }
@@ -93,13 +112,17 @@ private struct PhotosGridView: View {
         Group {
             if photos.items.isEmpty {
                 VStack(spacing: 0) {
-                    // The notes explain an empty grid too: limited access hides videos, and Full Disk Access
-                    // is about filters.
-                    if photos.hasLoaded {
+                    // Full Disk Access is about filters, which an empty grid can still explain; limited access has
+                    // a state of its own.
+                    if photos.hasLoaded, photos.authorization != .limited {
                         PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
                     }
-                    PhotosEmpty(isLoading: !photos.hasLoaded, error: photos.loadError) {
-                        Task { await photos.start() }
+                    if photos.hasLoaded, photos.loadError == nil, photos.authorization == .limited {
+                        PhotosAccessLimited()
+                    } else {
+                        PhotosEmpty(isLoading: !photos.hasLoaded, error: photos.loadError) {
+                            Task { await photos.start() }
+                        }
                     }
                 }
             } else {
@@ -130,11 +153,11 @@ private struct PhotosGridView: View {
             Group {
                 if browser.quality.isActive && browser.search.isEmpty {
                     ContentUnavailableView {
-                        Label("No matching videos", systemImage: "line.3.horizontal.decrease.circle")
+                        Label("No Matching Videos", systemImage: "line.3.horizontal.decrease.circle")
                     } description: {
                         Text("No videos here match these filters.")
                     } actions: {
-                        Button("Clear filters") { browser.quality = QualityFilter() }
+                        Button("Clear Filters") { browser.quality = QualityFilter() }
                     }
                 } else {
                     ContentUnavailableView.search(text: browser.search)
@@ -146,6 +169,8 @@ private struct PhotosGridView: View {
                 LibraryTile(item: item, isSelected: isSelected, thumbnails: model.thumbnailSource)
                     .contextMenu { PhotoTileMenu(model: model, item: item) }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Videos in Photos")
         }
     }
 
@@ -167,17 +192,17 @@ private struct PhotosEmpty: View {
     var body: some View {
         if let error {
             ContentUnavailableView {
-                Label("Couldn't read Photos", systemImage: "exclamationmark.triangle")
+                Label("Couldn't Read Photos", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(error)
             } actions: {
-                Button("Try again", action: retry)
+                Button("Try Again", action: retry)
             }
         } else if isLoading {
             ProgressView("Reading your Photos videos…")
         } else {
             EmptyState(
-                "No videos in Photos", systemImage: "photo.on.rectangle",
+                "No Videos in Photos", systemImage: "photo.on.rectangle",
                 message: "Videos you record or import show up here.")
         }
     }
@@ -215,7 +240,7 @@ private struct PhotosNotes: View {
         if authorization == .limited {
             note(
                 "You gave access to some of your photos only, so other videos aren't listed.",
-                button: "Open Photos settings", url: PrivacySettings.photos)
+                button: "Open Photos Settings", url: PrivacySettings.photos)
         }
         switch indexStatus {
         case .noAccess:
@@ -252,7 +277,7 @@ private struct PhotoTileMenu: View {
     let item: VideoItem
 
     var body: some View {
-        Button("Add to queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }
+        Button("Add to Queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }
     }
 }
 
@@ -285,7 +310,7 @@ struct PhotosInspector: View {
         let items = model.selectedPhotoItems
         if items.isEmpty {
             EmptyState(
-                "No selection", systemImage: "rectangle.dashed",
+                "No Selection", systemImage: "rectangle.dashed",
                 message: "Select videos to see their details.")
         } else {
             Form {

@@ -15,7 +15,7 @@ struct SidebarView: View {
                 DestinationRow(destination: .localFiles, count: model.library.items.count)
             }
             if !badgeCounts.isEmpty {
-                Section("Media types") {
+                Section("Media Types") {
                     ForEach(MediaBadge.allCases.filter { badgeCounts[$0] != nil }, id: \.self) { badge in
                         DestinationRow(destination: .mediaType(badge), count: badgeCounts[badge] ?? 0)
                     }

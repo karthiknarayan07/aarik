@@ -27,7 +27,7 @@ struct LossConfirmationSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel, action: cancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Convert anyway", action: convert)
+                Button("Convert Anyway", action: convert)
                     .keyboardShortcut(.defaultAction)
                     .help("Add the videos to the queue, except the ones you skip")
             }
@@ -53,7 +53,7 @@ private struct LossRow: View {
                     .foregroundStyle(.orange)
             }
             Spacer()
-            Toggle("Skip this video", isOn: $entry.skip)
+            Toggle("Skip This Video", isOn: $entry.skip)
                 .toggleStyle(.checkbox)
                 .accessibilityLabel("Skip \(entry.name)")
         }
