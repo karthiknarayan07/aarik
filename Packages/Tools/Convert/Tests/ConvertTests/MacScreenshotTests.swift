@@ -87,6 +87,26 @@
                 bytesAfter: after, report: MetadataReport(), replacedOriginal: false)
         }
 
+        private static func video(
+            _ name: String, megabytes: Int64, width: Int = 3840, height: Int = 2160, fps: Double = 60,
+            seconds: Double? = nil, badges: Set<MediaBadge> = [], location: Bool = false
+        ) -> VideoItem {
+            func item(_ key: String, _ category: MetadataCategory, _ value: String) -> MetadataItem {
+                MetadataItem(key: key, category: category, displayName: key, value: value)
+            }
+            // About 100 Mbit/s, as an iPhone records 4K.
+            let seconds = seconds ?? Double(megabytes) / 12
+            var items = [
+                item("video.dimensions", .video, "\(width)x\(height)"),
+                item("video.frameRate", .video, String(fps)), item("video.duration", .video, String(seconds * 1000)),
+            ]
+            if location { items.append(item("qt.location", .location, "1,2")) }
+            return VideoItem(
+                id: UUID(), url: URL(filePath: "/Users/example/Movies/\(name).mov"), byteSize: megabytes * 1_000_000,
+                duration: seconds, pixelSize: CGSize(width: width, height: height), frameRate: fps,
+                captureDate: Date(), badges: badges, isAvailable: true, inventory: MetadataInventory(items: items))
+        }
+
         @Test func rendersThePages() throws {
             guard let path = ProcessInfo.processInfo.environment["AARIK_MAC_SHOTS"] else { return }
             let folder = URL(filePath: path, directoryHint: .isDirectory)
@@ -127,12 +147,51 @@
             let completedDays = ResultsLedger.days(finished, date: \.job.createdAt, saved: \.outcome.savedBytes)
             let keptDays = ResultsLedger.days(kept, date: \.job.createdAt, saved: { _ in 0 })
 
+            let library = [
+                Self.video("Lake House", megabytes: 2400, badges: [.dolbyVision, .hdr, .k4], location: true),
+                Self.video("Night Walk", megabytes: 1500, badges: [.hdr, .k4]),
+                Self.video("Kitchen", megabytes: 900, badges: [.k4]),
+                Self.video("Garden", megabytes: 600, width: 1920, height: 1080, fps: 30, badges: []),
+                Self.video("Clip", megabytes: 8, width: 1280, height: 720, fps: 30, seconds: 3),
+                Self.video("Dock", megabytes: 1200, badges: [.k4]),
+            ]
             var timeline = ProgressTimeline()
             var begun = queued[0]
             begun.state = .running(progress: 0)
             timeline.observe([begun], now: Date().addingTimeInterval(-20))
             timeline.observe([queued[0]], now: Date())
+            let selected = library[0]
             for dark in [false, true] {
+                try Self.write(
+                    VStack(spacing: 0) {
+                        SavingsHeader(couldFree: 4_100_000_000, totalBytes: 6_600_000_000, availableCount: 6) {
+                            PresetPicker(
+                                "Quality Preset", selection: Binding.constant(Preset.balanced),
+                                options: Preset.allCases
+                            ) { (preset: Preset) in preset.displayName }
+                        }
+                        StorageBar(breakdown: StorageBreakdown.make(items: library, preset: { _ in .balanced }))
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12)
+                        {
+                            ForEach(library) { item in
+                                LibraryTile(
+                                    item: item, state: MediaTileState(isSelected: item.id == selected.id),
+                                    thumbnails: model.thumbnailSource,
+                                    savingsBadge: LibraryInsight.savingsBadge(for: item, preset: .balanced))
+                            }
+                        }
+                        .padding(16)
+                    },
+                    name: "library", size: CGSize(width: 760, height: 560), dark: dark, folder: folder)
+                try Self.write(
+                    Form {
+                        Section { ItemSummaryHeader(item: selected, thumbnails: model.thumbnailSource) }
+                        if let prediction = LibraryInsight.prediction(for: [selected], preset: { _ in .balanced }) {
+                            Section { PredictedSavingsGauge(prediction: prediction, presetName: "Balanced") }
+                        }
+                    }
+                    .formStyle(.grouped),
+                    name: "inspector", size: CGSize(width: 320, height: 520), dark: dark, folder: folder)
                 try Self.write(
                     OverviewInsights(charts: charts, presetName: "Balanced", isRefreshing: false).padding(24),
                     name: "overview", size: CGSize(width: 940, height: 1080), dark: dark, folder: folder)

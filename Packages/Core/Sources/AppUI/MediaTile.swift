@@ -16,13 +16,15 @@ public struct MediaTile: View {
     let isAvailable: Bool
     let state: MediaTileState
     let note: String?
+    /// "−58%" when converting this video would make it smaller; shown top right.
+    let savingsBadge: String?
 
     @ScaledMetric(relativeTo: .body) private var inset: CGFloat = 4
     @ScaledMetric(relativeTo: .body) private var focusWidth: CGFloat = 2
 
     public init(
         image: CGImage?, badges: [String], sizeLabel: String, isAvailable: Bool, state: MediaTileState,
-        note: String? = nil
+        note: String? = nil, savingsBadge: String? = nil
     ) {
         self.image = image
         self.badges = badges
@@ -30,6 +32,7 @@ public struct MediaTile: View {
         self.isAvailable = isAvailable
         self.state = state
         self.note = note
+        self.savingsBadge = savingsBadge
     }
 
     public var body: some View {
@@ -105,7 +108,18 @@ public struct MediaTile: View {
     }
 
     @ViewBuilder private var missingBadge: some View {
-        if !isAvailable {
+        if isAvailable, let savingsBadge {
+            Text(savingsBadge)
+                .font(.caption2.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.green.gradient, in: .capsule)
+                .padding(5)
+                .help("Converting could make this video \(savingsBadge.dropFirst()) smaller")
+                .accessibilityHidden(true)
+        } else if !isAvailable {
             Image(systemName: "exclamationmark.circle.fill")
                 .symbolRenderingMode(.multicolor)
                 .font(.title3)
