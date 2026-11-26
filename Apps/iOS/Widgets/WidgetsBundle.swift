@@ -6,6 +6,6 @@ struct WidgetsBundle: WidgetBundle {
     var body: some Widget {
         QueueSummaryWidget()
         QueuePauseControl()
-        PlaceholderLiveActivity()
+        ConvertLiveActivity()
     }
 }

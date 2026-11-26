@@ -6,6 +6,10 @@
 	<string>$(APP_GROUP_ID)</string>
 	<key>CFBundleDisplayName</key>
 	<string>$(APP_DISPLAY_NAME)</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).convert.*</string>
+	</array>
 	<key>AppGroupID</key>
 	<string>$(APP_GROUP_ID)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -14,6 +18,10 @@
 	<true/>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lets the app list the videos in your Photos library, shrink the ones you choose, and save the smaller copies back.</string>
 	<key>PHPhotoLibraryPreventAutomaticLimitedAccessAlert</key>
