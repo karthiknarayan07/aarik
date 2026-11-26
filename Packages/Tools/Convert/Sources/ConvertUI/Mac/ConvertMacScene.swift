@@ -68,8 +68,7 @@
             }
         }
 
-        /// The same items on every page, disabled where they don't apply: a toolbar that appears or disappears with the
-        /// page changes the title bar's height, and with it the window's frame.
+        /// Only asked for on the tool's own pages; the shell's items keep the title bar's height the same elsewhere.
         @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {
             let model = model
             ToolbarItem(placement: .primaryAction) {

@@ -98,10 +98,12 @@
             ToolSidebarModel(sidebar).selectableDestinations
         }
 
-        /// Whether the page showing has an inspector column: Home and Ask always do, so the window keeps its layout.
+        /// Whether the page showing has an inspector column. Home has none (the tool's item inspector has nothing to
+        /// show there); Ask's is the shell's chat history. The window's frame is the user's, so hiding it moves nothing.
         public func hasInspector(on page: MacShellPage<Destination>?) -> Bool {
             switch page {
-            case .home, .ask: true
+            case .home: false
+            case .ask: true
             case .page(let destination): hasInspector(for: destination)
             case nil: hasInspector(for: nil)
             }

@@ -15,7 +15,7 @@
         var body: some View {
             VStack(alignment: .leading, spacing: 20) {
                 SavingsHero(charts: charts, presetName: presetName, isRefreshing: isRefreshing)
-                AdaptiveGrid(minimumWidth: 190, spacing: 12) {
+                AdaptiveGrid(minimumWidth: 190, spacing: 12, isBalanced: true) {
                     SummaryCard(
                         title: "Could Free", systemImage: "arrow.down.right.circle.fill", tint: .blue,
                         value: charts.couldFree > 0 ? ByteFormat.string(charts.couldFree) : "Nothing",
@@ -36,7 +36,9 @@
                         value: charts.conversions.formatted(),
                         detail: charts.conversions == 1 ? "video" : "videos"
                     ) {
-                        MiniBars(values: charts.throughput.map { Double($0.videos) }, tint: .orange)
+                        MiniBars(
+                            values: charts.throughput.map { Double($0.videos) }, tint: .orange,
+                            singleCaption: "Not enough history yet")
                     }
                     SummaryCard(
                         title: "Biggest Group", systemImage: "rectangle.stack.fill", tint: .purple,
@@ -196,19 +198,43 @@
         }
     }
 
-    /// A few bars with no axes: the shape of a series, not its numbers.
+    /// The shape of a series, not its numbers. Three or more values are bars; with fewer a bar chart would be a few
+    /// stray strokes, so two values are drawn as proportional capsules, and one is a full capsule (or `singleCaption`).
     private struct MiniBars: View {
         let values: [Double]
         let tint: Color
+        var singleCaption: String?
 
         var body: some View {
-            Chart(Array(values.enumerated()), id: \.offset) { entry in
-                BarMark(x: .value("Item", entry.offset), y: .value("Value", entry.element))
-                    .foregroundStyle(tint.gradient)
-                    .cornerRadius(2)
+            if values.count >= 3 {
+                Chart(Array(values.enumerated()), id: \.offset) { entry in
+                    BarMark(x: .value("Item", entry.offset), y: .value("Value", entry.element), width: .ratio(0.7))
+                        .foregroundStyle(tint.gradient)
+                        .cornerRadius(2)
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+            } else if values.count == 1, let singleCaption {
+                Text(singleCaption)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            } else if values.isEmpty {
+                Color.clear
+            } else {
+                let top = max(values.max() ?? 1, 1)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(values.enumerated()), id: \.offset) { entry in
+                        GeometryReader { proxy in
+                            Capsule()
+                                .fill(tint.opacity(entry.offset == 0 && values.count == 2 ? 0.4 : 1))
+                                .frame(width: max(6, proxy.size.width * entry.element / top))
+                        }
+                        .frame(height: 10)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
-            .chartXAxis(.hidden)
-            .chartYAxis(.hidden)
         }
     }
 
@@ -217,15 +243,23 @@
         let tint: Color
 
         var body: some View {
-            Chart(points) { point in
-                AreaMark(x: .value("Day", point.day, unit: .day), y: .value("Saved", point.cumulativeBytes))
-                    .foregroundStyle(tint.opacity(0.25).gradient)
-                LineMark(x: .value("Day", point.day, unit: .day), y: .value("Saved", point.cumulativeBytes))
-                    .foregroundStyle(tint)
-                    .interpolationMethod(.monotone)
+            if points.count < 2 {
+                // A line needs two points; one would be a lone dot.
+                Text("Not enough history yet")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            } else {
+                Chart(points) { point in
+                    AreaMark(x: .value("Day", point.day, unit: .day), y: .value("Saved", point.cumulativeBytes))
+                        .foregroundStyle(tint.opacity(0.25).gradient)
+                    LineMark(x: .value("Day", point.day, unit: .day), y: .value("Saved", point.cumulativeBytes))
+                        .foregroundStyle(tint)
+                        .interpolationMethod(.monotone)
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
             }
-            .chartXAxis(.hidden)
-            .chartYAxis(.hidden)
         }
     }
 
@@ -237,6 +271,8 @@
         let subtitle: String
         let isEmpty: Bool
         let emptyText: String
+        /// With exactly one data point a trend can't be drawn; this says the value instead (value, then a caption).
+        var single: (value: String, caption: String)?
         @ViewBuilder let content: Content
 
         var body: some View {
@@ -248,6 +284,21 @@
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity, minHeight: Self.height)
+                    } else if let single {
+                        VStack(spacing: 4) {
+                            Text(single.value)
+                                .font(.system(.title, design: .rounded, weight: .semibold))
+                                .monospacedDigit()
+                            Text(single.caption)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Text("Not enough history yet")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, minHeight: Self.height)
+                        .accessibilityElement(children: .combine)
                     } else {
                         content.frame(height: Self.height)
                     }
@@ -264,7 +315,7 @@
             }
         }
 
-        private static var height: CGFloat { 160 }
+        private static var height: CGFloat { 190 }
     }
 
     private struct BeforeAfterChart: View {
@@ -296,11 +347,23 @@
                         .foregroundStyle(by: .value("When", bar.kind))
                         .position(by: .value("When", bar.kind))
                         .cornerRadius(3)
+                        .annotation(position: .top, alignment: .leading, spacing: 4) {
+                            // The library's name once, above its first bar, never over the plot.
+                            if bar.kind == "Now" {
+                                Text(bar.library)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
                         .accessibilityLabel("\(bar.library), \(bar.kind)")
                         .accessibilityValue(ByteFormat.string(bar.bytes))
                 }
                 .chartForegroundStyleScale(["Now": Color.indigo.opacity(0.45), "After": Color.indigo])
                 .chartXAxis { byteAxisMarks() }
+                .chartYAxis(.hidden)
+                .chartLegend(position: .bottom, alignment: .leading, spacing: 10)
+                .chartPlotStyle { $0.padding(.vertical, 6).padding(.trailing, 12) }
                 .accessibilityLabel("Size now and after converting")
                 .accessibilityValue(
                     sizes.map {
@@ -319,16 +382,24 @@
                 emptyText: "Nothing here would get meaningfully smaller at this preset."
             ) {
                 Chart(groups) { group in
-                    BarMark(x: .value("Could Free", group.bytes), y: .value("Group", group.title))
-                        .foregroundStyle(Color.blue.gradient)
-                        .cornerRadius(3)
-                        .accessibilityLabel(group.title)
-                        .accessibilityValue("could free about \(ByteFormat.string(group.bytes))")
+                    BarMark(
+                        x: .value("Could Free", group.bytes), y: .value("Group", group.title),
+                        height: groups.count == 1 ? .fixed(24) : .automatic
+                    )
+                    .foregroundStyle(Color.blue.gradient)
+                    .cornerRadius(3)
+                    .annotation(position: .top, alignment: .leading, spacing: 4) {
+                        Text(group.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .accessibilityLabel(group.title)
+                    .accessibilityValue("could free about \(ByteFormat.string(group.bytes))")
                 }
                 .chartXAxis { byteAxisMarks() }
-                .chartYAxis {
-                    AxisMarks { _ in AxisValueLabel().font(.caption) }
-                }
+                .chartYAxis(.hidden)
+                .chartPlotStyle { $0.padding(.vertical, 4).padding(.trailing, 12) }
                 .accessibilityLabel("What each group of videos could free")
                 .accessibilityValue(
                     groups.map { "\($0.title): about \(ByteFormat.string($0.bytes))" }.joined(separator: ". "))
@@ -342,7 +413,12 @@
         var body: some View {
             ChartBox(
                 title: "Space Saved Over Time", subtitle: "Total by the day videos were added",
-                isEmpty: points.isEmpty, emptyText: "Appears after the first conversion finishes."
+                isEmpty: points.isEmpty, emptyText: "Appears after the first conversion finishes.",
+                single: points.count == 1
+                    ? (
+                        ByteFormat.string(points[0].cumulativeBytes),
+                        "saved on \(points[0].day.formatted(date: .abbreviated, time: .omitted))"
+                    ) : nil
             ) {
                 Chart(points) { point in
                     AreaMark(x: .value("Day", point.day, unit: .day), y: .value("Saved", point.cumulativeBytes))
@@ -356,6 +432,7 @@
                         .accessibilityValue("\(ByteFormat.string(point.cumulativeBytes)) saved in total")
                 }
                 .chartYAxis { byteAxisMarks(position: .leading) }
+                .chartPlotStyle { $0.padding(.top, 10).padding(.horizontal, 8) }
                 .accessibilityLabel("Total space saved by day")
                 .accessibilityValue(
                     "\(ByteFormat.string(points.last?.cumulativeBytes ?? 0)) saved in total over "
@@ -370,7 +447,13 @@
         var body: some View {
             ChartBox(
                 title: "Queue Throughput", subtitle: "Videos converted by day", isEmpty: days.isEmpty,
-                emptyText: "Appears after the first conversion finishes."
+                emptyText: "Appears after the first conversion finishes.",
+                single: days.count == 1
+                    ? (
+                        days[0].videos.formatted(),
+                        (days[0].videos == 1 ? "video" : "videos")
+                            + " converted on \(days[0].day.formatted(date: .abbreviated, time: .omitted))"
+                    ) : nil
             ) {
                 Chart(days) { day in
                     BarMark(x: .value("Day", day.day, unit: .day), y: .value("Videos", day.videos))
@@ -382,9 +465,10 @@
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { _ in
                         AxisGridLine()
-                        AxisValueLabel()
+                        AxisValueLabel(horizontalSpacing: 10)
                     }
                 }
+                .chartPlotStyle { $0.padding(.top, 10).padding(.horizontal, 8) }
                 .accessibilityLabel("Videos converted by day")
                 .accessibilityValue(
                     "\(days.reduce(0) { $0 + $1.videos }) videos converted over "
@@ -397,7 +481,7 @@
     @AxisContentBuilder private func byteAxisMarks(position: AxisMarkPosition = .bottom) -> some AxisContent {
         AxisMarks(position: position, values: .automatic(desiredCount: 3)) { value in
             AxisGridLine()
-            AxisValueLabel {
+            AxisValueLabel(horizontalSpacing: 10, verticalSpacing: 6) {
                 if let bytes = value.as(Int64.self) { Text(bytes == 0 ? "0" : ByteFormat.string(bytes)) }
             }
         }
@@ -408,10 +492,17 @@
     private struct AdaptiveGrid: Layout {
         let minimumWidth: CGFloat
         let spacing: CGFloat
+        /// Only column counts that fill every row (4 cards go 4, 2 or 1 across, never 3 + 1).
+        var isBalanced = false
 
-        private func columns(for width: CGFloat) -> Int {
+        private func columns(for width: CGFloat, count: Int) -> Int {
             guard width.isFinite, width > 0 else { return 1 }
-            return max(1, Int((width + spacing) / (minimumWidth + spacing)))
+            var columns = max(1, Int((width + spacing) / (minimumWidth + spacing)))
+            if isBalanced {
+                columns = min(columns, max(count, 1))
+                while columns > 1 && count % columns != 0 { columns -= 1 }
+            }
+            return columns
         }
 
         private func cellWidth(_ width: CGFloat, columns: Int) -> CGFloat {
@@ -419,7 +510,7 @@
         }
 
         private func rowHeights(_ subviews: Subviews, width: CGFloat) -> (heights: [CGFloat], columns: Int) {
-            let count = columns(for: width)
+            let count = columns(for: width, count: subviews.count)
             let cell = cellWidth(width, columns: count)
             var heights: [CGFloat] = []
             for start in stride(from: 0, to: subviews.count, by: count) {
