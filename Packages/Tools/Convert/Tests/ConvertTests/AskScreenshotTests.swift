@@ -98,7 +98,7 @@
             let scene = ConvertMacScene(model: model)
             scene.selection = .ask
             let hosting = MainWindowLayout.makeHostingController(
-                rootView: MacRootView(module: scene, sidebarVisibility: .constant(.automatic)))
+                rootView: MacRootView(module: scene, services: services, sidebarVisibility: .constant(.automatic)))
             let window = NSWindow(contentViewController: hosting)
             MainWindowLayout.configure(window)
             window.setContentSize(NSSize(width: 1180, height: 740))

@@ -12,14 +12,17 @@ extension ConvertModel {
             isQueuePaused: isQueuePaused, failedJobCount: failedJobs.count)
     }
 
-    /// The sections ⌘1 to ⌘9 go to, in the sidebar's order. Media-type filters and tools are reached in the sidebar.
+    /// The pages of the Go menu in sidebar order: Home, Ask, then the tool's pages. A page keeps its ⌘-number (its
+    /// index here, from ⌘1) whether or not Ask is listed. Media-type filters are reached in the sidebar.
     public static let goDestinations: [VideoPage] = [
-        .overview, .photosVideos, .localFiles, .queue, .completed, .keptAsIs, .failed,
+        .overview, .ask, .photosVideos, .localFiles, .queue, .completed, .keptAsIs, .failed,
     ]
 
-    /// The Go menu: the sections above, then Ask (⌘8) while the assistant is available.
-    public func goDestinations() -> [VideoPage] {
-        Self.goDestinations + (isAskAvailable ? [.ask] : [])
+    /// The Go menu's pages with the index of their ⌘-number; Ask only while the assistant is available.
+    public func goEntries() -> [(index: Int, page: VideoPage)] {
+        Self.goDestinations.enumerated().compactMap { index, page in
+            page == .ask && !isAskAvailable ? nil : (index, page)
+        }
     }
 
     /// The browser the View menu's Group By and Sort By act on: the page that is showing; nil on the Activity pages.

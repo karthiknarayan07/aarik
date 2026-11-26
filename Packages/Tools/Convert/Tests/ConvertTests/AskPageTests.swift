@@ -30,24 +30,17 @@ private func video(name: String = "Beach Day.mov") -> LibraryItem {
 }
 
 @Suite struct AskSidebarTests {
-    private func state(showsAsk: Bool) -> VideoSidebarState {
-        VideoSidebarState(
-            photosCount: nil, localCount: 0, badgeCounts: [:], activity: .init(jobs: []), showsAsk: showsAsk)
+    private let tool = VideoSidebar.sections(
+        VideoSidebarState(photosCount: nil, localCount: 0, badgeCounts: [:], activity: .init(jobs: [])))
+
+    @Test func askIsTheShellsAndListedOnlyWhileTheAssistantIsAvailable() {
+        #expect(tool.flatMap(\.items).allSatisfy { $0.destination != .ask })
+        #expect(MacSidebarModel(showsAsk: true, tool: tool).selectablePages.contains(.ask))
+        #expect(!MacSidebarModel(showsAsk: false, tool: tool).selectablePages.contains(.ask))
     }
 
-    @Test func askIsListedOnlyWhileTheAssistantIsAvailable() {
-        let without = VideoSidebar.sections(state(showsAsk: false))
-        #expect(without.flatMap(\.items).allSatisfy { $0.destination != .ask })
-
-        let with = VideoSidebar.sections(state(showsAsk: true))
-        #expect(with.last?.title == "Assistant")
-        #expect(with.last?.items.map(\.title) == ["Ask"])
-        #expect(with.last?.items.map(\.systemImage) == ["sparkles"])
-    }
-
-    @Test func askComesAfterEveryOtherPageSoTheShortcutsDontMove() {
-        let titles = VideoSidebar.sections(state(showsAsk: true)).flatMap(\.items).map(\.title)
-        #expect(titles.last == "Ask")
+    @Test func askSitsRightAfterHome() {
+        #expect(MacSidebarModel(showsAsk: true, tool: tool).selectablePages.prefix(2) == [.home, .ask])
         #expect(VideoPage.ask.title == "Ask")
         #expect(!VideoPage.ask.showsLibrary)
         #expect(IOSPage(.ask) == nil)
@@ -56,13 +49,20 @@ private func video(name: String = "Beach Day.mov") -> LibraryItem {
 
 @MainActor
 @Suite struct AskModelTests {
-    @Test func theGoMenuGainsAskAsTheEighthPageOnlyWhenAvailable() throws {
+    @Test func theGoMenuFollowsTheSidebarAndAskKeepsItsNumberWhetherOrNotItIsListed() throws {
         let (on, onDirectory) = try makeModel(askAvailable: true)
         let (off, offDirectory) = try makeModel(askAvailable: false)
         defer { for url in [onDirectory, offDirectory] { try? FileManager.default.removeItem(at: url) } }
-        #expect(on.goDestinations() == ConvertModel.goDestinations + [.ask])
-        #expect(off.goDestinations() == ConvertModel.goDestinations)
-        #expect(ConvertModel.goDestinations.count == 7)
+        #expect(
+            ConvertModel.goDestinations == [
+                .overview, .ask, .photosVideos, .localFiles, .queue, .completed, .keptAsIs, .failed,
+            ])
+        #expect(on.goEntries().map(\.page) == ConvertModel.goDestinations)
+        #expect(on.goEntries().map(\.index) == Array(0..<8))
+        #expect(off.goEntries().map(\.page) == ConvertModel.goDestinations.filter { $0 != .ask })
+        // Photos stays ⌘3 with or without Ask.
+        #expect(off.goEntries().map(\.index) == [0, 2, 3, 4, 5, 6, 7])
+        #expect(VideoPage.overview.title == "Home")
     }
 
     @Test func newChatIsEnabledOnlyOnTheAskPage() throws {

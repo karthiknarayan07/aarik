@@ -16,7 +16,8 @@ import Testing
         }
 
         let tool: any Tool = FakeTool()
-        var selection: Page? = .first
+        var selection: MacShellPage<Page>? = .page(.first)
+        var sidebarTint: SidebarTint { .indigo }
         var isInspectorPresented = true
 
         var sidebar: [ToolSidebarSection<Page>] {
@@ -38,6 +39,7 @@ import Testing
             ]
         }
 
+        func homeSummary() -> some View { Text("home") }
         func detail(for destination: Page?) -> some View { Text("detail") }
         func toolbar(for destination: Page?) -> some ToolbarContent {
             ToolbarItem { Text("item") }
@@ -75,6 +77,36 @@ import Testing
             #expect(shell.accepts(.first))
             #expect(shell.accepts(nil))
             #expect(!shell.accepts(.third))
+        }
+
+        @Test func theShellListsHomeAskAndTheToolsPagesInOrder() {
+            let module = FakeModule()
+            let sidebar = MacSidebarModel(showsAsk: true, tool: module.sidebar)
+            #expect(sidebar.selectablePages == [.home, .ask, .page(.first), .page(.second), .page(.third)])
+            #expect(sidebar.toolRows.map(\.item.title) == ["First", "Second", "Header", "Third"])
+            let noAsk = MacSidebarModel(showsAsk: false, tool: module.sidebar)
+            #expect(noAsk.selectablePages == [.home, .page(.first), .page(.second), .page(.third)])
+        }
+
+        @Test func theShellRefusesAskWhenHiddenAndPagesTheToolDoesNotList() {
+            let sidebar = MacSidebarModel(showsAsk: false, tool: FakeModule().sidebar)
+            #expect(sidebar.accepts(.home))
+            #expect(sidebar.accepts(nil))
+            #expect(!sidebar.accepts(.ask))
+            #expect(sidebar.accepts(.page(.second)))
+            let unlisted = MacSidebarModel<FakeModule.Page>(showsAsk: true, tool: [])
+            #expect(!unlisted.accepts(.page(.first)))
+            #expect(unlisted.accepts(.ask))
+        }
+
+        @Test func homeAndAskAlwaysHaveAnInspectorColumn() {
+            let module = FakeModule()
+            #expect(module.hasInspector(on: .home))
+            #expect(module.hasInspector(on: .ask))
+            #expect(module.hasInspector(on: .page(.first)))
+            #expect(!module.hasInspector(on: .page(.second)))
+            #expect(MacShellPage<FakeModule.Page>.page(.third).destination == .third)
+            #expect(MacShellPage<FakeModule.Page>.home.destination == nil)
         }
 
         @Test func rowsSpeakTheirTitleAsLabelAndTheirCountAndProgressAsValue() {

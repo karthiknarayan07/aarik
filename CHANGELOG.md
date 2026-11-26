@@ -9,7 +9,8 @@ First public release.
 
 ### Added
 
-- **Ask on the Mac:** with Apple Intelligence available, an Ask page in the sidebar (⌘8) holds the on-device assistant, with chat history in the inspector, File → New Chat (⌘N), Return to send, Shift-Return for a new line, Esc to stop, and Ask About This… on videos.
+- **Mac sidebar:** Home (the savings summary), Ask and a Tools section, where Convert is a collapsible group holding Photos, Local Files, Queue, Completed, Kept as Is and Failed. The Go menu follows that order (Home ⌘1, Ask ⌘2) and the window reopens on the page you left.
+- **Ask on the Mac:** with Apple Intelligence available, an Ask item in the sidebar (⌘2) holds the on-device assistant, with chat history in the inspector, File → New Chat (⌘N), Return to send, Shift-Return for a new line, Esc to stop, and Ask About This… on videos.
 - **iPhone navigation:** the app opens on a Tools list, and each tool owns its interface. Convert has a floating tab
   bar (Overview, Library, Queue and Search) that folds away as you scroll, with Photos and Files inside Library and
   Completed inside Queue; a bar above the tabs shows the video converting now. The Overview leads with a savings ring

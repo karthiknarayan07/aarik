@@ -50,11 +50,11 @@
             let services = AppServices(
                 directory: directory, defaults: defaults, photoStore: FakePhotoStore(), assistantClient: client)
             let scene = ConvertMacScene(model: ConvertModel(services: services))
-            scene.selection = .overview
+            scene.selection = .home
             let visibility = Box(NavigationSplitViewVisibility.automatic)
             let hosting = MainWindowLayout.makeHostingController(
                 rootView: MacRootView(
-                    module: scene,
+                    module: scene, services: services,
                     sidebarVisibility: Binding {
                         visibility.value
                     } set: {
@@ -76,7 +76,9 @@
             let initial = harness.window.frame
             var changes: [String] = []
             for round in 0..<2 {
-                for page in harness.scene.selectableDestinations {
+                // Home and Ask belong to the shell; the rest are the tool's pages.
+                let pages = [MacShellPage<VideoPage>.home] + harness.scene.selectableDestinations.map { .page($0) }
+                for page in pages {
                     harness.scene.selection = page
                     Self.pump()
                     if harness.window.frame != initial {
@@ -90,9 +92,8 @@
         @Test func theAskPageKeepsTheWindowFrameToo() throws {
             guard let harness = try Self.makeHarness(askAvailable: true) else { return }
             defer { harness.tearDown() }
-            #expect(harness.scene.selectableDestinations.last == .ask)
             let initial = harness.window.frame
-            for page in [VideoPage.localFiles, .ask, .queue, .ask, .overview] {
+            for page in [MacShellPage<VideoPage>.page(.localFiles), .ask, .page(.queue), .ask, .home] {
                 harness.scene.selection = page
                 Self.pump()
                 #expect(harness.window.frame == initial, "\(page)")
@@ -108,7 +109,7 @@
         @Test func togglingTheInspectorNeverChangesTheWindowFrame() throws {
             guard let harness = try Self.makeHarness() else { return }
             defer { harness.tearDown() }
-            harness.scene.selection = .localFiles
+            harness.scene.selection = .page(.localFiles)
             Self.pump()
             let initial = harness.window.frame
             for _ in 0..<2 {

@@ -7,9 +7,9 @@
         public var body: some Commands { CommandGroup(after: .help) {} }
     }
 
-    /// What a tool's UI gives the Mac shell: its sidebar, its screens, its toolbar and its inspector. The shell hosts
-    /// one scene and knows nothing else of the tool: the scene also supplies the dialogs, file drops and sheets that
-    /// belong to it. The shared services belong to the app and are given to the tool's model when it is made; the
+    /// What a tool's UI gives the Mac shell: its pages, its toolbar items and its inspector. The shell owns Home, Ask and
+    /// the Tools section of the sidebar; the scene lists only its own pages, which the shell nests under the tool's row.
+    /// The scene also supplies the dialogs, file drops and sheets that belong to the tool. The shared services belong to the app and are given to the tool's model when it is made; the
     /// scene doesn't own them. It takes over what `ToolModule` carried (ADR 0006); the tool's identity, platforms and
     /// runners are the `Tool`'s.
     @MainActor
@@ -17,6 +17,10 @@
         /// What the sidebar selects: one value per page of the tool.
         associatedtype Destination: Hashable & Sendable
         associatedtype Detail: View
+        /// The app-level savings summary the shell shows as Home.
+        associatedtype Home: View
+        /// A bar on every page, Home and Ask included (originals waiting for deletion, for example).
+        associatedtype BottomBar: View = EmptyView
         associatedtype Toolbar: ToolbarContent
         associatedtype Inspector: View
         associatedtype ToolCommands: Commands = NoToolCommands
@@ -29,16 +33,26 @@
         var tool: any Tool { get }
 
         /// The page showing, kept by the scene so the shell can restore it.
-        var selection: Destination? { get set }
+        var selection: MacShellPage<Destination>? { get set }
         var isInspectorPresented: Bool { get set }
 
-        /// The sidebar, as data: the shell draws it. Read from observable state, so it redraws when counts change.
+        /// The colour of the tool's symbol on its sidebar row.
+        var sidebarTint: SidebarTint { get }
+
+        /// The tool's own pages, as data: the shell draws them under the tool's row. Read from observable state, so it
+        /// redraws when counts change. Home and Ask are the shell's and are not listed here.
         var sidebar: [ToolSidebarSection<Destination>] { get }
 
-        /// The page for a sidebar choice, with whatever the tool shows on every page (a bottom bar, for example).
+        /// The Home page: the savings summary of the tool's work.
+        @ViewBuilder func homeSummary() -> Home
+
+        /// The tool's page for a sidebar choice.
         @ViewBuilder func detail(for destination: Destination?) -> Detail
 
-        /// Toolbar items the shell adds beside the page's own.
+        @ViewBuilder func bottomBar() -> BottomBar
+
+        /// Toolbar items the tool adds. The shell adds its own (New Chat, the inspector button) and keeps the set the
+        /// same on every page, so the title bar's height never changes.
         @ToolbarContentBuilder func toolbar(for destination: Destination?) -> Toolbar
 
         /// Whether the page has an inspector; the shell hides the inspector column otherwise.
@@ -66,6 +80,10 @@
         public var dialogs: EmptyModifier { EmptyModifier() }
     }
 
+    extension MacToolScene where BottomBar == EmptyView {
+        public func bottomBar() -> EmptyView { EmptyView() }
+    }
+
     extension MacToolScene where RowMenu == EmptyView {
         public func contextMenu(for destination: Destination) -> EmptyView { EmptyView() }
     }
@@ -75,9 +93,18 @@
         public func acceptsFileDrop(on destination: Destination) -> Bool { false }
         public func dropFiles(_ urls: [URL], on destination: Destination) -> Bool { false }
 
-        /// Every page the sidebar can select, in order.
+        /// Every page of the tool the sidebar can select, in order.
         public var selectableDestinations: [Destination] {
             ToolSidebarModel(sidebar).selectableDestinations
+        }
+
+        /// Whether the page showing has an inspector column: Home and Ask always do, so the window keeps its layout.
+        public func hasInspector(on page: MacShellPage<Destination>?) -> Bool {
+            switch page {
+            case .home, .ask: true
+            case .page(let destination): hasInspector(for: destination)
+            case nil: hasInspector(for: nil)
+            }
         }
     }
 #endif

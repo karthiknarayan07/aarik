@@ -39,6 +39,7 @@ public struct ConvertHost {
 public final class ConvertModel {
     enum Keys {
         static let inspector = "window.inspectorPresented"
+        static let selectedPage = "window.selectedPage"
     }
 
     // MARK: Services
@@ -51,6 +52,7 @@ public final class ConvertModel {
     // MARK: Navigation
     public var selection: VideoPage? = .localFiles {
         didSet {
+            if let key = selection?.persistenceKey { services.defaults.set(key, forKey: Keys.selectedPage) }
             browser.filter = badgeFilter
             // A preview belongs to the page it was opened on.
             quickLookURL = nil
@@ -132,6 +134,12 @@ public final class ConvertModel {
             defaults.string(forKey: AppSettings.Keys.compressPreset).flatMap(CompressPreset.init(rawValue:))
             ?? .balanced
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
+        // Back on the page the last session ended on; Ask only if the assistant can be asked again.
+        if let page = defaults.string(forKey: Keys.selectedPage).flatMap(VideoPage.init(persistenceKey:)),
+            page != .ask || services.assistantAvailability.isAvailable
+        {
+            self.selection = page
+        }
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         let library = services.library.local
         self.library = library

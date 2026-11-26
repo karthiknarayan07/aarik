@@ -25,8 +25,8 @@ public enum VideoPage: Hashable, Sendable {
 
     public var title: String {
         switch self {
-        case .overview: "Overview"
-        case .photosVideos: "Videos"
+        case .overview: "Home"
+        case .photosVideos: "Photos"
         case .localFiles: "Local Files"
         case .mediaType(let badge): badge.displayName
         case .tool(let id): VideoSidebar.tool(withID: id)?.name ?? "Tool"
@@ -40,7 +40,7 @@ public enum VideoPage: Hashable, Sendable {
 
     public var systemImage: String {
         switch self {
-        case .overview: "chart.pie"
+        case .overview: "house"
         case .photosVideos: "photo.on.rectangle"
         case .localFiles: "folder"
         case .mediaType(let badge): badge.systemImage
@@ -53,10 +53,33 @@ public enum VideoPage: Hashable, Sendable {
         }
     }
 
+    /// The page as stored for the next launch; nil for pages that are not restored (a filter or a tool page).
+    public var persistenceKey: String? {
+        switch self {
+        case .overview: "home"
+        case .photosVideos: "photos"
+        case .localFiles: "localFiles"
+        case .queue: "queue"
+        case .completed: "completed"
+        case .keptAsIs: "keptAsIs"
+        case .failed: "failed"
+        case .ask: "ask"
+        case .mediaType, .tool: nil
+        }
+    }
+
+    public init?(persistenceKey: String) {
+        let restorable: [VideoPage] = [
+            .overview, .photosVideos, .localFiles, .queue, .completed, .keptAsIs, .failed, .ask,
+        ]
+        guard let page = restorable.first(where: { $0.persistenceKey == persistenceKey }) else { return nil }
+        self = page
+    }
+
     /// The colour of the page's sidebar symbol.
     public var tint: SidebarTint {
         switch self {
-        case .overview: .indigo
+        case .overview: .blue
         case .photosVideos: .blue
         case .localFiles: .teal
         case .mediaType: .pink
@@ -78,14 +101,8 @@ public struct VideoSidebarState: Sendable, Equatable {
     /// How many Local Files items carry each badge.
     public var badgeCounts: [MediaBadge: Int]
     public var activity: ActivitySummary
-    /// Whether the Ask page is listed: only while the on-device model can be asked.
-    public var showsAsk: Bool
 
-    public init(
-        photosCount: Int?, localCount: Int, badgeCounts: [MediaBadge: Int], activity: ActivitySummary,
-        showsAsk: Bool = false
-    ) {
-        self.showsAsk = showsAsk
+    public init(photosCount: Int?, localCount: Int, badgeCounts: [MediaBadge: Int], activity: ActivitySummary) {
         self.photosCount = photosCount
         self.localCount = localCount
         self.badgeCounts = badgeCounts
@@ -93,7 +110,8 @@ public struct VideoSidebarState: Sendable, Equatable {
     }
 }
 
-/// The video tool's sidebar: Library, Media Types (only the types present), and Activity.
+/// The video tool's own pages, listed under its row in the shell's Tools section: Library, Media Types (only the
+/// types present) and Activity. Home (`.overview`) and Ask are the shell's and are not listed.
 public enum VideoSidebar {
     public static let tools: [ToolDescriptor] = [ConvertTool.descriptor]
 
@@ -106,7 +124,6 @@ public enum VideoSidebar {
             ToolSidebarSection(
                 title: "Library",
                 items: [
-                    item(.overview),
                     item(.photosVideos, count: state.photosCount),
                     item(.localFiles, count: state.localCount),
                 ])
@@ -118,13 +135,6 @@ public enum VideoSidebar {
                     title: "Media Types",
                     items: badges.map { item(.mediaType($0), count: state.badgeCounts[$0] ?? 0) }))
         }
-        // Only show a Tools section once more than one tool ships (N15).
-        if tools.count > 1 {
-            sections.append(
-                ToolSidebarSection(
-                    title: "Tools",
-                    items: tools.map { item(.tool($0.id)) }))
-        }
         let activity = state.activity
         sections.append(
             ToolSidebarSection(
@@ -135,10 +145,6 @@ public enum VideoSidebar {
                     item(.keptAsIs, count: activity.keptAsIs),
                     item(.failed, count: activity.failed),
                 ]))
-        // Last, so ⌘1 to ⌘7 keep their pages whether or not Ask is listed.
-        if state.showsAsk {
-            sections.append(ToolSidebarSection(title: "Assistant", items: [item(.ask)]))
-        }
         return sections
     }
 

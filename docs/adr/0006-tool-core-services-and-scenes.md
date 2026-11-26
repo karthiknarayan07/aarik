@@ -38,3 +38,12 @@ Aarik now ships on macOS and iOS, and more tools will follow (photo conversion, 
 - Adding a tool means one new package: `Tool`, a model, runners and scenes. No shared file needs editing, apart from the shell's registry line.
 - `AppModel` disappears gradually. Its tool-agnostic parts move into `AppServices` and the rest into `ConvertModel`. The Mac's behaviour must not change.
 - Every persisted identifier stays as it is (Plan 10's Global Constraints).
+
+## Amendment (2026-11-26): the Mac sidebar belongs to the shell
+
+On the Mac the shell owns the sidebar's app items and a Tools section; a tool supplies only its own pages (owner decision).
+- The sidebar is Home, Ask, then Tools. Each tool is one `DisclosureGroup` row (expanded by default, remembered) showing the tool's symbol and tint, with its pages nested under it. Ask is listed only while Apple Intelligence is available.
+- `MacToolScene.selection` is a `MacShellPage<Destination>` (`.home`, `.ask` or `.page(Destination)`). `sidebar` lists only the tool's pages, `homeSummary()` is the tool's app-level savings summary shown as Home, and `sidebarTint` colours its row.
+- Ask (chat, history inspector, New Chat toolbar item) and the inspector button are the shell's. The tool's `bottomBar()` shows on every page, Home and Ask included.
+- The Go menu follows the sidebar order and each page keeps its ⌘-number whether or not Ask is listed.
+- The window's frame and toolbar stay the same on every page.

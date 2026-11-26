@@ -46,6 +46,20 @@
                 ], days: days, savedBytes: saved.reduce(0, +), conversions: 17)
         }
 
+        @MainActor private static func sidebarRow(
+            _ title: String, _ systemImage: String, _ tint: SidebarTint?, count: Int? = nil, selected: Bool = false
+        ) -> some View {
+            HStack {
+                SidebarRowLabel(title: title, systemImage: systemImage, tint: tint)
+                Spacer()
+                if let count, count > 0 { Text("\(count)").foregroundStyle(.secondary).monospacedDigit() }
+            }
+            .padding(.vertical, 3).padding(.horizontal, 8)
+            .background {
+                if selected { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.1)) }
+            }
+        }
+
         private static func write<Content: View>(
             _ content: Content, name: String, size: CGSize, dark: Bool, folder: URL
         ) throws {
@@ -236,24 +250,19 @@
                     name: "overview", size: CGSize(width: 940, height: 1080), dark: dark, folder: folder)
                 try Self.write(
                     VStack(alignment: .leading, spacing: 2) {
-                        ForEach(sidebar, id: \.id) { section in
-                            Text(section.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                .padding(.top, 10).padding(.leading, 8)
-                            ForEach(section.items, id: \.id) { item in
-                                HStack {
-                                    SidebarRowLabel(title: item.title, systemImage: item.systemImage, tint: item.tint)
-                                    Spacer()
-                                    if let count = item.count, count > 0 {
-                                        Text("\(count)").foregroundStyle(.secondary).monospacedDigit()
-                                    }
-                                }
-                                .padding(.vertical, 3).padding(.horizontal, 8)
-                                .background {
-                                    if item.title == "Overview" {
-                                        RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.1))
-                                    }
-                                }
-                            }
+                        Self.sidebarRow("Home", "house", .blue, selected: true)
+                        Self.sidebarRow("Ask", "sparkles", .purple)
+                        Text("Tools").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.top, 10).padding(.leading, 8)
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                            SidebarRowLabel(
+                                title: "Convert", systemImage: "arrow.down.right.and.arrow.up.left", tint: .indigo)
+                        }
+                        .padding(.vertical, 3).padding(.horizontal, 8)
+                        ForEach(sidebar.flatMap(\.items), id: \.id) { item in
+                            Self.sidebarRow(item.title, item.systemImage, item.tint, count: item.count)
+                                .padding(.leading, 18)
                         }
                     }
                     .padding(10),
