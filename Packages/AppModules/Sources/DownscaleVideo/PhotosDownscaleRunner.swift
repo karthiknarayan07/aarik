@@ -383,12 +383,14 @@ public struct PhotosDownscaleRunner: JobRunner {
         phase: @escaping @Sendable (String?) -> Void
     ) async throws -> URL {
         var original = input
-        // The copy goes to the backup volume, and an edited video's original is fetched into the job's folder first.
-        // (Without the first fetch the size isn't known yet; `core.backUp` checks once the original is fetched.)
-        if let input {
-            var needs = [SpaceNeed(url: folder, bytes: input.bytes)]
-            if input.isEditedVersion { needs.append(SpaceNeed(url: jobFolder, bytes: input.bytes)) }
-            do { try core.diskSpace.verify(needs) } catch { throw OriginalsBackupError.notEnoughSpace }
+        // The copy goes to the backup volume and is as big as the original. The first fetch is the original only when
+        // the video wasn't edited; for an edited one its size is Photos' rendering, not the original, so nothing is
+        // checked from it: the original is fetched next (a full job folder fails that fetch) and `core.backUp` checks
+        // the backup volume with the original's own size before copying.
+        if let input, !input.isEditedVersion {
+            do {
+                try core.diskSpace.verify([SpaceNeed(url: folder, bytes: input.bytes)])
+            } catch { throw OriginalsBackupError.notEnoughSpace }
         }
         if input == nil || input?.isEditedVersion == true {
             phase(Self.backupPhase)
