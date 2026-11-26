@@ -12,9 +12,13 @@ First public release.
 - **Long batches survive sleep, heat and low battery:** the Mac stays awake while videos convert (the display may
   still sleep). A hot Mac converts one video at a time, then pauses ("Paused while your Mac cools down") and resumes
   by itself. On battery, conversion pauses at 20 % ("Paused: battery low") and resumes when you plug in or it is above
-  25 %. A **Conversion speed** setting (Quiet, Balanced, Fastest) trades speed for heat and noise.
+  25 %. A **Conversion Speed** setting (Quiet, Balanced, Fastest) trades speed for heat and noise.
 - **Quit asks first while converting:** "Stop converting and quit?" The video in progress and the rest of the queue
   continue the next time you open the app.
+- **Shrink Videos action:** in Shortcuts, as a Finder Quick Action, by Siri and in Spotlight. It shrinks the videos you
+  give it, or picks them by date range, resolution and source (Local Files or Photos), with the quality, format and
+  destination you choose. Nothing is replaced, videos that would lose metadata are skipped, and one notification says
+  how it went. Settings explains how to add it to Finder.
 - **Replace in Photos:** choose Replace Original in Photos and each smaller copy is saved and checked first. When the
   queue finishes, Photos asks you once to move all the originals to Recently Deleted. If you decline, they are kept
   and a bar offers to move them later. iCloud space is freed when Recently Deleted is emptied, or after 30 days.

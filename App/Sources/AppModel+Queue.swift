@@ -25,8 +25,23 @@ extension AppModel {
         if let loadError {
             alert = AppAlert(title: "Couldn't read the queue", message: loadError)
         }
+        // Copies of action inputs that no waiting job reads are left over from a crash or quit.
+        let stillRead = await queue.jobs.filter(StagedInputs.isNeeded(by:)).map(\.source)
+        let staged = stagedInputs
+        await Task.detached(priority: .utility) { staged.sweep(keeping: stillRead) }.value
         // A queue created paused (auto-start off) waits for Resume.
         if !isQueuePaused { await queue.resume() }
+        hasFinishedStarting = true
+        let waiters = startWaiters
+        startWaiters = []
+        for waiter in waiters { waiter.resume() }
+    }
+
+    /// Returns once `start()` has finished: the work-folder sweep is done and the queue is running, so what an
+    /// entry point adds can't start a job too early.
+    func waitUntilStarted() async {
+        guard !hasFinishedStarting else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
     }
 
     /// Stops scanning (items found so far stay), lets library saves finish, and stops the queue before the app
@@ -68,6 +83,7 @@ extension AppModel {
             moveOriginalsAfterRun()
         }
         reconcileReplacedFiles(jobs)
+        if !stagedWatch.isEmpty { Task { await releaseStagedInputs() } }
     }
 
     /// A Replace put a smaller file where a library item was: update that item in place. The item is found by

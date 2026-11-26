@@ -37,6 +37,27 @@ public enum FrameRateTier: Int, Sendable, Hashable, CaseIterable {
     }
 }
 
+/// A resolution class from the short side of the displayed size; the one set of thresholds the quality buckets and
+/// anything that matches a resolution without a frame rate (a Photos video before its index is read) both use.
+public enum ResolutionClass: Sendable, Hashable {
+    case uhd, fullHD, hd, other
+    /// The short side is zero or less: the size is unknown.
+    case unknown
+
+    public init(shortSide: Double) {
+        guard shortSide > 0 else {
+            self = .unknown
+            return
+        }
+        switch shortSide {
+        case 2160...: self = .uhd
+        case 1080...: self = .fullHD
+        case 720...: self = .hd
+        default: self = .other
+        }
+    }
+}
+
 /// Resolution and frame rate together, from the short side of the displayed size: 4K and 1080p are split by
 /// frame rate, 720p and smaller are not. A 4K or 1080p clip whose frame rate is unknown is `unknown`.
 public enum QualityBucket: Sendable, Hashable, Comparable {
@@ -47,17 +68,13 @@ public enum QualityBucket: Sendable, Hashable, Comparable {
     case unknown
 
     public init(item: LibraryItem) {
-        let shortSide = min(item.pixelSize.width, item.pixelSize.height)
-        guard shortSide > 0 else {
-            self = .unknown
-            return
-        }
         let tier = FrameRateTier(fps: item.frameRate)
-        switch shortSide {
-        case 2160...: self = tier.map(QualityBucket.uhd) ?? .unknown
-        case 1080...: self = tier.map(QualityBucket.fullHD) ?? .unknown
-        case 720...: self = .hd
-        default: self = .other
+        switch ResolutionClass(shortSide: min(item.pixelSize.width, item.pixelSize.height)) {
+        case .unknown: self = .unknown
+        case .uhd: self = tier.map(QualityBucket.uhd) ?? .unknown
+        case .fullHD: self = tier.map(QualityBucket.fullHD) ?? .unknown
+        case .hd: self = .hd
+        case .other: self = .other
         }
     }
 

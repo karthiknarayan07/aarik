@@ -62,6 +62,7 @@ private struct GeneralSettings: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            FinderQuickActionSection()
             QuickRunSettingsSections()
         }
         .formStyle(.grouped)
