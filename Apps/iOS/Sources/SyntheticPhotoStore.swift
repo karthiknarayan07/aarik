@@ -51,6 +51,11 @@
 
         @concurrent
         func thumbnail(for id: String, size: CGSize) async -> CGImage? {
+            // iCloud-only videos (every ninth) have no local poster, as with network access off; the rest take a few
+            // milliseconds, as PhotoKit does, and stop when cancelled.
+            if (Int(id.dropFirst("synthetic-".count)) ?? 0) % 9 == 0 { return nil }
+            try? await Task.sleep(for: .milliseconds(8))
+            guard !Task.isCancelled else { return nil }
             let width = max(1, Int(size.width))
             let height = max(1, Int(size.height))
             guard
