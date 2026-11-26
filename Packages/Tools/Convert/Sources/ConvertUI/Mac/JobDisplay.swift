@@ -88,7 +88,7 @@ struct JobThumbnail: View {
 
 /// Pause or resume the queue (⌥⌘P lives on the Queue menu item).
 struct PauseResumeButton: View {
-    let model: AppModel
+    let model: ConvertModel
 
     var body: some View {
         Button {

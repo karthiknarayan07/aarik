@@ -11,7 +11,7 @@ import SwiftUI
 /// been saved so far. A vertical stack of titled groups, so another group (suggestions, for instance) can be added
 /// without changing the rest.
 struct OverviewView: View {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
     @State private var summary: OverviewSummary?
 
     /// Everything the summary depends on; when it changes the summary is made again.
@@ -67,7 +67,7 @@ struct OverviewView: View {
                 ProgressView()
             }
         }
-        .navigationTitle(SidebarDestination.overview.title)
+        .navigationTitle(VideoPage.overview.title)
         // Reads the list of videos when access is already allowed; never shows the access prompt.
         .task { await model.photos.start() }
         .task(id: inputs) {
@@ -137,7 +137,7 @@ private struct OverviewGroup<Content: View>: View {
 
 /// Count, size and what could be freed, for Photos videos and for Local Files.
 private struct LibraryGroup: View {
-    let model: AppModel
+    let model: ConvertModel
     let summary: OverviewSummary
 
     var body: some View {
@@ -216,7 +216,7 @@ private struct TotalsRows: View {
 /// reason, Show and Add These to the Queue. Without it (unavailable, or no usable answer) the same place lists the
 /// biggest groups as plain rows, with no mention of the model.
 private struct SmartPicksGroup: View {
-    let model: AppModel
+    let model: ConvertModel
 
     private var store: SmartPicksStore { model.assistant.smartPicks }
 
@@ -421,11 +421,11 @@ private struct SavedGroup: View {
 
 /// Nothing to total yet: one system empty state with the two ways to start.
 private struct OverviewEmptyState: View {
-    let model: AppModel
+    let model: ConvertModel
 
     var body: some View {
         ContentUnavailableView {
-            Label("Welcome to \(AppModel.displayName)", systemImage: "film.stack")
+            Label("Welcome to \(AppInfo.displayName)", systemImage: "film.stack")
         } description: {
             Text(
                 "See how much space your videos take, then keep smaller copies that look the same. "

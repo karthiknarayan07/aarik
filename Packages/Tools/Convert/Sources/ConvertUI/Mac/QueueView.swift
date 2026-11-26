@@ -1,3 +1,4 @@
+import Convert
 import AppCore
 import AppUI
 import LocalLibrary
@@ -6,7 +7,7 @@ import SwiftUI
 extension View {
     /// What every Activity list does with its selection, from `JobListActions`: a context menu on the selected
     /// rows, double-click and Return for the primary action, and Delete.
-    func jobListActions(model: AppModel, kind: JobListKind, selection: Set<UUID>) -> some View {
+    func jobListActions(model: ConvertModel, kind: JobListKind, selection: Set<UUID>) -> some View {
         contextMenu(forSelectionType: UUID.self) { ids in
             ForEach(model.contextMenu(for: ids, in: kind), id: \.action) { command in
                 Button(command.title) { model.perform(command.action, on: ids, in: kind) }
@@ -20,7 +21,7 @@ extension View {
 
 /// Videos waiting or converting, in order.
 struct QueueView: View {
-    let model: AppModel
+    let model: ConvertModel
     @State private var isConfirmingCancelAll = false
     @State private var selection = Set<UUID>()
 
@@ -28,7 +29,7 @@ struct QueueView: View {
         let jobs = model.queuedJobs
         Group {
             if jobs.isEmpty {
-                SidebarDestination.queue.emptyState
+                VideoPage.queue.emptyState
                     .action("Go to Local Files") { model.selection = .localFiles }
             } else {
                 List(selection: $selection) {

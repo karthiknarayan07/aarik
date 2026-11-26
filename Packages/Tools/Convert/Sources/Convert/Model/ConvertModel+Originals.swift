@@ -6,16 +6,16 @@ import LocalLibrary
 import PhotosLibrary
 
 /// How the last attempt to move originals to Recently Deleted went.
-enum OriginalsNotice: Equatable {
+public enum OriginalsNotice: Equatable {
     /// The user declined Photos' confirmation: nothing was deleted.
     case declined
     case failed(String)
     case moved(count: Int)
 }
 
-extension AppModel {
+extension ConvertModel {
     /// What the pending-deletion bar shows; nil when there is nothing to say.
-    var pendingDeletionBar: PendingDeletionBarContent? {
+    public var pendingDeletionBar: PendingDeletionBarContent? {
         let ready = pendingOriginals.filter { $0.blocked == nil }
         let held = pendingOriginals.compactMap(\.blocked)
         if isMovingOriginals { return PendingDeletionBarContent(count: ready.count, status: .working) }
@@ -37,7 +37,7 @@ extension AppModel {
     }
 
     /// The bar's button: moves the originals (Photos asks the user to confirm), or dismisses the result.
-    func performPendingDeletionAction() {
+    public func performPendingDeletionAction() {
         if case .moved = originalsNotice {
             originalsNotice = nil
         } else {
@@ -46,19 +46,19 @@ extension AppModel {
     }
 
     /// "Remove from List": forgets the originals that were kept out of the batch. Nothing is deleted.
-    func removeKeptOriginalsFromList() {
+    public func removeKeptOriginalsFromList() {
         pendingDeletions.remove(assetIDs: pendingOriginals.filter { $0.blocked != nil }.map(\.assetID))
         pendingOriginals = pendingDeletions.all
     }
 
     /// "Open System Settings…" for an original that limited access hides.
-    func openPhotosAccessSettings() {
-        PrivacySettings.open(PrivacySettings.photos)
+    public func openPhotosAccessSettings() {
+        host.openPhotosAccessSettings()
     }
 
     /// After a queue run: moves the originals, unless the user already declined for all of them (then it waits for
     /// the user, or for originals from a later run).
-    func moveOriginalsAfterRun() {
+    public func moveOriginalsAfterRun() {
         guard pendingOriginals.contains(where: { $0.blocked == nil && !declinedOriginals.contains($0.assetID) })
         else { return }
         moveOriginalsToRecentlyDeleted()
@@ -67,7 +67,7 @@ extension AppModel {
     /// Asks Photos, once, to move every pending original that passes the checks to Recently Deleted. Photos shows
     /// its own confirmation; declining keeps the list (the bar says so) and nothing is deleted later without asking
     /// again.
-    func moveOriginalsToRecentlyDeleted() {
+    public func moveOriginalsToRecentlyDeleted() {
         guard !isMovingOriginals, !pendingOriginals.isEmpty else { return }
         isMovingOriginals = true
         originalsNotice = nil
@@ -105,7 +105,7 @@ extension AppModel {
 
     private func update(_ jobIDs: [UUID], _ change: @escaping @Sendable (inout JobOutcome) -> Void) {
         for id in jobIDs {
-            send { queue in await queue.updateOutcome(id: id, transform: change) }
+            services.send { queue in await queue.updateOutcome(id: id, transform: change) }
         }
     }
 
@@ -113,7 +113,7 @@ extension AppModel {
 
     /// Opens the grid that holds an Overview entry and selects it there. Search and filters that would hide it
     /// are cleared first.
-    func reveal(_ entry: OverviewSummary.Entry) {
+    public func reveal(_ entry: OverviewSummary.Entry) {
         let target: LibraryBrowser
         switch entry.library {
         case .photos:

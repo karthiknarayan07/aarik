@@ -1,37 +1,35 @@
-import ConvertUI
 import AppCore
-import AppKit
 import AppUI
 import Convert
 import Foundation
 import LocalLibrary
 
-extension AppModel {
+extension ConvertModel {
     /// What the menus' commands decide from (see `AppCommands`).
-    var commandContext: AppCommandContext {
+    public var commandContext: AppCommandContext {
         AppCommandContext(
             canRemoveFromLibrary: canRemoveSelectionFromLibrary, canAddToQueue: canAddSelectionToQueue,
             isQueuePaused: isQueuePaused, failedJobCount: failedJobs.count)
     }
 
     /// The sections ⌘1 to ⌘9 go to, in the sidebar's order. Media-type filters and tools are reached in the sidebar.
-    static let goDestinations: [SidebarDestination] = [
+    public static let goDestinations: [VideoPage] = [
         .overview, .photosVideos, .localFiles, .queue, .completed, .keptAsIs, .failed,
     ]
 
     /// The browser the View menu's Group By and Sort By act on: the page that is showing; nil on the Activity pages.
-    var activeBrowser: LibraryBrowser? {
+    public var activeBrowser: LibraryBrowser? {
         if isPhotosPage { return photosBrowser }
         return selection?.showsLibrary == true ? browser : nil
     }
 
     /// The toolbar's Add to Queue button: "Add to Queue", or "Add 3 to Queue" for several videos.
-    var toolbarAddToQueueTitle: String {
+    public var toolbarAddToQueueTitle: String {
         QueueButtonTitle.toolbarTitle(count: isPhotosPage ? selectedPhotoItems.count : queueableItems.count)
     }
 
-    func perform(_ command: AppCommandID) {
-        showMainWindow()
+    public func perform(_ command: AppCommandID) {
+        host.showMainWindow()
         switch command {
         case .addVideos:
             if selection?.showsLibrary != true { selection = .localFiles }
@@ -43,19 +41,19 @@ extension AppModel {
         }
     }
 
-    func showQueue() {
-        showMainWindow()
+    public func showQueue() {
+        host.showMainWindow()
         selection = .queue
     }
 
     // MARK: - Undo
 
     /// The window's undo manager, which Edit → Undo and Redo use.
-    private var undoManager: UndoManager? { mainWindow?.undoManager }
+    private var undoManager: UndoManager? { host.undoManager() }
 
     /// Offers Edit → Undo Remove from Library. Undo adds the files back (they are scanned again, so they return
     /// as new items); Redo removes them again.
-    func registerUndo(of removal: LibraryRemoval) {
+    public func registerUndo(of removal: LibraryRemoval) {
         guard !removal.isEmpty, let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { model in
             MainActor.assumeIsolated { model.undoRemoval(removal) }
@@ -84,7 +82,7 @@ extension AppModel {
 
     // MARK: - Activity lists
 
-    func rowFacts(of job: Job, in kind: JobListKind) -> JobRowFacts {
+    public func rowFacts(of job: Job, in kind: JobListKind) -> JobRowFacts {
         let hasFile: Bool
         if kind == .completed, case .completed(let outcome) = job.state {
             hasFile = outcome.output.isFileURL
@@ -96,29 +94,29 @@ extension AppModel {
     }
 
     /// The jobs with these ids, in list order.
-    func jobs(withIDs ids: Set<UUID>) -> [Job] { jobs.filter { ids.contains($0.id) } }
+    public func jobs(withIDs ids: Set<UUID>) -> [Job] { jobs.filter { ids.contains($0.id) } }
 
-    func facts(of ids: Set<UUID>, in kind: JobListKind) -> [JobRowFacts] {
+    public func facts(of ids: Set<UUID>, in kind: JobListKind) -> [JobRowFacts] {
         jobs(withIDs: ids).map { rowFacts(of: $0, in: kind) }
     }
 
-    func contextMenu(for ids: Set<UUID>, in kind: JobListKind) -> [JobListCommand] {
+    public func contextMenu(for ids: Set<UUID>, in kind: JobListKind) -> [JobListCommand] {
         JobListActions.contextMenu(kind: kind, rows: facts(of: ids, in: kind))
     }
 
     /// Double-click or Return.
-    func performPrimaryAction(on ids: Set<UUID>, in kind: JobListKind) {
+    public func performPrimaryAction(on ids: Set<UUID>, in kind: JobListKind) {
         guard let action = JobListActions.primary(kind: kind, rows: facts(of: ids, in: kind)) else { return }
         perform(action, on: ids, in: kind)
     }
 
     /// Delete.
-    func performDelete(on ids: Set<UUID>, in kind: JobListKind) {
+    public func performDelete(on ids: Set<UUID>, in kind: JobListKind) {
         guard let action = JobListActions.deleteAction(kind: kind, rows: facts(of: ids, in: kind)) else { return }
         perform(action, on: ids, in: kind)
     }
 
-    func perform(_ action: JobListAction, on ids: Set<UUID>, in kind: JobListKind) {
+    public func perform(_ action: JobListAction, on ids: Set<UUID>, in kind: JobListKind) {
         let selected = jobs(withIDs: ids)
         switch action {
         case .showInFinder:
@@ -128,7 +126,7 @@ extension AppModel {
                 }
                 return job.source.isFileURL ? job.source : nil
             }
-            if !urls.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(urls) }
+            if !urls.isEmpty { host.reveal(urls) }
         case .retry:
             for job in selected { retry(job) }
         case .removeFromQueue:

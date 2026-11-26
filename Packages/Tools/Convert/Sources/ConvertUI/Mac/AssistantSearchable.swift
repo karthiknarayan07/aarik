@@ -81,21 +81,3 @@ private struct AssistantSearchable: ViewModifier {
         Task { await search.submit(text, browser: browser, sidebarBadge: sidebarBadge, shrunkIDs: shrunk) }
     }
 }
-
-extension AppModel {
-    /// The Local Files items that already have a finished conversion, or are one: "not yet shrunk" hides them.
-    func shrunkIDs(in browser: LibraryBrowser) -> Set<UUID> {
-        var paths = Set<String>()
-        for job in jobs {
-            guard case .completed(let outcome) = job.state else { continue }
-            paths.insert(job.sourceUsed.standardizedFileURL.path)
-            paths.insert(job.source.standardizedFileURL.path)
-            paths.insert(outcome.output.standardizedFileURL.path)
-        }
-        guard !paths.isEmpty else { return [] }
-        return Set(
-            browser.collection.items.compactMap { item in
-                item.fileURL.flatMap { paths.contains($0.standardizedFileURL.path) ? item.id : nil }
-            })
-    }
-}

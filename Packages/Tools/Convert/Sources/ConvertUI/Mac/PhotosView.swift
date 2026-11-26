@@ -1,3 +1,4 @@
+import AppCore
 import AppKit
 import AppUI
 import Convert
@@ -19,7 +20,7 @@ enum PrivacySettings {
 /// The Videos page: the access prompt, the denied state, or the user's Photos videos in the same grid and
 /// inspector as Local Files.
 struct PhotosView: View {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
 
     var body: some View {
         let photos = model.photos
@@ -37,7 +38,7 @@ struct PhotosView: View {
                 }
             }
         }
-        .navigationTitle(SidebarDestination.photosVideos.title)
+        .navigationTitle(VideoPage.photosVideos.title)
         .task { await photos.start() }
         // Access or Full Disk Access may have been changed in System Settings while the app was in the background.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -57,7 +58,7 @@ private struct PhotosAccessPrompt: View {
             Label("See Your Photos Videos", systemImage: "photo.on.rectangle")
         } description: {
             Text(
-                "\(AppModel.displayName) reads your video list on this Mac and changes nothing in Photos until you convert a video."
+                "\(AppInfo.displayName) reads your video list on this Mac and changes nothing in Photos until you convert a video."
             )
         } actions: {
             Button("Allow Access to Photos…", action: allow)
@@ -94,7 +95,7 @@ private struct PhotosAccessLimited: View {
             Label("No Videos Are Shared", systemImage: "photo.badge.exclamationmark")
         } description: {
             Text(
-                "You gave \(AppModel.displayName) access to some of your photos only, and none of them is a video. "
+                "You gave \(AppInfo.displayName) access to some of your photos only, and none of them is a video. "
                     + "Choose more in System Settings to see your videos here.")
         } actions: {
             Button("Open Photos Settings") { PrivacySettings.open(PrivacySettings.photos) }
@@ -104,7 +105,7 @@ private struct PhotosAccessLimited: View {
 }
 
 private struct PhotosGridView: View {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
 
     var body: some View {
         @Bindable var browser = model.photosBrowser
@@ -277,7 +278,7 @@ private struct PhotosNotes: View {
 
 /// A tile's context menu on the Videos page.
 private struct PhotoTileMenu: View {
-    let model: AppModel
+    let model: ConvertModel
     let item: VideoItem
 
     var body: some View {
@@ -291,7 +292,7 @@ private struct PhotoTileMenu: View {
 
 /// The inspector for the Videos page: what the selected videos are, and how to convert them.
 struct PhotosInspector: View {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
     @State private var isChoosingFolder = false
 
     private var preset: Binding<Preset?> {

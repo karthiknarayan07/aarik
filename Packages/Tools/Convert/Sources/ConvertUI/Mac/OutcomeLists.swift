@@ -8,14 +8,14 @@ import SwiftUI
 /// Finished conversions with what they saved and the report badge. Select rows for the context menu (Show in
 /// Finder, Remove from List); double-click or Return shows the file in Finder.
 struct CompletedView: View {
-    let model: AppModel
+    let model: ConvertModel
     @State private var selection = Set<UUID>()
 
     var body: some View {
         let rows = model.completedJobs
         Group {
             if rows.isEmpty {
-                SidebarDestination.completed.emptyState
+                VideoPage.completed.emptyState
             } else {
                 List(selection: $selection) {
                     ForEach(rows, id: \.job.id) { row in
@@ -78,14 +78,14 @@ private struct CompletedRow: View {
 
 /// Videos left untouched, with the reason.
 struct KeptAsIsView: View {
-    let model: AppModel
+    let model: ConvertModel
     @State private var selection = Set<UUID>()
 
     var body: some View {
         let rows = model.keptAsIsJobs
         Group {
             if rows.isEmpty {
-                SidebarDestination.keptAsIs.emptyState
+                VideoPage.keptAsIs.emptyState
             } else {
                 List(selection: $selection) {
                     ForEach(rows, id: \.job.id) { row in
@@ -105,14 +105,14 @@ struct KeptAsIsView: View {
 
 /// Conversions that couldn't finish, with Retry and Retry all.
 struct FailedView: View {
-    let model: AppModel
+    let model: ConvertModel
     @State private var selection = Set<UUID>()
 
     var body: some View {
         let rows = model.failedJobs
         Group {
             if rows.isEmpty {
-                SidebarDestination.failed.emptyState
+                VideoPage.failed.emptyState
             } else {
                 List(selection: $selection) {
                     ForEach(rows, id: \.job.id) { row in

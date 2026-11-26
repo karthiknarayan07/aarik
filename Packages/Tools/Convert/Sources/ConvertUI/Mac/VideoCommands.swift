@@ -1,3 +1,4 @@
+import Convert
 import AppUI
 import LocalLibrary
 import SwiftUI
@@ -5,7 +6,7 @@ import SwiftUI
 /// The video tool's menu commands: View → Group By and Sort By, the Go menu, File → Add Videos…, Edit → Remove from
 /// Library and the Queue menu. They ride on the app's scene through `MacToolScene.commands`.
 struct VideoCommands: Commands {
-    let model: AppModel
+    let model: ConvertModel
 
     var body: some Commands {
         CommandGroup(after: .sidebar) {
@@ -20,7 +21,7 @@ struct VideoCommands: Commands {
 /// A menu item for a command of the pure command model: its title, shortcut and enabled state come from
 /// `AppCommands`.
 private struct CommandButton: View {
-    let model: AppModel
+    let model: ConvertModel
     let id: AppCommandID
 
     var body: some View {
@@ -34,7 +35,7 @@ private struct CommandButton: View {
 /// View → Group By and Sort By, as in Finder: a submenu each, with the current choice checked. They act on the
 /// library page that is showing and are off on the Activity pages.
 private struct GroupSortMenus: View {
-    let model: AppModel
+    let model: ConvertModel
 
     var body: some View {
         let browser = model.activeBrowser
@@ -61,11 +62,11 @@ private struct GroupSortMenus: View {
 
 /// Go → the sections of the sidebar, ⌘1 to ⌘7 in its order.
 private struct GoCommands: Commands {
-    let model: AppModel
+    let model: ConvertModel
 
     var body: some Commands {
         CommandMenu("Go") {
-            ForEach(Array(AppModel.goDestinations.enumerated()), id: \.offset) { index, destination in
+            ForEach(Array(ConvertModel.goDestinations.enumerated()), id: \.offset) { index, destination in
                 Button(destination.title) {
                     model.showMainWindow()
                     model.selection = destination
@@ -79,7 +80,7 @@ private struct GoCommands: Commands {
 /// File → Add Videos… (⌘O); Edit → Remove from Library (no shortcut; ⌫ in the grid); Queue → Add to Queue (⌘⏎), Pause or Resume Queue
 /// (⌥⌘P) and Retry All Failed.
 private struct LibraryCommands: Commands {
-    let model: AppModel
+    let model: ConvertModel
 
     var body: some Commands {
         CommandGroup(after: .newItem) {

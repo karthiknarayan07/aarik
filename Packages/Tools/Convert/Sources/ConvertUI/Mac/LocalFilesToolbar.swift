@@ -1,12 +1,13 @@
+import Convert
 import LocalLibrary
 import SwiftUI
 
 /// The Local Files toolbar: Group By in the middle, then Share, Filter and Sort, then Add Files.
 struct LocalFilesToolbar: ToolbarContent {
-    let model: AppModel
+    let model: ConvertModel
     @Bindable private var browser: LibraryBrowser
 
-    init(model: AppModel) {
+    init(model: ConvertModel) {
         self.model = model
         self.browser = model.browser
     }

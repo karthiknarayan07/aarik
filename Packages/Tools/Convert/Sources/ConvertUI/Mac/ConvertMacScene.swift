@@ -7,9 +7,9 @@ import UniformTypeIdentifiers
 /// The video tool as the shell hosts it: its sidebar, pages, toolbar, inspector, dialogs, drops and menu commands.
 @MainActor
 final class ConvertModule: MacToolScene {
-    private let model: AppModel
+    private let model: ConvertModel
 
-    init(model: AppModel) {
+    init(model: ConvertModel) {
         self.model = model
     }
 
@@ -105,7 +105,7 @@ final class ConvertModule: MacToolScene {
 
 /// A page of the video tool, with the bar for originals waiting to move to Recently Deleted on every page.
 private struct VideoDetail: View {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
     let destination: VideoPage?
 
     var body: some View {
@@ -123,7 +123,7 @@ private struct VideoDetail: View {
                     .navigationTitle(page.title)
             case nil:
                 EmptyState("Nothing Selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar.")
-                    .navigationTitle(AppModel.displayName)
+                    .navigationTitle(AppInfo.displayName)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -140,7 +140,7 @@ private struct VideoDetail: View {
 /// The video tool's window-wide dialogs: the file importer, dropped files, the Replace confirmation, messages and the
 /// loss review.
 struct VideoDialogs: ViewModifier {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
     @State private var isDropTargeted = false
 
     private var alertShown: Binding<Bool> {

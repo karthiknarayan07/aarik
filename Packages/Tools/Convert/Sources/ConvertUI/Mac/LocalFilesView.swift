@@ -8,7 +8,7 @@ import SwiftUI
 /// The Local Files screen: the grid under a savings header. Filters, counts and Share live in the toolbar and the
 /// subtitle. Media-type filters reuse it.
 struct LocalFilesView: View {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
 
     var body: some View {
         @Bindable var browser = model.browser
@@ -124,7 +124,7 @@ private struct LocalFilesWelcome: View {
 
 /// A tile's context menu; each item acts on the selection when the tile is part of it, else on that tile.
 private struct TileMenu: View {
-    let model: AppModel
+    let model: ConvertModel
     let item: VideoItem
 
     var body: some View {

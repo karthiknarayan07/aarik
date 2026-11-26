@@ -1,13 +1,12 @@
 import AppServices
 import AppUI
 import Convert
-import ConvertUI
 import LocalLibrary
 import SwiftUI
 
 /// The inspector: nothing selected, one video, or several.
 struct LibraryInspector: View {
-    @Bindable var model: AppModel
+    @Bindable var model: ConvertModel
 
     var body: some View {
         if model.isPhotosPage {

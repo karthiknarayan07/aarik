@@ -1,4 +1,3 @@
-import ConvertUI
 import AppCore
 import AppUI
 import Convert
@@ -8,12 +7,12 @@ import PhotosLibrary
 
 /// Where the Videos page puts converted copies: a new video in Photos, a new video with the original moved to
 /// Recently Deleted afterwards, or a folder on this Mac.
-struct PhotosSaveLocation: Equatable {
-    enum Choice: String, CaseIterable, Identifiable {
+public struct PhotosSaveLocation: Equatable {
+    public enum Choice: String, CaseIterable, Identifiable {
         case newAsset, replace, folder
 
-        var id: Self { self }
-        var title: String {
+        public var id: Self { self }
+        public var title: String {
             switch self {
             case .newAsset: "Photos, as a new video"
             case .replace: "Replace Original in Photos"
@@ -22,12 +21,14 @@ struct PhotosSaveLocation: Equatable {
         }
     }
 
-    var choice = Choice.newAsset
-    var folder: URL?
-    var folderBookmark: Data?
+    public var choice = Choice.newAsset
+    public var folder: URL?
+    public var folderBookmark: Data?
+
+    public init() {}
 
     /// What a job records; nil while Folder is chosen but no folder has been picked.
-    var destination: PhotosDestination? {
+    public var destination: PhotosDestination? {
         switch choice {
         case .newAsset: .newAsset
         case .replace: .replace
@@ -36,7 +37,7 @@ struct PhotosSaveLocation: Equatable {
     }
 
     /// Remembers a picked folder as a bookmark (security-scoped when the system allows it).
-    mutating func setFolder(_ url: URL) throws {
+    public mutating func setFolder(_ url: URL) throws {
         let bookmark: Data
         if let scoped = try? url.bookmarkData(options: [.withSecurityScope]) {
             bookmark = scoped
@@ -49,10 +50,10 @@ struct PhotosSaveLocation: Equatable {
     }
 }
 
-extension AppModel {
+extension ConvertModel {
     /// The inspector's preset for the selected Photos videos: the one they share, nil when they differ ("Mixed").
     /// Choosing one gives it to every selected video, leaving the header's preset alone.
-    var photoSelectionPreset: Preset? {
+    public var photoSelectionPreset: Preset? {
         get { presetOverrides.selectionPreset(for: selectedPhotoItems.map(\.id), default: preset) }
         set {
             guard let newValue else { return }
@@ -60,11 +61,11 @@ extension AppModel {
         }
     }
 
-    var canAddPhotosToQueue: Bool {
+    public var canAddPhotosToQueue: Bool {
         !selectedPhotoItems.isEmpty && photosSaveLocation.destination != nil
     }
 
-    var addPhotosToQueueTitle: String {
+    public var addPhotosToQueueTitle: String {
         let items = selectedPhotoItems
         return QueueButtonTitle.title(
             count: items.count, preset: items.first.map(effectivePreset(for:)) ?? preset, isCustom: false)
@@ -72,7 +73,7 @@ extension AppModel {
 
     /// Adds the selected Photos videos. Nothing is downloaded now: each video is fetched when its turn comes.
     /// Videos Photos says will lose something (Cinematic depth data) are listed for the user first.
-    func addPhotosSelectionToQueue() {
+    public func addPhotosSelectionToQueue() {
         guard let destination = photosSaveLocation.destination else { return }
         // The Advanced options are not offered for Photos videos yet, so a hidden custom spec never applies.
         let settings = ConvertJobSettings(preset: preset, saveTo: .nextToOriginal)
@@ -102,12 +103,12 @@ extension AppModel {
     }
 
     /// Context menu: Add to queue, for the selection or the clicked tile.
-    func addPhotosToQueue(clicked item: LibraryItem) {
+    public func addPhotosToQueue(clicked item: LibraryItem) {
         if !selectedPhotoItems.contains(where: { $0.id == item.id }) { photosBrowser.selection = [item.id] }
         requestAddSelectionToQueue()
     }
 
-    func enqueuePhotos(
+    public func enqueuePhotos(
         _ items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset], batch: PhotosBatch
     ) {
         replaceConsent.videosAdded()
@@ -117,9 +118,9 @@ extension AppModel {
                     (assetID: $0, name: item.name, preset: presets[item.id] ?? settings.preset)
                 }
             }, settings: settings, destination: batch.destination, lost: batch.lost)
-        let autoStart = AppSettings.autoStartQueue(defaults)
+        let autoStart = services.settings.autoStartQueue
         if autoStart { isQueuePaused = false }
-        send { [weak self] queue in
+        services.send { [weak self] queue in
             let added = await queue.enqueue(jobs)
             if autoStart { await queue.resume() }
             let alreadyQueued = jobs.count - added.count
@@ -127,6 +128,6 @@ extension AppModel {
                 self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: 0, missing: 0)
             }
         }
-        notifier.requestAuthorizationOnce()
+        host.requestNotificationAuthorization()
     }
 }

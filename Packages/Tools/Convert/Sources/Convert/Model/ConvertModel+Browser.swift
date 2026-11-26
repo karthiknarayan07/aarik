@@ -1,4 +1,4 @@
-import AppKit
+import AppCore
 import AppUI
 import ImageIO
 import LocalLibrary
@@ -6,32 +6,32 @@ import PhotosLibrary
 import UniformTypeIdentifiers
 
 /// What the library grids do beyond selecting: open, Share, Show in Photos, Quick Look for Photos, and the subtitle.
-extension AppModel {
+extension ConvertModel {
     // MARK: Local Files
 
     /// The files Share sends: the visible selection's files that exist.
-    var shareURLs: [URL] { selectedItems.filter(\.isAvailable).compactMap(\.fileURL) }
+    public var shareURLs: [URL] { selectedItems.filter(\.isAvailable).compactMap(\.fileURL) }
 
     /// The files a tile's context menu sends.
-    func shareURLs(clicked item: VideoItem) -> [URL] {
+    public func shareURLs(clicked item: LibraryItem) -> [URL] {
         contextTargets(clicked: item).filter(\.isAvailable).compactMap(\.fileURL)
     }
 
     /// Double-click and Return: opens the videos in their default app, as Finder does. A missing file beeps.
-    func openLocal(_ ids: Set<UUID>) {
+    public func openLocal(_ ids: Set<UUID>) {
         let items = selectedItems.filter { ids.contains($0.id) }
         openLocal(items)
     }
 
     /// The context menu's Open: the selection when the clicked tile is part of it, else that tile.
-    func openLocal(clicked item: VideoItem) {
+    public func openLocal(clicked item: LibraryItem) {
         openLocal(contextTargets(clicked: item))
     }
 
-    private func openLocal(_ items: [VideoItem]) {
+    private func openLocal(_ items: [LibraryItem]) {
         let urls = items.filter(\.isAvailable).compactMap(\.fileURL)
         guard !urls.isEmpty else {
-            NSSound.beep()
+            host.beep()
             return
         }
         guard OpenLimit.allows(urls.count) else {
@@ -40,32 +40,25 @@ extension AppModel {
                 message: "Select up to \(OpenLimit.maximum) videos to open them at once.")
             return
         }
-        for url in urls { NSWorkspace.shared.open(url) }
+        host.open(urls)
     }
 
     // MARK: Videos (Photos)
 
     /// Double-click and Return on a Photos video: shows it in Photos. Nothing in Photos changes.
-    func showInPhotos(_ ids: Set<UUID>) {
+    public func showInPhotos(_ ids: Set<UUID>) {
         guard let item = selectedPhotoItems.first(where: { ids.contains($0.id) }) else { return }
         showInPhotos(item)
     }
 
-    func showInPhotos(_ item: VideoItem) {
-        if let identifier = item.photosIdentifier, let url = PhotosDeepLink.assetURL(localIdentifier: identifier),
-            NSWorkspace.shared.open(url)
-        {
-            return
-        }
-        // The address didn't open: at least bring Photos forward.
-        if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
-            NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
-        }
+    public func showInPhotos(_ item: LibraryItem) {
+        guard let identifier = item.photosIdentifier else { return }
+        host.showInPhotos(identifier)
     }
 
     /// Space on the Videos page: Quick Look of the selected video's poster frame (the thumbnail Photos has on this
     /// Mac). The video itself stays in Photos, so nothing is downloaded or exported.
-    func quickLookPhotoPoster() {
+    public func quickLookPhotoPoster() {
         if quickLookURL != nil {
             quickLookURL = nil
             return
@@ -74,18 +67,18 @@ extension AppModel {
         quickLookPhotoPoster(of: item)
     }
 
-    func quickLookPhotoPoster(of item: VideoItem) {
+    public func quickLookPhotoPoster(of item: LibraryItem) {
         if !selectedPhotoItems.contains(where: { $0.id == item.id }) { photosBrowser.selection = [item.id] }
         let source = thumbnailSource
         let name = item.name
         Task {
             guard let image = await source.image(for: item, maxPixel: 1600) else {
-                NSSound.beep()
+                host.beep()
                 return
             }
             let write = Task.detached(priority: .userInitiated) { PosterFile.write(image, named: name) }
             guard let url = await write.value else {
-                NSSound.beep()
+                host.beep()
                 return
             }
             quickLookURL = url
@@ -95,7 +88,7 @@ extension AppModel {
     // MARK: Subtitle
 
     /// "218 of 1,203 videos · 29.8 GB · 3 selected, 1.2 GB": the window subtitle for a library page.
-    func subtitle(for browser: LibraryBrowser, total: Int, selected: [VideoItem], activity: String?) -> String {
+    public func subtitle(for browser: LibraryBrowser, total: Int, selected: [LibraryItem], activity: String?) -> String {
         let snapshot = browser.snapshot
         return LibrarySubtitle.text(
             shownCount: snapshot.items.count, shownBytes: snapshot.totalBytes, totalCount: total,
@@ -105,8 +98,8 @@ extension AppModel {
 
 /// A poster frame written for Quick Look, in a folder of the app's own under the temporary directory. The previous
 /// poster is replaced; the system clears the folder.
-enum PosterFile {
-    static func write(_ image: CGImage, named name: String) -> URL? {
+public enum PosterFile {
+    public static func write(_ image: CGImage, named name: String) -> URL? {
         // Named after the app's own identifier, so removing it can only remove what this app wrote.
         let id = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
         let folder = FileManager.default.temporaryDirectory

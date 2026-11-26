@@ -1,4 +1,3 @@
-import ConvertUI
 import AppCore
 import AppUI
 import Convert
@@ -6,45 +5,45 @@ import Foundation
 import LocalLibrary
 
 /// Videos that would lose metadata, each with what it loses and whether the user chose to skip it.
-struct LossReview {
-    struct Entry: Identifiable {
-        let id: UUID
-        let name: String
-        let lost: [String]
-        var skip = false
+public struct LossReview {
+    public struct Entry: Identifiable {
+        public let id: UUID
+        public let name: String
+        public let lost: [String]
+        public var skip = false
     }
 
-    var entries: [Entry]
+    public var entries: [Entry]
     /// Every video to add, lossy or not, in grid order.
-    let items: [LibraryItem]
-    let settings: ConvertJobSettings
+    public let items: [LibraryItem]
+    public let settings: ConvertJobSettings
     /// Each video's preset when it was added (the header's, or its own from the inspector).
-    let presets: [UUID: Preset]
+    public let presets: [UUID: Preset]
     /// What each lossy file loses, for the jobs' badges and the runner's check.
-    let losses: [URL: PredictedLoss<UUID>]
+    public let losses: [URL: PredictedLoss<UUID>]
     /// Selected videos found missing just before they would have been added.
-    let missing: Int
+    public let missing: Int
     /// Set for Photos videos: where their copies go and what each is predicted to lose.
-    var photos: PhotosBatch?
+    public var photos: PhotosBatch?
 }
 
 /// What a batch of Photos videos is added with.
-struct PhotosBatch {
-    let destination: PhotosDestination
+public struct PhotosBatch {
+    public let destination: PhotosDestination
     /// Predicted losses by Photos local identifier, for the jobs' badges and the runner's check.
-    let lost: [String: [String]]
+    public let lost: [String: [String]]
 }
 
-extension AppModel {
+extension ConvertModel {
     /// Available selected items; missing files can't be converted.
-    var queueableItems: [LibraryItem] { selectedItems.filter { $0.isAvailable && $0.fileURL != nil } }
+    public var queueableItems: [LibraryItem] { selectedItems.filter { $0.isAvailable && $0.fileURL != nil } }
 
-    var canAddSelectionToQueue: Bool {
+    public var canAddSelectionToQueue: Bool {
         if isPhotosPage { return canAddPhotosToQueue }
         return !queueableItems.isEmpty && saveLocation.destination != nil
     }
 
-    var addToQueueTitle: String {
+    public var addToQueueTitle: String {
         let items = queueableItems
         return QueueButtonTitle.title(
             count: items.count, preset: items.first.map(effectivePreset(for:)) ?? preset,
@@ -52,7 +51,7 @@ extension AppModel {
     }
 
     /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
-    func requestAddSelectionToQueue() {
+    public func requestAddSelectionToQueue() {
         guard canAddSelectionToQueue else { return }
         let replaces = isPhotosPage ? photosSaveLocation.choice == .replace : saveLocation.choice == .replace
         if replaces, replaceConsent.needsAsking {
@@ -65,7 +64,7 @@ extension AppModel {
     }
 
     /// The confirmation holds only once videos are added: cancelling the loss sheet asks again next time.
-    func confirmReplace() {
+    public func confirmReplace() {
         replaceConsent.confirm()
         if isPhotosPage { addPhotosSelectionToQueue() } else { addSelectionToQueue() }
     }
@@ -74,7 +73,7 @@ extension AppModel {
     /// (its own, else the header's), the Advanced spec and the Save to choice. Videos that would lose metadata (in the conversion, or because an
     /// MPEG-4 file has to be saved as QuickTime) are listed for the user first (`lossReview`); the rest go
     /// straight in.
-    func addSelectionToQueue() {
+    public func addSelectionToQueue() {
         guard let destination = saveLocation.destination else {
             replaceConsent.abandon()
             return
@@ -115,7 +114,7 @@ extension AppModel {
     }
 
     /// Convert anyway: adds every reviewed video except the ones marked to skip.
-    func confirmLossReview() {
+    public func confirmLossReview() {
         guard let review = lossReview else { return }
         lossReview = nil
         let skipped = Set(review.entries.filter(\.skip).map(\.id))
@@ -134,7 +133,7 @@ extension AppModel {
     }
 
     /// Cancel on the loss sheet: nothing is added, and a Replace confirmed just before doesn't count.
-    func cancelLossReview() {
+    public func cancelLossReview() {
         guard lossReview != nil else { return }
         lossReview = nil
         replaceConsent.abandon()
@@ -152,9 +151,9 @@ extension AppModel {
                 item.fileURL.map { (url: $0, preset: presets[item.id] ?? settings.preset) }
             }, settings: settings,
             losses: losses)
-        let autoStart = AppSettings.autoStartQueue(defaults)
+        let autoStart = services.settings.autoStartQueue
         if autoStart { isQueuePaused = false }
-        send { [weak self] queue in
+        services.send { [weak self] queue in
             let added = await queue.enqueue(batch.jobs)
             if autoStart { await queue.resume() }
             let alreadyQueued = batch.jobs.count - added.count
@@ -162,10 +161,10 @@ extension AppModel {
                 self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: batch.skipped.count, missing: missing)
             }
         }
-        notifier.requestAuthorizationOnce()
+        host.requestNotificationAuthorization()
     }
 
-    func showAddNotice(alreadyQueued: Int, unreadable: Int, missing: Int) {
+    public func showAddNotice(alreadyQueued: Int, unreadable: Int, missing: Int) {
         guard
             let notice = ActivityText.addNotice(alreadyQueued: alreadyQueued, unreadable: unreadable, missing: missing)
         else { return }

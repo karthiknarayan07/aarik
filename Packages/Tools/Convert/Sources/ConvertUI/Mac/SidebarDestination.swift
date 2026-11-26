@@ -1,8 +1,6 @@
+import AppCore
 import AppUI
 import Convert
-
-/// Where the sidebar points: the video tool's pages.
-typealias SidebarDestination = VideoPage
 
 extension VideoPage {
     /// Placeholder content for the destinations that don't have a screen yet.
@@ -19,7 +17,7 @@ extension VideoPage {
         case .localFiles, .mediaType:
             EmptyState(
                 "No Files Added", systemImage: systemImage,
-                message: "Add videos or folders to see how much space \(AppModel.displayName) could free.")
+                message: "Add videos or folders to see how much space \(AppInfo.displayName) could free.")
         case .tool:
             EmptyState(
                 title, systemImage: systemImage, message: "Choose videos in Local Files, then add them to the queue.")

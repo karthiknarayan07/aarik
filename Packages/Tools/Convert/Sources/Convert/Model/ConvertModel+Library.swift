@@ -1,11 +1,10 @@
-import ConvertUI
 import AppUI
 import Convert
 import Foundation
 import LocalLibrary
 import MediaEngine
 
-extension AppModel {
+extension ConvertModel {
     /// The media-type filter when the sidebar points at one.
     var badgeFilter: MediaBadge? {
         if case .mediaType(let badge) = selection { return badge }
@@ -14,16 +13,16 @@ extension AppModel {
 
     /// Whether the Videos (Photos) page is showing. The queue, Quick Look and Remove only ever act on Local Files,
     /// so `selectedItems` is empty there.
-    var isPhotosPage: Bool { selection == .photosVideos }
+    public var isPhotosPage: Bool { selection == .photosVideos }
 
     /// The inspector belongs to the library grids; the Activity lists don't show it.
-    var inspectorAvailable: Bool { selection?.showsLibrary == true || isPhotosPage }
+    public var inspectorAvailable: Bool { selection?.showsLibrary == true || isPhotosPage }
 
     /// The grid's sections, built once per change of the library or the query (never per selection change).
-    var sections: [MediaSection<LibraryItem>] { Self.sections(of: browser) }
+    public var sections: [MediaSection<LibraryItem>] { Self.sections(of: browser) }
 
     /// The Videos page's sections.
-    var photoSections: [MediaSection<LibraryItem>] { Self.sections(of: photosBrowser) }
+    public var photoSections: [MediaSection<LibraryItem>] { Self.sections(of: photosBrowser) }
 
     private static func sections(of browser: LibraryBrowser) -> [MediaSection<LibraryItem>] {
         let grouping = browser.grouping
@@ -39,7 +38,7 @@ extension AppModel {
     /// What converting the shown, available items would free, each with its own preset (the header's unless the
     /// inspector chose another), or all with the Advanced spec. Kept As Is items count as zero. Cached until the
     /// items, the query, the presets or the spec change.
-    var couldFreeShown: Int64 {
+    public var couldFreeShown: Int64 {
         let key = SavingsKey(preset: preset, custom: advanced.spec, overrides: presetOverrides)
         return browser.cached(key) { snapshot in
             key.overrides.couldFreeBytes(
@@ -50,19 +49,19 @@ extension AppModel {
 
     /// Visible selected Local Files items, in grid order; a search or filter that hides an item also deselects it
     /// here. Empty on the Videos page, so nothing there reaches the file-based queue, Quick Look or Remove.
-    var selectedItems: [LibraryItem] { isPhotosPage ? [] : browser.selectedItems }
+    public var selectedItems: [LibraryItem] { isPhotosPage ? [] : browser.selectedItems }
 
     /// Visible selected Photos videos, in grid order.
-    var selectedPhotoItems: [LibraryItem] { photosBrowser.selectedItems }
+    public var selectedPhotoItems: [LibraryItem] { photosBrowser.selectedItems }
 
     /// The preset `item` converts with: its own from the inspector, else the header's.
-    func effectivePreset(for item: LibraryItem) -> Preset {
+    public func effectivePreset(for item: LibraryItem) -> Preset {
         presetOverrides.preset(for: item.id, default: preset)
     }
 
     /// The inspector's preset: the one every selected video converts with, nil when they differ ("Mixed").
     /// Choosing one gives it to every selected video, leaving the header's preset alone.
-    var selectionPreset: Preset? {
+    public var selectionPreset: Preset? {
         get { presetOverrides.selectionPreset(for: selectedItems.map(\.id), default: preset) }
         set {
             guard let newValue else { return }
@@ -70,44 +69,44 @@ extension AppModel {
         }
     }
 
-    func inspectorSource(for item: LibraryItem) -> InspectorSource {
+    public func inspectorSource(for item: LibraryItem) -> InspectorSource {
         InspectorSource(
             byteSize: item.byteSize, inventory: item.inventory, isAvailable: item.isAvailable,
             preset: effectivePreset(for: item))
     }
 
     /// Space toggles Quick Look for the selection.
-    func toggleQuickLook() {
+    public func toggleQuickLook() {
         quickLookURL = quickLookURL == nil ? selectedItems.first?.fileURL : nil
     }
 
-    var quickLookURLs: [URL] { selectedItems.compactMap(\.fileURL) }
+    public var quickLookURLs: [URL] { selectedItems.compactMap(\.fileURL) }
 }
 
 private struct SavingsKey: Hashable {
-    let preset: Preset
-    let custom: DownscaleSpec?
-    let overrides: PresetOverrides<UUID>
+    public let preset: Preset
+    public let custom: DownscaleSpec?
+    public let overrides: PresetOverrides<UUID>
 }
 
 extension LibraryItem {
-    var savingsSource: SavingsCalculator.Source { (byteSize: byteSize, inventory: inventory) }
+    public var savingsSource: SavingsCalculator.Source { (byteSize: byteSize, inventory: inventory) }
 }
 
-extension AppModel {
+extension ConvertModel {
     /// Whether Remove from library has anything to remove: visible selected items on a library screen.
-    var canRemoveSelectionFromLibrary: Bool {
+    public var canRemoveSelectionFromLibrary: Bool {
         selection?.showsLibrary == true && !selectedItems.isEmpty
     }
 
     /// Removes the visible selected items from the library. The files themselves are never touched.
-    func removeSelectionFromLibrary() {
+    public func removeSelectionFromLibrary() {
         guard canRemoveSelectionFromLibrary else { return }
         removeFromLibrary(Set(selectedItems.map(\.id)))
     }
 
     /// From a tile's context menu: the visible selection when the tile is part of it, else just that tile.
-    func removeFromLibrary(clicked item: LibraryItem) {
+    public func removeFromLibrary(clicked item: LibraryItem) {
         removeFromLibrary(contextTargetIDs(clicked: item))
     }
 
@@ -117,7 +116,7 @@ extension AppModel {
     }
 
     /// The items a tile's context menu acts on, in grid order.
-    func contextTargets(clicked item: LibraryItem) -> [LibraryItem] {
+    public func contextTargets(clicked item: LibraryItem) -> [LibraryItem] {
         let ids = contextTargetIDs(clicked: item)
         return ids == [item.id] ? [item] : selectedItems.filter { ids.contains($0.id) }
     }
@@ -129,23 +128,23 @@ extension AppModel {
     }
 
     /// Context menu: Add to queue, for the selection or the clicked tile.
-    func addToQueue(clicked item: LibraryItem) {
+    public func addToQueue(clicked item: LibraryItem) {
         selectContextTargets(clicked: item)
         requestAddSelectionToQueue()
     }
 
-    func canAddToQueue(clicked item: LibraryItem) -> Bool {
+    public func canAddToQueue(clicked item: LibraryItem) -> Bool {
         saveLocation.destination != nil && contextTargets(clicked: item).contains(where: \.isAvailable)
     }
 
     /// Context menu: Quick Look, for the selection or the clicked tile (Space does the same for the selection).
-    func quickLook(clicked item: LibraryItem) {
+    public func quickLook(clicked item: LibraryItem) {
         selectContextTargets(clicked: item)
         quickLookURL = item.fileURL
     }
 
     /// `undoable`: Edit → Undo can put the items back (not for the removal an Undo's Redo performs itself).
-    func removeFromLibrary(_ ids: Set<UUID>, undoable: Bool = true) {
+    public func removeFromLibrary(_ ids: Set<UUID>, undoable: Bool = true) {
         if undoable { registerUndo(of: LibraryRemoval(items: library.items.filter { ids.contains($0.id) })) }
         library.remove(ids)
         presetOverrides.remove(ids)
