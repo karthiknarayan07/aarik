@@ -12,6 +12,7 @@
     /// is available) or Biggest Groups, Biggest Savings, and Saved So Far.
     struct IOSOverviewView: View {
         @Bindable var model: ConvertModel
+        let stats: any SavingsStatsSource
         @State private var summary: OverviewSummary?
 
         private struct Inputs: Hashable {
@@ -50,19 +51,36 @@
                     } else {
                         ProgressView()
                     }
-                } else if let summary {
+                } else {
                     List {
-                        IOSLibraryOverviewSections(model: model, summary: summary)
-                        IOSSmartPicksSection(model: model)
-                        IOSBiggestSavingsSection(summary: summary, reveal: model.reveal)
-                        IOSSavedSoFarSection(savedBytes: summary.savedBytes, conversions: model.activity.completed)
+                        Section {
+                            IOSSavingsHero(snapshot: stats.snapshot, activity: model.activity)
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        Section {
+                            IOSInsightCards(
+                                snapshot: stats.snapshot, history: stats.history, activity: model.activity,
+                                open: { model.selection = $0.videoPage })
+                        } header: {
+                            Text("Pinned")
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        Section("Trends") {
+                            IOSTrendCharts(snapshot: stats.snapshot, history: stats.history)
+                        }
+                        if let summary {
+                            IOSSmartPicksSection(model: model)
+                            IOSLibraryOverviewSections(model: model, summary: summary)
+                            IOSBiggestSavingsSection(summary: summary, reveal: model.reveal)
+                        }
                     }
                     .listStyle(.insetGrouped)
-                } else {
-                    ProgressView()
                 }
             }
-            .navigationTitle(VideoPage.overview.title)
+            .navigationTitle(IOSPage.overview.title)
             .task { await model.photos.start() }
             .task(id: inputs) {
                 let photos = model.photos.items
@@ -74,10 +92,26 @@
                     custom: model.advanced.spec, completed: completed, shrunk: shrunk)
                 guard !Task.isCancelled else { return }
                 summary = analysis.summary
+                stats.store(
+                    SavingsStatsSnapshot(
+                        photos: analysis.summary.videos, files: analysis.summary.localFiles,
+                        savedBytes: analysis.summary.savedBytes, conversions: completed.count,
+                        groups: analysis.buckets.prefix(6).map {
+                            SavingsStatsSnapshot.Group(id: $0.id, title: $0.title, couldFree: $0.couldFree)
+                        }),
+                    history: Self.history(of: model.completedJobs.map { ($0.job.createdAt, $0.outcome.savedBytes) }))
                 model.assistant.smartPicks.update(
                     buckets: analysis.buckets, undatedCount: analysis.undated, key: inputs)
             }
             .task(id: picksTrigger) { await model.assistant.smartPicks.generateIfNeeded() }
+        }
+
+        /// Bytes freed per day, the last 14 days that had a conversion.
+        private static func history(of finished: [(Date, Int64)]) -> [SavingsDay] {
+            let calendar = Calendar.current
+            let perDay = Dictionary(grouping: finished) { calendar.startOfDay(for: $0.0) }
+                .mapValues { $0.reduce(Int64(0)) { $0 + $1.1 } }
+            return perDay.keys.sorted().suffix(14).map { SavingsDay(date: $0, savedBytes: perDay[$0] ?? 0) }
         }
 
         @concurrent private static func analyze(

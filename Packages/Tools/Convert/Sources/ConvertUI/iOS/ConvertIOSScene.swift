@@ -5,14 +5,17 @@
     import SwiftUI
     import UniformTypeIdentifiers
 
-    /// The video tool as the iOS shell hosts it: adaptive `NavigationSplitView` across iPhone, iPad and Duo,
-    /// adaptive inspector, toolbar, sheets and input hand-off (ADR 0006).
+    /// The video tool as the iOS shell hosts it (ADR 0006): the tool owns its pages (Overview, Photos, Files, Queue,
+    /// Completed) and the detail of each. The shell lists the tools and hosts the columns, so the same scene serves
+    /// a stack on iPhone and a folded Duo and three columns on iPad and an open Duo.
     @MainActor
     @Observable
     public final class ConvertIOSScene: IOSToolScene {
         private let model: ConvertModel
-        public var columnVisibility = NavigationSplitViewVisibility.automatic
+        private let stats: any SavingsStatsSource = InMemorySavingsStats()
         public var isSettingsPresented = false
+        /// Whether a page was tapped in the page list; only a collapsed stack needs it (see `IOSPagesView`).
+        var hasOpenedPage = false
         /// On compact widths (iPhone, folded Duo) the inspector opens on demand as a sheet rather than popping up empty.
         public var isCompactInspectorPresented = false
 
@@ -22,27 +25,31 @@
 
         public var tool: any Tool { model.tool }
 
-        public var selection: VideoPage? {
-            get { model.selection }
-            set { model.selection = newValue }
-        }
-
-        public func hasInspector(for destination: VideoPage?) -> Bool {
-            destination?.showsLibrary == true || destination == .photosVideos
-        }
-
-        @ViewBuilder public func root() -> some View {
-            let model = model
-            ForegroundObserver(model: model) {
-                IOSRootView(scene: self, model: model)
+        public var selection: IOSPage? {
+            get { IOSPage(model.selection) }
+            set {
+                // A pop in a collapsed stack clears the list's selection; the page itself stays where it was.
+                guard let newValue else { return }
+                if IOSPage(model.selection) != newValue { model.selection = newValue.videoPage }
             }
         }
 
-        @ViewBuilder public func detail(for destination: VideoPage?) -> some View {
-            IOSVideoDetail(model: model, destination: destination)
+        public func hasInspector(for destination: IOSPage?) -> Bool {
+            destination == .files || destination == .photos
         }
 
-        @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {
+        @ViewBuilder public func pages() -> some View {
+            let model = model
+            ForegroundObserver(model: model) {
+                IOSPagesView(scene: self, model: model)
+            }
+        }
+
+        @ViewBuilder public func detail(for destination: IOSPage?) -> some View {
+            IOSVideoDetail(scene: self, model: model, stats: stats, destination: destination)
+        }
+
+        @ToolbarContentBuilder public func toolbar(for destination: IOSPage?) -> some ToolbarContent {
             let model = model
             if hasInspector(for: destination) {
                 ToolbarItem(placement: .primaryAction) {
@@ -53,6 +60,7 @@
                     }
                     .buttonStyle(.glassProminent)
                     .disabled(!model.canAddSelectionToQueue)
+                    .accessibilityIdentifier("addToQueue")
                     .accessibilityLabel(model.toolbarAddToQueueTitle)
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -81,19 +89,22 @@
         }
     }
 
-    private struct IOSRootView: View {
+    /// The detail column's content for a page, with the inspector, which is a sheet on compact widths.
+    private struct IOSVideoDetail: View {
         @Bindable var scene: ConvertIOSScene
         @Bindable var model: ConvertModel
+        let stats: any SavingsStatsSource
+        let destination: IOSPage?
         @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
         private var isCompact: Bool { horizontalSizeClass == .compact }
 
         private var inspectorShown: Binding<Bool> {
             Binding {
-                guard scene.hasInspector(for: model.selection) else { return false }
+                guard scene.hasInspector(for: destination) else { return false }
                 return isCompact ? scene.isCompactInspectorPresented : model.isInspectorPresented
             } set: { isPresented in
-                guard scene.hasInspector(for: model.selection) else { return }
+                guard scene.hasInspector(for: destination) else { return }
                 if isCompact {
                     scene.isCompactInspectorPresented = isPresented
                 } else {
@@ -102,58 +113,48 @@
             }
         }
 
-        var body: some View {
-            NavigationSplitView(columnVisibility: $scene.columnVisibility) {
-                IOSSidebarView(model: model, isSettingsPresented: $scene.isSettingsPresented)
-            } detail: {
-                scene.detail(for: model.selection)
-                    .inspector(isPresented: inspectorShown) {
-                        IOSLibraryInspector(
-                            model: model,
-                            isCompact: isCompact,
-                            dismiss: {
-                                if isCompact {
-                                    scene.isCompactInspectorPresented = false
-                                } else {
-                                    model.isInspectorPresented = false
-                                }
-                            }
-                        )
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
+        private var inspector: some View {
+            IOSLibraryInspector(
+                model: model, isCompact: isCompact,
+                dismiss: {
+                    if isCompact {
+                        scene.isCompactInspectorPresented = false
+                    } else {
+                        model.isInspectorPresented = false
                     }
-                    .toolbar { scene.toolbar(for: model.selection) }
-            }
-            .modifier(scene.sheets)
+                })
         }
-    }
-
-    private struct IOSVideoDetail: View {
-        @Bindable var model: ConvertModel
-        let destination: VideoPage?
 
         var body: some View {
-            Group {
-                switch destination {
-                case .localFiles, .mediaType: IOSLocalFilesView(model: model)
-                case .photosVideos: IOSPhotosView(model: model)
-                case .queue: IOSQueueView(model: model)
-                case .completed: IOSCompletedView(model: model)
-                case .keptAsIs: IOSKeptAsIsView(model: model)
-                case .failed: IOSFailedView(model: model)
-                case .overview: IOSOverviewView(model: model)
-                case .some(let page):
-                    page.emptyState
-                        .navigationTitle(page.title)
-                case nil:
-                    EmptyState(
-                        "Nothing Selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar."
-                    )
-                    .navigationTitle(AppInfo.displayName)
+            let content =
+                page
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaBar(edge: .bottom) {
+                    IOSPendingDeletionBar(model: model)
+                }
+            // A sheet with detents on compact widths, a trailing column on regular ones.
+            if isCompact {
+                content.sheet(isPresented: inspectorShown) {
+                    inspector.presentationDetents([.medium, .large])
+                }
+            } else {
+                content.inspector(isPresented: inspectorShown) {
+                    inspector.inspectorColumnWidth(min: 280, ideal: 320, max: 400)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaBar(edge: .bottom) {
-                IOSPendingDeletionBar(model: model)
+        }
+
+        @ViewBuilder private var page: some View {
+            switch destination {
+            case .overview: IOSOverviewView(model: model, stats: stats)
+            case .photos: IOSPhotosView(model: model)
+            case .files: IOSLocalFilesView(model: model)
+            case .queue: IOSQueueView(model: model)
+            case .completed: IOSCompletedView(model: model)
+            case nil:
+                ContentUnavailableView(
+                    "Choose a Page", systemImage: "sidebar.left",
+                    description: Text("Pick Overview, Photos, Files, Queue or Completed."))
             }
         }
     }
@@ -181,6 +182,7 @@
                     isCompact ? "Options…" : "Inspector",
                     systemImage: isCompact ? "slider.horizontal.3" : "sidebar.trailing")
             }
+            .accessibilityIdentifier("inspectorToggle")
             .accessibilityLabel(isPresented ? "Hide Inspector" : "Show Inspector")
         }
     }
@@ -241,6 +243,7 @@
                 }
                 .sheet(isPresented: $scene.isSettingsPresented) {
                     IOSSettingsView(model: model)
+                        .presentationDetents([.medium, .large])
                 }
         }
     }

@@ -15,8 +15,15 @@
             let jobs = model.queuedJobs
             Group {
                 if jobs.isEmpty {
-                    VideoPage.queue.emptyState
-                        .action("Go to Local Files") { model.selection = .localFiles }
+                    ContentUnavailableView {
+                        Label("Queue Is Empty", systemImage: "list.bullet.rectangle")
+                    } description: {
+                        Text("Videos you add wait here until they convert.")
+                    } actions: {
+                        Button("Browse Photos") { model.selection = .photosVideos }
+                            .buttonStyle(.borderedProminent)
+                        Button("Browse Files") { model.selection = .localFiles }
+                    }
                 } else {
                     List {
                         ForEach(jobs) { job in
@@ -42,7 +49,18 @@
                     kind: .queue, count: jobs.count, savedBytes: 0, pauseText: model.queuePause.statusText)
             )
             .toolbar {
-                ToolbarItem(placement: .primaryAction) { PauseResumeButton(model: model) }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        model.toggleQueuePaused()
+                    } label: {
+                        Label(
+                            model.isQueuePaused ? "Resume" : "Pause",
+                            systemImage: model.isQueuePaused ? "play.fill" : "pause.fill")
+                    }
+                    .contentTransition(.symbolEffect(.replace))
+                    .sensoryFeedback(.impact, trigger: model.isQueuePaused)
+                    .accessibilityIdentifier("pauseResume")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button("Cancel All…", systemImage: "xmark.circle") { isConfirmingCancelAll = true }
                         .disabled(jobs.isEmpty)
@@ -109,37 +127,106 @@
         }
     }
 
-    /// Finished conversions with space saved, verification report badge and Apple Intelligence "Why?".
+    /// Everything that has finished, in one list like Fitness's history: what failed first (it needs a decision), then
+    /// the finished conversions with the space they saved, then the videos left as they were.
     struct IOSCompletedView: View {
         let model: ConvertModel
 
         var body: some View {
-            let rows = model.completedJobs
+            let done = model.completedJobs
+            let failed = model.failedJobs
+            let kept = model.keptAsIsJobs
             Group {
-                if rows.isEmpty {
-                    VideoPage.completed.emptyState
+                if done.isEmpty && failed.isEmpty && kept.isEmpty {
+                    ContentUnavailableView {
+                        Label("Nothing Finished Yet", systemImage: "checkmark.circle")
+                    } description: {
+                        Text("Converted videos, and videos kept as they were, show up here with what they saved.")
+                    }
                 } else {
                     List {
-                        ForEach(rows, id: \.job.id) { row in
-                            IOSCompletedRow(
-                                job: row.job, outcome: row.outcome, thumbnails: model.thumbnailSource.cache,
-                                assistant: model.assistant,
-                                reveal: { model.host.reveal([row.outcome.output]) }
-                            )
-                            .swipeActions(edge: .trailing) {
-                                Button("Remove", systemImage: "minus.circle", role: .destructive) {
-                                    model.remove(row.job)
+                        if !failed.isEmpty {
+                            Section {
+                                ForEach(failed, id: \.job.id) { row in
+                                    IOSReasonRow(
+                                        job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
+                                        assistant: model.assistant
+                                    ) {
+                                        Button("Retry") { model.retry(row.job) }
+                                            .buttonStyle(.bordered)
+                                            .accessibilityLabel("Retry \(row.job.displayName)")
+                                    }
+                                    .swipeActions(edge: .leading) {
+                                        Button("Retry", systemImage: "arrow.clockwise") { model.retry(row.job) }
+                                            .tint(.blue)
+                                    }
+                                    .swipeActions(edge: .trailing) {
+                                        Button("Remove", systemImage: "minus.circle", role: .destructive) {
+                                            model.remove(row.job)
+                                        }
+                                    }
                                 }
+                            } header: {
+                                Label("Failed", systemImage: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                        if !done.isEmpty {
+                            Section {
+                                ForEach(done, id: \.job.id) { row in
+                                    IOSCompletedRow(
+                                        job: row.job, outcome: row.outcome, thumbnails: model.thumbnailSource.cache,
+                                        assistant: model.assistant,
+                                        reveal: { model.host.reveal([row.outcome.output]) }
+                                    )
+                                    .swipeActions(edge: .trailing) {
+                                        Button("Remove", systemImage: "minus.circle", role: .destructive) {
+                                            model.remove(row.job)
+                                        }
+                                    }
+                                }
+                            } header: {
+                                Label("Completed", systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            } footer: {
+                                Text(
+                                    JobListActions.subtitle(
+                                        kind: .completed, count: done.count, savedBytes: model.activity.savedBytes,
+                                        pauseText: nil))
+                            }
+                        }
+                        if !kept.isEmpty {
+                            Section {
+                                ForEach(kept, id: \.job.id) { row in
+                                    IOSReasonRow(
+                                        job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
+                                        assistant: model.assistant
+                                    )
+                                    .swipeActions(edge: .trailing) {
+                                        Button("Remove", systemImage: "minus.circle", role: .destructive) {
+                                            model.remove(row.job)
+                                        }
+                                    }
+                                }
+                            } header: {
+                                Label("Kept as Is", systemImage: "equal.circle.fill")
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
                     .listStyle(.insetGrouped)
                 }
             }
-            .navigationTitle("Completed")
-            .navigationSubtitle(
-                JobListActions.subtitle(
-                    kind: .completed, count: rows.count, savedBytes: model.activity.savedBytes, pauseText: nil))
+            .navigationTitle(IOSPage.completed.title)
+            .toolbar {
+                if !failed.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Retry All", systemImage: "arrow.clockwise") { model.retryAllFailed() }
+                    }
+                }
+            }
+            .sensoryFeedback(.success, trigger: done.count)
+            .sensoryFeedback(.error, trigger: failed.count)
         }
     }
 
@@ -189,81 +276,6 @@
                     ShareLink(items: [outcome.output]) {
                         Label("Share…", systemImage: "square.and.arrow.up")
                     }
-                }
-            }
-        }
-    }
-
-    /// Videos left untouched, with the reason and Apple Intelligence "Why?".
-    struct IOSKeptAsIsView: View {
-        let model: ConvertModel
-
-        var body: some View {
-            let rows = model.keptAsIsJobs
-            Group {
-                if rows.isEmpty {
-                    VideoPage.keptAsIs.emptyState
-                } else {
-                    List {
-                        ForEach(rows, id: \.job.id) { row in
-                            IOSReasonRow(
-                                job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
-                                assistant: model.assistant
-                            )
-                            .swipeActions(edge: .trailing) {
-                                Button("Remove", systemImage: "minus.circle", role: .destructive) {
-                                    model.remove(row.job)
-                                }
-                            }
-                        }
-                    }
-                    .listStyle(.insetGrouped)
-                }
-            }
-            .navigationTitle("Kept as Is")
-            .navigationSubtitle(
-                JobListActions.subtitle(kind: .keptAsIs, count: rows.count, savedBytes: 0, pauseText: nil))
-        }
-    }
-
-    /// Conversions that failed, with per-item Retry, Retry All and Apple Intelligence "Why?".
-    struct IOSFailedView: View {
-        let model: ConvertModel
-
-        var body: some View {
-            let rows = model.failedJobs
-            Group {
-                if rows.isEmpty {
-                    VideoPage.failed.emptyState
-                } else {
-                    List {
-                        ForEach(rows, id: \.job.id) { row in
-                            IOSReasonRow(
-                                job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
-                                assistant: model.assistant
-                            ) {
-                                Button("Retry") { model.retry(row.job) }
-                                    .buttonStyle(.bordered)
-                                    .accessibilityLabel("Retry \(row.job.displayName)")
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button("Remove", systemImage: "minus.circle", role: .destructive) {
-                                    model.remove(row.job)
-                                }
-                            }
-                        }
-                    }
-                    .listStyle(.insetGrouped)
-                }
-            }
-            .navigationTitle("Failed")
-            .navigationSubtitle(
-                JobListActions.subtitle(kind: .failed, count: rows.count, savedBytes: 0, pauseText: nil)
-            )
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Retry All", systemImage: "arrow.clockwise") { model.retryAllFailed() }
-                        .disabled(rows.isEmpty)
                 }
             }
         }

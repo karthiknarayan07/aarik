@@ -64,6 +64,8 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     let name: (Item) -> String
     let dragFile: ((Item) -> URL?)?
     let actions: MediaGridActions<Item.ID>
+    /// Touch only: a tap opens the video instead of toggling it, until the caller turns selecting on.
+    let opensOnTap: Bool
     let tile: (Item, MediaTileState) -> Tile
 
     @State private var state = GridSelection<Item.ID>()
@@ -85,7 +87,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     ///   - dragFile: the file a tile drags out, or nil when it has none; the grid doesn't drag out when this is nil.
     public init(
         sections: [MediaSection<Item>], selection: Binding<Set<Item.ID>>, name: @escaping (Item) -> String,
-        dragFile: ((Item) -> URL?)? = nil, actions: MediaGridActions<Item.ID>,
+        dragFile: ((Item) -> URL?)? = nil, actions: MediaGridActions<Item.ID>, opensOnTap: Bool = false,
         @ViewBuilder tile: @escaping (Item, MediaTileState) -> Tile
     ) {
         self.sections = sections
@@ -93,6 +95,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
         self.name = name
         self.dragFile = dragFile
         self.actions = actions
+        self.opensOnTap = opensOnTap
         self.tile = tile
     }
 
@@ -198,6 +201,12 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
             let event = NSApp.currentEvent
             click(id, count: event?.clickCount ?? 1, modifiers: Self.clickModifiers(event?.modifierFlags ?? []))
         #else
+            if opensOnTap {
+                state.select(id)
+                selection = state.selected
+                actions.open(selection)
+                return
+            }
             // Touch has no modifier keys, so tapping a tile toggles it in the selection.
             click(id, count: 1, modifiers: .toggle)
         #endif
