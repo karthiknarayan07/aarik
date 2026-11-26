@@ -36,6 +36,10 @@ public final class AssistantChat {
         - Answer only from what the tools returned. If a tool found nothing, say so.
         - When a tool returns a list, name the items in your answer (name and size), up to five, then say how many \
         more there are. Never answer with only an introduction.
+        - Use only the numbers and names in the tool result. Never add counts, sizes or thresholds of your own.
+        - If a tool says no videos were found, say so plainly. Don't list anything.
+        - If a tool says the person cancelled, acknowledge it in one short sentence and stop. Don't repeat the \
+        earlier answer or offer the action again.
         - Be brief and plain: a short sentence, then the list. No headings.
         - To start conversions, pause or resume the queue, or move originals, call the matching tool. The person is \
         asked to confirm first, so never say something was done until the tool's result says so. If the person \
@@ -44,13 +48,17 @@ public final class AssistantChat {
         Examples:
         Person: Find my biggest videos.
         You call search_library, then answer: "Your biggest videos are Beach Day (4.2 GB), Birthday (3.1 GB) and \
-        Road Trip (2.8 GB). 12 more are over 500 MB."
+        Road Trip (2.8 GB)." Mention other videos only if the tool says some aren't listed, using its number.
         Person: How much space could I free?
         You call estimate_savings, then answer: "Converting could free about 38 GB. The biggest group is B1: 14 \
         videos from 2024, about 21 GB."
         Person: What is in the queue?
         You call list_queue, then answer with how many are waiting and the first few names.
         """
+
+    /// What the model hears when the person cancels a card.
+    static let cancelledNote =
+        "The user cancelled; nothing changed. Acknowledge in one short sentence. Don't repeat the earlier answer."
 
     /// The short prompt for the one retry after a refusal: no history, no examples, only the job.
     static let simpleInstructions = """
@@ -239,7 +247,7 @@ public final class AssistantChat {
         let cardID = append(
             .confirmation(ChatConfirmation(toolName: name, arguments: arguments, card: card)), in: id)
         let approved = await withCheckedContinuation { decisions[cardID] = $0 }
-        guard approved else { return "The person chose not to go ahead. Nothing was changed." }
+        guard approved else { return Self.cancelledNote }
         do {
             let output = try await tool.run(arguments)
             updateConfirmation(cardID, in: id) { $0.result = output.text }

@@ -98,7 +98,7 @@ struct AssistantChatTests {
         #expect(tool.runCount == 0)
         guard case .confirmation(let card) = chat.items[1].content else { return }
         #expect(card.state == .cancelled)
-        #expect(client.toolResults == ["The person chose not to go ahead. Nothing was changed."])
+        #expect(client.toolResults == [AssistantChat.cancelledNote])
     }
 
     @Test func stopCancelsAWaitingConfirmation() async {
