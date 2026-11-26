@@ -33,40 +33,40 @@ struct IOSOnboardingView: View {
         let app = AppInfo.displayName
         return [
             Page(
-                title: "Your Videos Stay on \(device)", systemImage: "lock.shield.fill", tint: .blue,
+                title: "Your Library Stays on \(device)", systemImage: "lock.shield.fill", tint: .blue,
                 points: [
                     Point(
                         symbol: "iphone", heading: "Everything Happens Here",
-                        text: "\(app) converts on \(device). Nothing is uploaded."),
+                        text: "\(app) does all its work on \(device). Nothing is uploaded."),
                     Point(
                         symbol: "eye.slash.fill", heading: "No Tracking",
-                        text: "There are no accounts, analytics or ads. Your videos are never shared."),
+                        text: "There are no accounts, analytics or ads. Your photos and videos are never shared."),
                     Point(
                         symbol: "checkmark.seal.fill", heading: "Originals Stay Safe",
-                        text: "A smaller copy is made and checked first. You choose what happens to the original."),
+                        text: "Every new copy is checked before anything changes. You choose what happens to the original."),
                 ], button: "Continue"),
             Page(
                 title: "Photos Access", systemImage: "photo.on.rectangle.angled.fill", tint: .pink,
                 points: [
                     Point(
-                        symbol: "list.bullet.rectangle.fill", heading: "Find the Big Ones",
-                        text: "\(app) lists your videos and their sizes without downloading them."),
+                        symbol: "list.bullet.rectangle.fill", heading: "See What Takes Space",
+                        text: "\(app) shows what is in your library and how much space it uses, without downloading anything."),
                     Point(
                         symbol: "hand.raised.fill", heading: "You Stay in Control",
-                        text: "Nothing in Photos changes until you convert a video. You can share only some videos."),
+                        text: "Nothing in Photos changes until you say so. You can share only some items."),
                 ], button: "Allow Access to Photos…"),
             Page(
                 title: "Easy on Your Battery", systemImage: "battery.100percent.bolt", tint: .green,
                 points: [
                     Point(
-                        symbol: "battery.25percent", heading: "Pauses at 20 Percent",
-                        text: "Conversion waits when the battery is low and carries on once it charges."),
+                        symbol: "battery.25percent", heading: "Pauses When Battery Is Low",
+                        text: "Work waits when the battery is low and carries on once it charges."),
                     Point(
                         symbol: "thermometer.high", heading: "Cools Down First",
-                        text: "When \(device) gets hot, conversion pauses until it cools."),
+                        text: "When \(device) gets hot, work pauses until it cools."),
                     Point(
                         symbol: "bolt.fill", heading: "Runs Best Plugged In",
-                        text: "Long videos convert fastest while charging. You can pause any time."),
+                        text: "Big jobs finish fastest while charging. You can pause any time."),
                 ], button: "Get Started"),
         ]
     }

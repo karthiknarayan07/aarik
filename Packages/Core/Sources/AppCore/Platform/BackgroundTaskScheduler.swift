@@ -128,9 +128,9 @@ public final class ContinuedProcessingCoordinator {
         pushedSubtitle = nil
         pushedCompletedUnits = nil
 
-        let registered = scheduler.register(identifier: identifier) { [weak self] task in
+        let registered = scheduler.register(identifier: identifier) { @Sendable [weak self] task in
             // Attach the expiration handler synchronously before returning so the system never sees a task without one.
-            task.setExpirationHandler { [weak self] in
+            task.setExpirationHandler { @Sendable [weak self] in
                 Task { @MainActor in
                     self?.handleExpiration(for: identifier, task: task)
                 }

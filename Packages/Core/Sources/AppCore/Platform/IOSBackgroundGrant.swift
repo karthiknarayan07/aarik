@@ -45,7 +45,7 @@
             handler: @escaping @Sendable (any ContinuedProcessingTask) -> Void
         ) -> Bool {
             guard registeredIdentifiers.insert(identifier).inserted else { return true }
-            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
+            let ok = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { @Sendable task in
                 guard let continued = task as? BGContinuedProcessingTask else {
                     task.setTaskCompleted(success: false)
                     return
