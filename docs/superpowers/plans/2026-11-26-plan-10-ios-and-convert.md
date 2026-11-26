@@ -75,7 +75,7 @@
   - `PhotosLibrary`
   - `Assistant` (the generic `LanguageModelClient`, availability and `Deadline` only)
   - `AppUI` (the old `AppUI`)
-  - `AppState` (the tool-agnostic part of `App/Sources/AppModel*`)
+  - (AppModel stays in the Mac shell until Task 3b)
   - `MediaTestSupport`
   - `devtool`
 - `Packages/Tools/Convert/Package.swift` contains:
@@ -91,7 +91,24 @@
 
 ---
 
-## Phase 3: in parallel after Task 3
+### Task 3b: Tool core, AppServices, ConvertModel and Mac scene (ADR 0006)
+
+This task runs after Task 3 and before Tasks 4 to 12.
+
+- [ ] Add these to Core:
+  - `Tool`, `ToolPlatforms`, `JobKind`, `JobRunner` and `MediaInput`
+  - `AppServices`, with the queue, pressure, settings, pending deletions, staging, the library service and the Assistant client
+  - `MacToolScene` and `IOSToolScene`, each behind `#if os`
+- [ ] Make the queue a shared queue that persists `toolID` and a payload. Test it as `unknownToolJobsAreKeptNotDropped` and `jobsRouteToTheirToolsRunner`.
+- [ ] Split `AppModel`:
+  - tool-agnostic parts go to `AppServices`
+  - video logic goes to `ConvertModel(services:)` in `Convert`
+  - `VideoShrinkerModule` becomes `ConvertMacScene: MacToolScene` in `ConvertUI`
+  - the Mac shell becomes the composition root
+- [ ] Remove `ToolModule`, or keep it as a typealias for a single release. Update ADR 0004 so it points to ADR 0006.
+- [ ] Mac behaviour stays unchanged, and the Mac UI checks in the earlier reports still hold. The test count must not fall.
+
+## Phase 3: in parallel after Task 3b
 
 ### Task 4: make Core and Convert iOS-ready
 
