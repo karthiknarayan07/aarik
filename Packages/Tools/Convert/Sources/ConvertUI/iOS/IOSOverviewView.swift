@@ -12,8 +12,8 @@
     /// is available) or Biggest Groups, Biggest Savings, and Saved So Far.
     struct IOSOverviewView: View {
         @Bindable var model: ConvertModel
-        let stats: any SavingsStatsSource
         @State private var summary: OverviewSummary?
+        @State private var refreshTick = 0
 
         private struct Inputs: Hashable {
             let photosRevision: Int
@@ -54,13 +54,13 @@
                 } else {
                     List {
                         Section {
-                            IOSSavingsHero(snapshot: stats.snapshot, activity: model.activity)
+                            IOSSavingsHero(snapshot: charts, activity: model.activity)
                         }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         Section {
                             IOSInsightCards(
-                                snapshot: stats.snapshot, history: stats.history, activity: model.activity,
+                                snapshot: charts, activity: model.activity,
                                 open: { model.selection = $0.videoPage })
                         } header: {
                             Text("Pinned")
@@ -69,7 +69,7 @@
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.hidden)
                         Section("Trends") {
-                            IOSTrendCharts(snapshot: stats.snapshot, history: stats.history)
+                            IOSTrendCharts(snapshot: charts)
                         }
                         if let summary {
                             IOSSmartPicksSection(model: model)
@@ -82,36 +82,60 @@
             }
             .navigationTitle(IOSPage.overview.title)
             .task { await model.photos.start() }
-            .task(id: inputs) {
-                let photos = model.photos.items
-                let files = model.library.items
-                let completed = model.completedJobs.map(\.outcome)
-                let shrunk = model.shrunkIDs(in: model.browser)
-                let analysis = await Self.analyze(
-                    photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-                    custom: model.advanced.spec, completed: completed, shrunk: shrunk)
-                guard !Task.isCancelled else { return }
-                summary = analysis.summary
-                stats.store(
-                    SavingsStatsSnapshot(
-                        photos: analysis.summary.videos, files: analysis.summary.localFiles,
-                        savedBytes: analysis.summary.savedBytes, conversions: completed.count,
-                        groups: analysis.buckets.prefix(6).map {
-                            SavingsStatsSnapshot.Group(id: $0.id, title: $0.title, couldFree: $0.couldFree)
-                        }),
-                    history: Self.history(of: model.completedJobs.map { ($0.job.createdAt, $0.outcome.savedBytes) }))
-                model.assistant.smartPicks.update(
-                    buckets: analysis.buckets, undatedCount: analysis.undated, key: inputs)
+            .task { await cache.load() }
+            // Every few minutes while the page is showing; leaving the page cancels the loop and any refresh.
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.refreshInterval)
+                    guard !Task.isCancelled else { return }
+                    refreshTick += 1
+                }
             }
+            .task(id: RefreshKey(inputs: inputs, tick: refreshTick)) { await refresh() }
             .task(id: picksTrigger) { await model.assistant.smartPicks.generateIfNeeded() }
         }
 
-        /// Bytes freed per day, the last 14 days that had a conversion.
-        private static func history(of finished: [(Date, Int64)]) -> [SavingsDay] {
-            let calendar = Calendar.current
-            let perDay = Dictionary(grouping: finished) { calendar.startOfDay(for: $0.0) }
-                .mapValues { $0.reduce(Int64(0)) { $0 + $1.1 } }
-            return perDay.keys.sorted().suffix(14).map { SavingsDay(date: $0, savedBytes: perDay[$0] ?? 0) }
+        private var cache: SavingsStatsCache { model.services.savingsStats }
+
+        /// What the charts draw: the stored numbers at once, then the refreshed ones.
+        private var charts: OverviewCharts? {
+            cache.snapshot.map(OverviewCharts.init(snapshot:))
+        }
+
+        /// How often the numbers are made again while the page is open, besides when something changes.
+        private static let refreshInterval = Duration.seconds(300)
+        /// A burst of changes (a scan, jobs finishing one after another) makes one refresh.
+        private static let debounce = Duration.seconds(1)
+
+        private struct RefreshKey: Hashable {
+            let inputs: Inputs
+            let tick: Int
+        }
+
+        private func refresh() async {
+            let photos = model.photos.items
+            let files = model.library.items
+            let finished = model.completedJobs.map { (addedOn: $0.job.createdAt, outcome: $0.outcome) }
+            let shrunk = model.shrunkIDs(in: model.browser)
+            let preset = model.preset
+            let overrides = model.presetOverrides
+            let custom = model.advanced.spec
+            let key = inputs
+            let model = model
+            // The first read of the page isn't held back: the live groups wait for it.
+            let delay = summary == nil ? Duration.zero : Self.debounce
+            await cache.refresh(after: delay) { [finished] in
+                let analysis = await Self.analyze(
+                    photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
+                    completed: finished.map(\.outcome), shrunk: shrunk)
+                await MainActor.run {
+                    // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
+                    model.assistant.smartPicks.update(
+                        buckets: analysis.buckets, undatedCount: analysis.undated, key: key)
+                    self.summary = analysis.summary
+                }
+                return OverviewCharts.snapshot(summary: analysis.summary, buckets: analysis.buckets, finished: finished)
+            }
         }
 
         @concurrent private static func analyze(

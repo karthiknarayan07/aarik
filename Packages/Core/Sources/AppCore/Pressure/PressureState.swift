@@ -151,7 +151,12 @@ public struct QueuePause: Sendable, Equatable {
         switch reason {
         case nil: nil
         case .user: "Paused"
-        case .automatic(.thermal): "Paused while your Mac cools down"
+        case .automatic(.thermal):
+            #if os(iOS)
+                "Paused while your device cools down"
+            #else
+                "Paused while your Mac cools down"
+            #endif
         case .automatic(.batteryLow): "Paused: battery low"
         }
     }

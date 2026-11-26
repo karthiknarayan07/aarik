@@ -12,7 +12,6 @@
     @Observable
     public final class ConvertIOSScene: IOSToolScene {
         private let model: ConvertModel
-        private let stats: any SavingsStatsSource = InMemorySavingsStats()
         public var isSettingsPresented = false
         /// Whether a page was tapped in the page list; only a collapsed stack needs it (see `IOSPagesView`).
         var hasOpenedPage = false
@@ -48,7 +47,7 @@
         }
 
         @ViewBuilder public func detail(for destination: IOSPage?) -> some View {
-            IOSVideoDetail(scene: self, model: model, stats: stats, destination: destination)
+            IOSVideoDetail(scene: self, model: model, destination: destination)
         }
 
         @ToolbarContentBuilder public func toolbar(for destination: IOSPage?) -> some ToolbarContent {
@@ -95,7 +94,6 @@
     private struct IOSVideoDetail: View {
         @Bindable var scene: ConvertIOSScene
         @Bindable var model: ConvertModel
-        let stats: any SavingsStatsSource
         let destination: IOSPage?
         @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -148,7 +146,7 @@
 
         @ViewBuilder private var page: some View {
             switch destination {
-            case .overview: IOSOverviewView(model: model, stats: stats)
+            case .overview: IOSOverviewView(model: model)
             case .photos: IOSPhotosView(model: model)
             case .files: IOSLocalFilesView(model: model)
             case .queue: IOSQueueView(model: model)

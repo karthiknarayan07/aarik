@@ -10,7 +10,7 @@
     /// The Overview's hero: a ring of where the space stands (saved, could free, stays) and one line saying what it
     /// means. The ring is a Swift Charts donut, so VoiceOver reads each part.
     struct IOSSavingsHero: View {
-        let snapshot: SavingsStatsSnapshot?
+        let snapshot: OverviewCharts?
         let activity: ActivitySummary
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
         @ScaledMetric(relativeTo: .largeTitle) private var ringSize: CGFloat = 190
@@ -158,8 +158,7 @@
 
     /// The pinned cards: space saved, what could be freed, the queue, and the biggest groups.
     struct IOSInsightCards: View {
-        let snapshot: SavingsStatsSnapshot?
-        let history: [SavingsDay]
+        let snapshot: OverviewCharts?
         let activity: ActivitySummary
         let open: (IOSPage) -> Void
 
@@ -176,6 +175,14 @@
             ]
         }
 
+        private static let photosName = "Videos in Photos"
+        private static let filesName = "Local Files"
+
+        /// What converting one library would free, from the sizes before and after.
+        private func couldFree(of library: String) -> Int64 {
+            snapshot?.sizes.first { $0.library == library }.map { max(0, $0.now - $0.after) } ?? 0
+        }
+
         var body: some View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 12)], spacing: 12) {
                 IOSInsightCard(
@@ -184,8 +191,8 @@
                     caption: activity.completed == 1 ? "1 conversion" : "\(activity.completed) conversions",
                     identifier: "card.saved", open: { open(.completed) }
                 ) {
-                    Chart(history) { day in
-                        BarMark(x: .value("Day", day.date, unit: .day), y: .value("Saved", day.savedBytes))
+                    Chart(snapshot?.throughput ?? []) { day in
+                        BarMark(x: .value("Day", day.day, unit: .day), y: .value("Saved", day.savedBytes))
                             .foregroundStyle(.green)
                             .cornerRadius(3)
                     }
@@ -198,13 +205,13 @@
                     caption: "In Photos and Files",
                     identifier: "card.couldFree",
                     open: {
-                        open((snapshot?.photos.couldFree ?? 0) >= (snapshot?.files.couldFree ?? 0) ? .photos : .files)
+                        open(couldFree(of: Self.photosName) >= couldFree(of: Self.filesName) ? .photos : .files)
                     }
                 ) {
                     Chart {
-                        BarMark(x: .value("Freed", snapshot?.photos.couldFree ?? 0), y: .value("Library", "Photos"))
+                        BarMark(x: .value("Freed", couldFree(of: Self.photosName)), y: .value("Library", "Photos"))
                             .foregroundStyle(.blue)
-                        BarMark(x: .value("Freed", snapshot?.files.couldFree ?? 0), y: .value("Library", "Files"))
+                        BarMark(x: .value("Freed", couldFree(of: Self.filesName)), y: .value("Library", "Files"))
                             .foregroundStyle(.cyan)
                     }
                     .chartXAxis(.hidden)
@@ -231,12 +238,12 @@
                 IOSInsightCard(
                     title: "Biggest Groups", systemImage: "rectangle.3.group.fill", tint: .purple,
                     value: snapshot?.groups.first?.title ?? "None Yet",
-                    caption: snapshot?.groups.first.map { "Could free \(ByteFormat.string($0.couldFree))" }
+                    caption: snapshot?.groups.first.map { "Could free \(ByteFormat.string($0.bytes))" }
                         ?? "Groups appear once videos load",
                     identifier: "card.groups", open: { open(.files) }
                 ) {
                     Chart(snapshot?.groups.prefix(4).map { $0 } ?? []) { group in
-                        BarMark(x: .value("Freed", group.couldFree), y: .value("Group", group.title))
+                        BarMark(x: .value("Freed", group.bytes), y: .value("Group", group.title))
                             .foregroundStyle(.purple)
                             .cornerRadius(3)
                     }
@@ -252,8 +259,9 @@
 
     /// Full-size charts with axes, for the Overview's Trends section.
     struct IOSTrendCharts: View {
-        let snapshot: SavingsStatsSnapshot?
-        let history: [SavingsDay]
+        let snapshot: OverviewCharts?
+
+        private var history: [OverviewCharts.DayThroughput] { snapshot?.throughput ?? [] }
 
         private static let dayFormat = Date.FormatStyle().month(.abbreviated).day()
 
@@ -263,10 +271,10 @@
                     Text("Space Saved by Day")
                         .font(.headline)
                     Chart(history) { day in
-                        BarMark(x: .value("Day", day.date, unit: .day), y: .value("Saved", day.savedBytes))
+                        BarMark(x: .value("Day", day.day, unit: .day), y: .value("Saved", day.savedBytes))
                             .foregroundStyle(.green.gradient)
                             .cornerRadius(4)
-                            .accessibilityLabel(day.date.formatted(Self.dayFormat))
+                            .accessibilityLabel(day.day.formatted(Self.dayFormat))
                             .accessibilityValue(ByteFormat.string(day.savedBytes))
                     }
                     .chartYAxis {
@@ -283,7 +291,7 @@
                             title: "Space Saved by Day",
                             summary: "Bytes freed by the conversions that finished on each day.",
                             xTitle: "Day", yTitle: "Saved",
-                            points: history.map { ($0.date.formatted(Self.dayFormat), Double($0.savedBytes)) }))
+                            points: history.map { ($0.day.formatted(Self.dayFormat), Double($0.savedBytes)) }))
                 }
                 .padding(.vertical, 4)
             }
@@ -292,7 +300,7 @@
                     Text("Savings by Group")
                         .font(.headline)
                     Chart(groups.prefix(6).map { $0 }) { group in
-                        BarMark(x: .value("Could free", group.couldFree), y: .value("Group", group.title))
+                        BarMark(x: .value("Could free", group.bytes), y: .value("Group", group.title))
                             .foregroundStyle(.purple.gradient)
                             .cornerRadius(4)
                             .annotation(position: .top, alignment: .leading, spacing: 2) {
@@ -302,7 +310,7 @@
                                     .lineLimit(1)
                             }
                             .accessibilityLabel(group.title)
-                            .accessibilityValue("Could free \(ByteFormat.string(group.couldFree))")
+                            .accessibilityValue("Could free \(ByteFormat.string(group.bytes))")
                     }
                     .chartXAxis {
                         AxisMarks { value in
@@ -319,7 +327,7 @@
                             title: "Savings by Group",
                             summary: "What converting each group of videos would free.",
                             xTitle: "Group", yTitle: "Could free",
-                            points: groups.prefix(6).map { ($0.title, Double($0.couldFree)) }))
+                            points: groups.prefix(6).map { ($0.title, Double($0.bytes)) }))
                 }
                 .padding(.vertical, 4)
             }
