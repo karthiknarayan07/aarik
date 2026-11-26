@@ -64,7 +64,9 @@ struct IOSOnboardingView: View {
                 points: [
                     Point(
                         symbol: "battery.25percent", heading: "Warns When Battery Is Low",
-                        text: "If the battery runs low, you will see a warning. Work keeps going, and you decide when to pause."),
+                        text:
+                            "If the battery runs low, you will see a warning. Work keeps going, and you decide when to pause."
+                    ),
                     Point(
                         symbol: "thermometer.high", heading: "Cools Down First",
                         text: "When \(device) gets hot, work pauses until it cools."),

@@ -61,7 +61,7 @@ extension PhotoKitStore {
     @concurrent
     public func deleteAssets(ids: [String]) async throws {
         guard await authorization().allowsReading else { throw PhotoStoreError.notAuthorized }
-        let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: Self.idFetchOptions())
         // Nothing is deleted, and the caller hears of it, when any asset can't be found.
         guard assets.count == Set(ids).count else {
             var found: Set<String> = []

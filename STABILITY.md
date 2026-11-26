@@ -78,11 +78,11 @@ How the app keeps long batches and user files safe. Every rule here is enforced 
   The relaunch after an update is held while a job is running, or jobs are waiting and the queue is not paused,
   and runs once when the queue goes idle. A paused queue counts as idle: the user paused on purpose, and waiting
   jobs are saved after every change (`jobs.json`) and restored as queued at next launch, where they start when the
-  queue is resumed (automatically, unless auto-start is off). An automatic pause (heat, low battery) counts as paused
+  queue is resumed (automatically, unless auto-start is off). An automatic pause (heat) counts as paused
   in the same way, because the gate is fed the combined pause (`QueuePause.isPaused`): a running job still holds the
-  relaunch, waiting jobs do not. The choice: holding an update for as long as the Mac stays hot or on a low battery
+  relaunch, waiting jobs do not. The choice: holding an update for as long as the Mac stays hot
   could be indefinite, and nothing is lost by relaunching, since the queue is saved and the automatic pause is
-  decided again at launch from the thermal state and the battery.
+  decided again at launch from the thermal state.
   Tests: `RelaunchGateTests`.
 
 ## Resources
@@ -124,8 +124,9 @@ The decisions are pure types in `AppCore/Pressure` (`PressureState`, `QueuePause
   pause keeps the hold until it is done.
 - **Heat.** `.serious`: one video at a time. `.critical`: the queue pauses after the current video, status line
   "Paused while your Mac cools down". It resumes at `.fair` or better (`.serious` on the way down stays paused).
-- **Battery.** Conversion continues on battery. At 20 % or less the queue pauses after the current video ("Paused:
-  battery low"); it resumes when the Mac is plugged in or above 25 %. No battery reading means never paused.
+- **Battery.** Conversion continues on battery and never pauses for it or for Low Power Mode (Low Power Mode limits
+  conversion to one video at a time). At 20 % or less on battery the app shows a non-blocking warning ("Battery is
+  low. Converting uses more power."); it clears when plugged in or above 25 %. No battery reading means never warned.
 - **Pause reasons stay separate.** `JobQueue` has the user's pause (`pause`/`resume`) and its own automatic hold
   (`setAutomaticHold`). `resume()` never lifts the hold, and lifting it never overrides the user's pause. The status
   line shows the user's pause first ("Paused"), otherwise the automatic reason.

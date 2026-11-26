@@ -27,7 +27,7 @@ extension PhotoKitStore {
     }
 
     private static func fetchAsset(_ id: String) throws -> PHAsset {
-        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: idFetchOptions()).firstObject else {
             throw PhotoStoreError.notInLibrary(id)
         }
         return asset

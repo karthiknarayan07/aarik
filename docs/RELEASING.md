@@ -112,9 +112,10 @@ Tick each line in the release notes (copy this list into the tag's PR).
 
 **Battery, thermal and Low Power Mode**
 
-- [ ] Low Power Mode on: the run follows the Low Power rule (it pauses or slows as `Pressure` defines and says so in the
-  queue's status line); turning it off lets it continue.
-- [ ] Battery below the threshold and unplugged: the queue holds with the battery message; plugging in resumes it.
+- [ ] Low Power Mode on: the run slows to one video at a time without pausing, and turning it off restores the speed
+  setting's limit.
+- [ ] Battery at 20 % or less and unplugged: the queue shows the low-battery warning in the Queue and Live Activity and
+  keeps running; plugging in or charging past 25 % clears it.
 - [ ] Heat: convert a long batch in a warm room or with the phone in the sun. At Serious the queue slows to one job; at
   Critical it holds and says why. No job fails because of the hold.
 - [ ] Energy Log: run Instruments' Energy Log (or the Xcode Energy gauge) over a 10-minute batch and confirm the app is not

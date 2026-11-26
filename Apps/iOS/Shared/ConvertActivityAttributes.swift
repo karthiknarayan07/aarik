@@ -44,7 +44,11 @@ enum LiveActivityText {
     static func subtitle(for state: ConvertActivityAttributes.ContentState) -> String {
         switch state.status {
         case .running, .downloading:
-            if state.lowBattery { "Battery is low. Converting uses more power." } else { state.detail.isEmpty ? "Converting" : state.detail }
+            if state.lowBattery {
+                "Battery is low. Converting uses more power."
+            } else {
+                state.detail.isEmpty ? "Converting" : state.detail
+            }
         case .waitingThermal: "Waiting for device temperature to drop"
         case .finished: "All videos converted"
         }

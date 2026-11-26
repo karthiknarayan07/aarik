@@ -61,6 +61,28 @@ import Testing
         // The original is only recorded for deletion, after the copy checked out and is in its albums.
         #expect(rig.store.deletedIDs.isEmpty)
         #expect(rig.pending.all.map(\.assetID) == [rig.asset.id])
+
+        // Moving the original to Recently Deleted leaves the copy and every attribute/album intact.
+        let deletion = try await OriginalsDeleter.deleteAll(store: rig.store, pending: rig.pending)
+        #expect(deletion.moved.map(\.assetID) == [rig.asset.id])
+        #expect(rig.store.deletedIDs == [rig.asset.id])
+        #expect(try await rig.store.albums(containing: newID) == ["album-1", "album-2"])
+    }
+
+    @Test(.timeLimit(.minutes(5))) func anAlbumMissingFromTheCopyRemovesTheCopyAndKeepsTheOriginal() async throws {
+        let rig = try await PhotosRig(albums: ["album-1", "album-2"])
+        rig.store.existingAlbums = ["album-1"]
+
+        do {
+            _ = try await rig.runner().run(try rig.job(.replace)) { _ in }
+            Issue.record("expected verifyFailed")
+        } catch let PhotoSaveError.verifyFailed(reasons, cleanup) {
+            #expect(cleanup == .removed)
+            #expect(reasons.contains { $0.contains("albums") })
+        }
+        #expect(rig.store.deletedIDs == ["new-1"])
+        #expect(rig.pending.all.isEmpty)
+        #expect(rig.store.assets.map(\.id) == [rig.asset.id])
     }
 
     @Test(.timeLimit(.minutes(5))) func theDownloadIsItsOwnPhaseWithItsOwnProgress() async throws {
