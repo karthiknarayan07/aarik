@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import SwiftUI
 
@@ -11,23 +12,29 @@ public struct MediaTile: View {
     let badges: [String]
     let sizeLabel: String
     let isAvailable: Bool
-    let isSelected: Bool
+    let state: MediaTileState
     let note: String?
 
+    @ScaledMetric(relativeTo: .body) private var inset: CGFloat = 4
+    @ScaledMetric(relativeTo: .body) private var focusWidth: CGFloat = 2
+
     public init(
-        image: CGImage?, badges: [String], sizeLabel: String, isAvailable: Bool, isSelected: Bool, note: String? = nil
+        image: CGImage?, badges: [String], sizeLabel: String, isAvailable: Bool, state: MediaTileState,
+        note: String? = nil
     ) {
         self.image = image
         self.badges = badges
         self.sizeLabel = sizeLabel
         self.isAvailable = isAvailable
-        self.isSelected = isSelected
+        self.state = state
         self.note = note
     }
 
     public var body: some View {
         Rectangle()
             .fill(.quaternary)
+            // Opaque underneath, so the selection colour doesn't tint a poster that hasn't loaded.
+            .background(.background)
             .aspectRatio(4 / 3, contentMode: .fit)
             .overlay { poster }
             .clipShape(.rect(cornerRadius: Self.cornerRadius))
@@ -38,13 +45,27 @@ public struct MediaTile: View {
                 if let note { TileLabel(note).padding(5) }
             }
             .overlay(alignment: .topTrailing) { missingBadge }
-            .overlay {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: Self.cornerRadius + 3)
-                        .strokeBorder(Color.accentColor, lineWidth: 3)
-                        .padding(-4)
+            .background {
+                // Finder's and Photos' selection: the system's selection colour around the poster, grey when the
+                // window is in the background or the grid doesn't have focus.
+                if state.isSelected {
+                    RoundedRectangle(cornerRadius: Self.cornerRadius + inset)
+                        .fill(selectionColor)
+                        .padding(-inset)
                 }
             }
+            .overlay {
+                if state.isFocused && !state.isSelected {
+                    RoundedRectangle(cornerRadius: Self.cornerRadius + inset)
+                        .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: focusWidth)
+                        .padding(-inset)
+                }
+            }
+    }
+
+    private var selectionColor: Color {
+        Color(
+            nsColor: state.isEmphasized ? .selectedContentBackgroundColor : .unemphasizedSelectedContentBackgroundColor)
     }
 
     @ViewBuilder private var poster: some View {
@@ -79,9 +100,11 @@ public struct MediaTile: View {
     }
 }
 
-/// A small caption on a dark material, readable over any thumbnail.
+/// A small caption on a dark plate, readable over any thumbnail in light and dark appearance. The plate is darker
+/// with Increase Contrast.
 private struct TileLabel: View {
     let text: String
+    @Environment(\.colorSchemeContrast) private var contrast
 
     init(_ text: String) {
         self.text = text
@@ -91,10 +114,9 @@ private struct TileLabel: View {
         Text(text)
             .font(.caption2)
             .lineLimit(1)
+            .foregroundStyle(.white)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(.thinMaterial, in: .rect(cornerRadius: 4))
-            .environment(\.colorScheme, .dark)
-            .foregroundStyle(.primary)
+            .background(.black.opacity(contrast == .increased ? 0.8 : 0.55), in: .rect(cornerRadius: 4))
     }
 }

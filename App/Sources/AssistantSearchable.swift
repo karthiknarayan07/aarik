@@ -32,7 +32,7 @@ private struct AssistantSearchable: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .searchable(text: $browser.search, tokens: tokens, placement: .toolbar, prompt: "Search by name") { token in
+            .searchable(text: $browser.search, tokens: tokens, placement: .toolbar, prompt: "Search") { token in
                 Label(token.title, systemImage: token.symbolName)
                     .accessibilityLabel("Filter: \(token.title)")
                     .accessibilityHint("Press Delete to remove this filter")

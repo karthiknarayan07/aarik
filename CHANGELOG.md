@@ -36,6 +36,14 @@ First public release.
   as is, have warnings or failed, and Smart Picks on Overview. They use only metadata (formats, sizes, years, reason
   codes) and, for Ask in Plain Words, the words you type, never video content or file names from your library; they work with VoiceOver and the keyboard, and are hidden when Apple
   Intelligence is off or unavailable. Turn it off in System Settings ▸ Apple Intelligence & Siri.
+- **A grid that behaves like Finder and Photos:** double-click or Return opens a video (in Photos for Photos videos),
+  drag a rectangle over empty space to select several, type a name to jump to it, ⇧-arrows and Home and End extend the
+  selection, and the keyboard-focused tile has a ring. The selection turns grey when the window is in the background.
+  Drag videos out to Finder or another app (the receiver gets a copy; the original is never moved), and Share them from
+  the toolbar or a right-click. Space previews a Photos video's poster frame, and Show in Photos opens it in Photos.
+- **Filters, counts and search in the toolbar:** a Filter menu replaces the bar of menus, the window subtitle shows
+  how many videos (and how many of them are selected), and the savings summary scrolls with the grid under the toolbar.
+  Search says "Search"; the filters Ask in Plain Words makes stay system search tokens.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).
 

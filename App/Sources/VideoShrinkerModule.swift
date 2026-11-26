@@ -49,6 +49,8 @@ final class VideoShrinkerModule: ToolModule {
 
     @ToolbarContentBuilder func toolbar(for destination: VideoPage?) -> some ToolbarContent {
         if hasInspector(for: destination) {
+            // The inspector button is its own group, apart from the page's own buttons.
+            ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItem(placement: .primaryAction) {
                 InspectorToggle(isPresented: Bindable(model).isInspectorPresented)
             }
