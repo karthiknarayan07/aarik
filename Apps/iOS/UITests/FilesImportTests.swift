@@ -12,14 +12,16 @@ final class FilesImportTests: AppTestCase {
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         add.tap()
 
+        // iPhone shows a Recents/Browse tab bar; iPad shows the locations sidebar directly.
         let browse = app.buttons["Browse"].firstMatch
-        XCTAssertTrue(browse.waitForExistence(timeout: 15), "the document picker didn't open")
-        browse.tap()
+        let onMyDevice = app.cells.matching(NSPredicate(format: "label BEGINSWITH 'On My i'")).firstMatch
+        if !(browse.waitForExistence(timeout: 15) || onMyDevice.exists) { dump("document picker") }
+        XCTAssertTrue(browse.exists || onMyDevice.exists, "the document picker didn't open")
+        if browse.exists { browse.tap() }
 
         // Browse opens on the locations list the first time and in the last folder after that.
-        let onMyPhone = app.cells.matching(NSPredicate(format: "label == 'On My iPhone'")).firstMatch
-        if onMyPhone.waitForExistence(timeout: 3) { onMyPhone.tap() }
-        // On My iPhone's only folder is the app's own.
+        if onMyDevice.waitForExistence(timeout: 3) { onMyDevice.tap() }
+        // The device's only folder is the app's own.
         let folder = app.cells.matching(NSPredicate(format: "label CONTAINS ' item'")).firstMatch
         if !folder.waitForExistence(timeout: 15) { dump("files picker without the app folder") }
         XCTAssertTrue(folder.exists, "no app folder under On My iPhone")

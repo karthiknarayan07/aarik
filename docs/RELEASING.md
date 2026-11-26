@@ -139,13 +139,13 @@ Tick each line in the release notes (copy this list into the tag's PR).
 - [ ] Limited Photos access: assets outside the limited set stay pending and are never touched. Denied access shows the
   native state and downloads nothing.
 
-**Adaptive layout (the Simulator can't fold a Duo or enter split view)**
+**Adaptive layout (deferred: the UI test matrix is iPhone only for now; iPad and Duo come later, and the Simulator can't fold a Duo or enter split view)**
 
 - [ ] iPad, split view and Slide Over at every width: the selection, an open sheet and a running job survive resizing.
 - [ ] iPhone Duo Simulator (iOS 27.1) postures, by hand with Hardware ▸ Device ▸ Posture (or the Simulator's posture
   control): folded (outer screen, compact stack), half-open and open (inner screen, sidebar + detail). In each, switch
   posture while a job runs and while an inspector or Settings is open: nothing reloads, nothing restarts, and the
-  selection is unchanged. The UI tests only run the Duo at its default posture because XCUITest can't set a posture.
+  selection is unchanged. The UI tests don't cover the iPad or the Duo yet (deferred); when they return, the Duo runs at its default posture because XCUITest can't set a posture.
 - [ ] Dynamic Type at AX3 and AX5, light and dark, on the phone: no clipped or unreachable control.
 
 **Gate**
