@@ -70,10 +70,10 @@ import Testing
         let tools = ConvertAssistantToolProvider(model: rig.model).assistantTools()
         #expect(
             tools.filter { !$0.requiresConfirmation }.map(\.name)
-                == ["search_library", "estimate_savings", "explain_outcome", "list_queue"])
+                == ["search_library", "estimate_savings", "savings_so_far", "explain_outcome", "list_queue"])
         #expect(
             tools.filter(\.requiresConfirmation).map(\.name)
-                == ["convert_videos", "pause_queue", "resume_queue", "replace_originals"])
+                == ["convert_videos", "pause_queue", "resume_queue", "replace_originals", "allow_photos_access"])
     }
 
     // MARK: Search
@@ -120,13 +120,13 @@ import Testing
     }
 
     @Test func searchSaysHowManyAreNotListedOnlyWhenSome() async throws {
-        let many = (1...7).map { Self.asset("A/L0/00\($0)", name: "Clip \($0).MOV", megabytes: 100 + $0) }
+        let many = (1...11).map { Self.asset("A/L0/00\($0)", name: "Clip \($0).MOV", megabytes: 100 + $0) }
         let rig = try await rig(assets: many) { _ in [.tool("search_library")] }
         defer { rig.cleanUp() }
         await ask(rig)
         let result = try #require(rig.client.toolResults.first)
-        #expect(result.hasPrefix("Found 7 videos in total"))
-        #expect(result.contains("5 are listed below") && result.hasSuffix("2 other videos aren't listed."))
+        #expect(result.hasPrefix("Found 11 videos in total"))
+        #expect(result.contains("8 are listed below") && result.hasSuffix("3 other videos aren't listed."))
     }
 
     @Test func searchFiltersBySizeAndSaysWhenNothingMatches() async throws {
@@ -147,7 +147,7 @@ import Testing
         defer { rig.cleanUp() }
         await ask(rig)
         let result = try #require(rig.client.toolResults.first)
-        #expect(result.hasPrefix("Converting everything could free about"))
+        #expect(result.contains("Converting everything could free about"))
         #expect(result.contains("B1:"))
         guard case .toolCall(let call) = rig.chat.items[1].content else {
             Issue.record("expected a tool row")
@@ -273,5 +273,58 @@ import Testing
         await ask(rig)
         #expect(!rig.chat.hasPendingConfirmation)
         #expect(rig.client.toolResults == ["No originals are waiting to be moved."])
+    }
+
+    @Test func relativeYearsResolveFromTodaysDate() {
+        let today = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 26))!
+        #expect(ConvertAssistantContext.year("last year", today: today) == 2025)
+        #expect(ConvertAssistantContext.year("this year", today: today) == 2026)
+        #expect(ConvertAssistantContext.year("2 years ago", today: today) == 2024)
+        #expect(ConvertAssistantContext.year("2023", today: today) == 2023)
+        #expect(ConvertAssistantContext.year("", today: today) == nil)
+        #expect(ConvertAssistantContext.year("banana", today: today) == nil)
+    }
+
+    @Test func savingsSoFarSaysNothingWasSavedBeforeAnyConversion() async throws {
+        let rig = try await rig(assets: Self.library) { _ in [.tool("savings_so_far")] }
+        defer { rig.cleanUp() }
+        await ask(rig)
+        let result = try #require(rig.client.toolResults.first)
+        #expect(result.hasPrefix("Nothing has been converted yet"))
+        #expect(!rig.chat.hasPendingConfirmation)
+    }
+
+    @Test func searchLeadsWithTheTotalsOfTheWholeLibrary() async throws {
+        let rig = try await rig(assets: Self.library) { _ in [.tool("search_library", ["name_contains": "videos"])] }
+        defer { rig.cleanUp() }
+        await ask(rig)
+        let result = try #require(rig.client.toolResults.first)
+        #expect(result.hasPrefix("Found 3 videos in total, 2.3 GB combined"))
+        #expect(result.contains("Name every one"))
+    }
+
+    @Test func offeringPhotosAccessAlwaysAsksFirst() async throws {
+        let directory = URL.temporaryDirectory.appending(
+            path: "ask-access-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = UserDefaults(suiteName: "ConvertAssistantToolsTests-\(UUID().uuidString)")!
+        let store = FakePhotoStore(assets: Self.library, authorization: .denied)
+        let model = ConvertModel(services: AppServices(directory: directory, defaults: suite, photoStore: store))
+        await model.photos.start()
+        await model.photos.waitUntilIdle()
+        var opened = 0
+        let client = ScriptedChatClient { _ in [.tool("allow_photos_access"), .text("Done.")] }
+        let chat = AssistantChat(
+            client: client, availability: AssistantAvailability(client: client, observesActivation: false),
+            store: ChatStore(directory: nil), tools: { ConvertAssistantToolProvider(model: model).assistantTools() })
+        model.host.openPhotosAccessSettings = { opened += 1 }
+        chat.send("go")
+        while !chat.hasPendingConfirmation { await Task.yield() }
+        #expect(opened == 0)
+        let card = try #require(chat.items.last { if case .confirmation = $0.content { true } else { false } })
+        chat.cancel(card.id)
+        await chat.waitUntilIdle()
+        #expect(opened == 0)
     }
 }

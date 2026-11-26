@@ -11,14 +11,16 @@ import PhotosLibrary
 public struct ConvertAssistantToolProvider: AssistantToolProvider {
     private let context: ConvertAssistantContext
 
-    @MainActor public init(model: ConvertModel) { context = ConvertAssistantContext(model: model) }
+    @MainActor public init(model: ConvertModel, now: @escaping @Sendable () -> Date = { .now }) {
+        context = ConvertAssistantContext(model: model, now: now)
+    }
 
     public func assistantTools() -> [any AssistantTool] {
         [
             SearchLibraryTool(context: context), EstimateSavingsTool(context: context),
-            ExplainOutcomeTool(context: context), ListQueueTool(context: context),
+            SavingsSoFarTool(context: context), ExplainOutcomeTool(context: context), ListQueueTool(context: context),
             ConvertVideosTool(context: context), PauseQueueTool(context: context), ResumeQueueTool(context: context),
-            ReplaceOriginalsTool(context: context),
+            ReplaceOriginalsTool(context: context), PhotosAccessTool(context: context),
         ]
     }
 }
@@ -27,8 +29,12 @@ public struct ConvertAssistantToolProvider: AssistantToolProvider {
 @MainActor
 final class ConvertAssistantContext {
     private weak var model: ConvertModel?
+    private let now: @Sendable () -> Date
 
-    init(model: ConvertModel) { self.model = model }
+    init(model: ConvertModel, now: @escaping @Sendable () -> Date = { .now }) {
+        self.model = model
+        self.now = now
+    }
 
     func model(or fail: String = "Convert isn't available.") throws -> ConvertModel {
         guard let model else { throw AssistantToolError(fail) }
@@ -36,7 +42,7 @@ final class ConvertAssistantContext {
     }
 
     /// How many items a tool result lists: enough to answer, short enough for the model's small context.
-    static let listLimit = 5
+    static let listLimit = 8
 
     // MARK: Search
 
@@ -47,7 +53,7 @@ final class ConvertAssistantContext {
         if scope != "files" { items += model.photos.items }
         if scope != "photos" { items += model.library.items }
         let words = Self.nameWords(arguments.string("name_contains"))
-        let year = arguments.integer("year")
+        let year = Self.year(arguments.string("year"), today: now())
         let minimum = Int64(arguments.integer("minimum_size_mb") ?? 0) * 1_000_000
         let matches = items.filter { item in
             let name = item.name.lowercased()
@@ -60,9 +66,10 @@ final class ConvertAssistantContext {
             "\(item.name) · \(QualityBucket(item: item).title) · \(ByteFormat.string(item.byteSize))"
         }
         let total = ByteFormat.string(matches.reduce(0) { $0 + $1.byteSize })
+        let access = photosAccessNote(model, scope: scope)
         var summary =
             items.isEmpty
-            ? "No videos found. The library is empty: nothing in Photos or Local Files yet."
+            ? (access ?? "No videos found. The library is empty: nothing in Photos or Local Files yet.")
             : "No videos matched. The library has \(items.count.formatted()) videos; try again without the filters."
         if !matches.isEmpty {
             // Numbered, one per line: the model reads this as a list and repeats it by name.
@@ -73,12 +80,56 @@ final class ConvertAssistantContext {
             let listed =
                 more > 0
                 ? "\(shown.count.formatted()) are listed below, largest first."
-                : (shown.count == 1 ? "It is listed below." : "All \(shown.count) are listed below, largest first.")
+                : (shown.count == 1
+                    ? "It is listed below."
+                    : "All \(shown.count) are listed below, largest first. Name every one of them.")
             summary =
-                "\(found), \(total) combined. \(listed)\n\(numbered)"
+                "\(found), \(total) combined\(Self.breakdown(matches)). \(listed)\n\(numbered)"
                 + (more > 0 ? "\n\(more.formatted()) other videos aren't listed." : "")
+            if let access { summary += "\n" + access }
+        } else if let access, !items.isEmpty {
+            summary += " " + access
         }
         return AssistantToolOutput(text: summary, title: "Searched Library", count: matches.count, lines: lines)
+    }
+
+    /// " (3 in Photos: 2 GB, 2 in Local Files: 1 GB)" when both sources are among the matches, else nothing.
+    private static func breakdown(_ matches: [LibraryItem]) -> String {
+        let photos = matches.filter { $0.photosIdentifier != nil }
+        let files = matches.filter { $0.photosIdentifier == nil }
+        guard !photos.isEmpty, !files.isEmpty else { return "" }
+        let photoBytes = ByteFormat.string(photos.reduce(0) { $0 + $1.byteSize })
+        let fileBytes = ByteFormat.string(files.reduce(0) { $0 + $1.byteSize })
+        return " (\(photos.count) in Photos: \(photoBytes), \(files.count) in Local Files: \(fileBytes))"
+    }
+
+    /// Says Photos access is off, when it is and the search would have looked there.
+    func photosAccessNote(_ model: ConvertModel, scope: String) -> String? {
+        guard scope != "files", model.photos.isAuthorizationKnown else { return nil }
+        switch model.photos.authorization {
+        case .authorized, .limited: return nil
+        case .notDetermined:
+            return "Photos access hasn't been allowed yet, so videos in Photos can't be read. Say so, and offer to "
+                + "ask for access with the allow_photos_access tool. Don't call the library empty."
+        case .denied, .restricted:
+            return "Photos access is turned off, so videos in Photos can't be read. Say so, and offer to open "
+                + "Settings with the allow_photos_access tool. Don't call the library empty."
+        }
+    }
+
+    /// A year from "2025", "this year", "last year" or "2 years ago", worked out from today's date.
+    static func year(_ text: String?, today: Date) -> Int? {
+        guard let text = text?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            return nil
+        }
+        let current = Calendar.current.component(.year, from: today)
+        if let number = Int(text) { return number >= 1900 ? number : nil }
+        if let ago = text.split(separator: " ").compactMap({ Int($0) }).first, text.contains("ago") {
+            return current - ago
+        }
+        if text.contains("this") || text.contains("current") { return current }
+        if text.contains("last") || text.contains("previous") || text.contains("past") { return current - 1 }
+        return text.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.first { $0 >= 1900 }
     }
 
     /// The words of a name filter that can narrow anything. "Biggest videos" says what the person wants, not what the
@@ -123,12 +174,81 @@ final class ConvertAssistantContext {
         let top = analysis.buckets.prefix(Self.listLimit)
         let lines = top.map { "\($0.id): \($0.title) · \($0.detail)" }
         let videos = analysis.buckets.reduce(0) { $0 + $1.count }
+        let librarySize =
+            try model().photos.items.reduce(Int64(0)) { $0 + $1.byteSize }
+            + model().library.items.reduce(Int64(0)) { $0 + $1.byteSize }
         let text =
             analysis.buckets.isEmpty
             ? "Nothing in the library would free space."
-            : "Converting everything could free about \(ByteFormat.string(total)) across \(videos.formatted()) videos. "
+            : "The library takes \(ByteFormat.string(librarySize)) in total. "
+                + "Converting everything could free about \(ByteFormat.string(total)) across \(videos.formatted()) videos. "
                 + "Biggest groups, most savings first:\n" + lines.joined(separator: "\n")
         return AssistantToolOutput(text: text, title: "Estimated Savings", count: analysis.buckets.count, lines: lines)
+    }
+
+    // MARK: Saved so far
+
+    func savedSoFar() async throws -> AssistantToolOutput {
+        let model = try model()
+        let cache = model.services.savingsStats
+        if !cache.hasLoaded { await cache.load() }
+        let outcomes = model.completedJobs.map(\.outcome)
+        let live = outcomes.reduce(Int64(0)) { $0 + max(0, $1.bytesBefore - $1.bytesAfter) }
+        let stored = cache.snapshot
+        let saved = max(live, stored?.savedBytes ?? 0)
+        let converted = max(outcomes.count, stored?.conversions ?? 0)
+        let couldFree = try analysis().buckets.reduce(Int64(0)) { $0 + $1.couldFree }
+        let text =
+            converted == 0
+            ? "Nothing has been converted yet, so nothing has been saved so far. "
+                + "Converting everything could free about \(ByteFormat.string(couldFree)) now."
+            : "Saved so far: \(ByteFormat.string(saved)) across \(converted.formatted()) converted videos. "
+                + "Converting the rest could free about \(ByteFormat.string(couldFree)) more now."
+        let lines = [
+            "Saved so far · \(ByteFormat.string(saved))", "Videos converted · \(converted.formatted())",
+            "Could free now · \(ByteFormat.string(couldFree))",
+        ]
+        return AssistantToolOutput(text: text, title: "Checked Savings", count: converted, lines: lines)
+    }
+
+    // MARK: Photos access
+
+    func accessConfirmation() throws -> AssistantConfirmation {
+        let model = try model()
+        switch model.photos.authorization {
+        case .authorized: throw AssistantToolError("Photos access is already on.")
+        case .limited:
+            return AssistantConfirmation(
+                title: "Open Settings",
+                message: "Photos access is limited to the videos you picked. Settings lets you share more.",
+                confirmLabel: "Open Settings")
+        case .notDetermined:
+            return AssistantConfirmation(
+                title: "Allow Access to Photos",
+                message: "Shows the system prompt so the app can read your Photos videos. Nothing is changed.",
+                confirmLabel: "Continue")
+        case .denied, .restricted:
+            return AssistantConfirmation(
+                title: "Open Settings", message: "Photos access is off. Settings lets you turn it on.",
+                confirmLabel: "Open Settings")
+        }
+    }
+
+    func requestAccess() async throws -> AssistantToolOutput {
+        let model = try model()
+        _ = try accessConfirmation()
+        if model.photos.authorization == .notDetermined {
+            await model.photos.requestAccess()
+            let on = model.photos.authorization.allowsReading
+            return AssistantToolOutput(
+                text: on
+                    ? "Photos access is on; \(model.photos.items.count.formatted()) videos can be read now."
+                    : "Photos access was not given.",
+                title: "Asked for Photos Access")
+        }
+        model.openPhotosAccessSettings()
+        return AssistantToolOutput(
+            text: "Settings is open. The person can turn on Photos access there.", title: "Opened Settings")
     }
 
     // MARK: Results and queue
@@ -265,14 +385,28 @@ private struct SearchLibraryTool: AssistantTool {
     let context: ConvertAssistantContext
     var name: String { "search_library" }
     var summary: String {
-        "Finds videos in the library by name, year or size. Returns the count, the total size and the biggest videos by name and size."
+        "Looks up videos, and answers how many there are and how much space they take. The first line is the "
+            + "count and total size of what matched: use it for any count or size question. With library any it "
+            + "covers the whole library. Then it lists the biggest by name and size. Every argument is optional: "
+            + "leave out any the person didn't say."
     }
     var parameters: [AssistantParameter] {
         [
-            AssistantParameter("name_contains", "Text the video's name contains."),
-            AssistantParameter("year", "Capture year, such as 2025.", kind: .integer),
-            AssistantParameter("minimum_size_mb", "Only videos at least this many megabytes.", kind: .integer),
-            AssistantParameter("library", "Where to look.", allowed: ["photos", "files", "any"]),
+            AssistantParameter(
+                "name_contains",
+                "Only if the person gave a word from a video's name, such as a place or event. Leave empty for "
+                    + "words like biggest, videos, all or my."),
+            AssistantParameter(
+                "year",
+                "Only if the person named a year or said this year or last year (write exactly that, or the "
+                    + "four-digit year). Otherwise leave empty."),
+            AssistantParameter(
+                "minimum_size_mb",
+                "Only if the person gave a size such as over 100 MB. Leave empty for biggest or large.",
+                kind: .integer),
+            AssistantParameter(
+                "library", "photos, files, or any (both). Use any unless the person said Photos or Local Files.",
+                allowed: ["photos", "files", "any"]),
         ]
     }
     func run(_ arguments: AssistantArguments) async throws -> AssistantToolOutput {
@@ -361,4 +495,32 @@ private struct ReplaceOriginalsTool: AssistantTool {
         try await context.originalsConfirmation()
     }
     func run(_ arguments: AssistantArguments) async throws -> AssistantToolOutput { try await context.moveOriginals() }
+}
+
+private struct SavingsSoFarTool: AssistantTool {
+    let context: ConvertAssistantContext
+    var name: String { "savings_so_far" }
+    var summary: String {
+        "Says how much space has been saved so far by finished conversions, how many videos were converted, and how "
+            + "much more converting could free now. Use it for how much have I saved."
+    }
+    func run(_ arguments: AssistantArguments) async throws -> AssistantToolOutput {
+        try await context.savedSoFar()
+    }
+}
+
+private struct PhotosAccessTool: AssistantTool {
+    let context: ConvertAssistantContext
+    var name: String { "allow_photos_access" }
+    var summary: String {
+        "Asks for access to Photos, or opens Settings to turn it on, after the person confirms. Offer it only when a "
+            + "tool says Photos access is off."
+    }
+    var requiresConfirmation: Bool { true }
+    func confirmation(for arguments: AssistantArguments) async throws -> AssistantConfirmation {
+        try await context.accessConfirmation()
+    }
+    func run(_ arguments: AssistantArguments) async throws -> AssistantToolOutput {
+        try await context.requestAccess()
+    }
 }

@@ -25,10 +25,18 @@ public final class AssistantChat {
     @ObservationIgnored private let client: any LanguageModelClient
     @ObservationIgnored private let store: ChatStore
     @ObservationIgnored private let tools: @MainActor () -> [any AssistantTool]
+    @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var generation: Task<Void, Never>?
     /// Changes whenever another chat is opened, so an answer still finishing for the old one writes nothing.
     @ObservationIgnored private var epoch = 0
     @ObservationIgnored private var decisions: [UUID: CheckedContinuation<Bool, Never>] = [:]
+
+    /// The rules, headed by today's date so "last year" and "this year" mean something.
+    static func instructions(today: Date) -> String {
+        let year = Calendar.current.component(.year, from: today)
+        let date = today.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
+        return "Today is \(date). The current year is \(year); last year was \(year - 1).\n" + instructions
+    }
 
     static let instructions = """
         You are the assistant inside a free, offline app that shrinks videos on this device. Help the person \
@@ -36,9 +44,19 @@ public final class AssistantChat {
 
         Rules:
         - Call a tool to look anything up. Never guess sizes, counts, names or savings.
+        - For how many videos there are, or how much space they take, call search_library with library set to \
+        any and answer with the count and the total size from its first line, not the number of items listed.
+        - Always start an answer about videos by saying how many were found and their total size, for example \
+        "You have 3 videos, 1.2 GB in total:", then name them.
+        - For how much has been saved, call savings_so_far. For what could be freed, call estimate_savings.
+        - Fill in a tool's arguments only with what the person said. Never add a name, year, size or library of your \
+        own.
         - Answer only from what the tools returned. If a tool found nothing, say so.
-        - When a tool returns a list, name the items in your answer (name and size), up to five, then say how many \
-        more there are. Never answer with only an introduction.
+        - When a tool returns a list, name every item it lists (name and size), then say how many more there are, \
+        using the tool's number. If it says all are listed, there are no others. Never answer with only an \
+        introduction.
+        - If a tool says Photos access is off or not allowed yet, say that, not that the library is empty, and offer \
+        to help turn it on with allow_photos_access.
         - Use only the numbers and names in the tool result. Never add counts, sizes or thresholds of your own.
         - If a tool says no videos were found, say so plainly. Don't list anything.
         - If a tool says the person cancelled, acknowledge it in one short sentence and stop. Don't repeat the \
@@ -63,6 +81,16 @@ public final class AssistantChat {
     static let cancelledNote =
         "The user cancelled; nothing changed. Acknowledge in one short sentence. Don't repeat the earlier answer."
 
+    /// Added to the instructions for the retry after the model wrote a tool call as text.
+    static let toolNudge =
+        "\nCall the tool itself. Never write a tool's name or braces in your reply; write only the answer."
+
+    /// Whether a reply is a tool call written out as text, such as `search_library{}`, not an answer.
+    static func looksLikeToolCall(_ text: String, toolNames: [String]) -> Bool {
+        if text.range(of: #"^\s*\w+\s*\{.*\}\s*$"#, options: .regularExpression) != nil { return true }
+        return toolNames.contains { text.contains("\($0){") || text.contains("\($0) {") }
+    }
+
     /// The short prompt for the one retry after a refusal: no history, no examples, only the job.
     static let simpleInstructions = """
         You help someone manage the video files in their own library on this device. Use the tools to look things \
@@ -72,8 +100,9 @@ public final class AssistantChat {
 
     public init(
         client: any LanguageModelClient, availability: AssistantAvailability, store: ChatStore,
-        tools: @escaping @MainActor () -> [any AssistantTool]
+        tools: @escaping @MainActor () -> [any AssistantTool], now: @escaping @Sendable () -> Date = { .now }
     ) {
+        self.now = now
         self.client = client
         self.availability = availability
         self.store = store
@@ -181,20 +210,37 @@ public final class AssistantChat {
         var replyID: UUID?
         var failure: (any Error)?
         // A refusal is often the model misjudging an ordinary question, so it gets one more try with a plainer prompt.
-        for attempt in 0..<2 {
-            let simplified = attempt == 1
+        // A reply that is a tool call written out as text gets one more try with a nudge, and is never shown.
+        var simplified = false
+        var nudged = false
+        var attempt = 0
+        while attempt < 3 {
+            attempt += 1
+            let names = tools().map(\.name)
             let request = ChatRequest(
                 prompt: prompt,
-                instructions: (simplified ? Self.simpleInstructions : Self.instructions)
-                    + (context?.instructions ?? ""),
+                instructions: (simplified ? Self.simpleInstructions : Self.instructions(today: now()))
+                    + (context?.instructions ?? "") + (nudged ? Self.toolNudge : ""),
                 history: simplified ? [] : history, tools: tools(),
                 invoke: { [weak self] name, arguments in
                     await self?.handleToolCall(name, arguments, in: id) ?? "The assistant is closed."
                 })
             failure = nil
+            var wroteToolCall = false
             do {
                 for try await text in client.streamChat(request) {
                     if Task.isCancelled { break }
+                    if Self.looksLikeToolCall(text, toolNames: names) {
+                        wroteToolCall = true
+                        // Nothing of it is shown: a partial reply that turned out to be a call is removed.
+                        if let existing = replyID {
+                            items.removeAll { $0.id == existing }
+                            store.remove([existing], in: id)
+                            replyID = nil
+                        }
+                        continue
+                    }
+                    if wroteToolCall { continue }
                     if let existing = replyID {
                         update(existing) { $0.content = .assistant(text) }
                     } else if !text.isEmpty {
@@ -205,7 +251,16 @@ public final class AssistantChat {
             } catch {
                 failure = error
             }
-            guard (failure as? AssistantError) == .guardrail, replyID == nil, !Task.isCancelled else { break }
+            if Task.isCancelled { break }
+            if wroteToolCall, replyID == nil, !nudged {
+                nudged = true
+                continue
+            }
+            if (failure as? AssistantError) == .guardrail, replyID == nil, !simplified {
+                simplified = true
+                continue
+            }
+            break
         }
         if let failure { append(.notice(Self.message(for: failure)), in: id) }
         // Whatever was written stays; a reply that ended up empty leaves no row.
