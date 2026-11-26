@@ -46,7 +46,7 @@ public enum AppSettings {
         try? FileManager.default.createDirectory(at: defaultOriginalsFolder, withIntermediateDirectories: true)
     }
 
-    /// The Save to choice new selections start with: next to original (macOS) or Documents (iOS), or a folder whose
+    /// The Save To choice new selections start with: next to original (macOS) or Documents (iOS), or a folder whose
     /// bookmark still resolves.
     public static func defaultSaveLocation(_ defaults: UserDefaults, platform: ToolPlatforms = .current) -> SaveLocation
     {

@@ -87,3 +87,28 @@ private func waitForWaiters(_ gate: DownloadGate, _ count: Int) async {
     await #expect(throws: Failure.self) { try await gate.run { throw Failure() } }
     #expect(try await gate.run { 7 } == 7)
 }
+
+@Test(.timeLimit(.minutes(1))) func onWaitRunsOnlyWhenTheGateIsBusy() async throws {
+    let gate = DownloadGate()
+    let (hold, release) = AsyncStream.makeStream(of: Void.self)
+    let (entered, enteredSink) = AsyncStream.makeStream(of: Void.self)
+    var enteredIterator = entered.makeAsyncIterator()
+    let (waited, waitedSink) = AsyncStream.makeStream(of: String.self)
+    var waitedIterator = waited.makeAsyncIterator()
+
+    let first = Task {
+        try await gate.run(onWait: { waitedSink.yield("first") }) {
+            enteredSink.yield()
+            for await _ in hold { break }
+        }
+    }
+    await enteredIterator.next()
+
+    let second = Task {
+        try await gate.run(onWait: { waitedSink.yield("second") }) {}
+    }
+    #expect(await waitedIterator.next() == "second")
+    release.yield()
+    try await first.value
+    try await second.value
+}

@@ -1,21 +1,21 @@
 # Stability
 
-How the app keeps long batches and user files safe. Every rule here is enforced in code and most are covered by tests (the
-Time Machine exclusion and the system inputs themselves are not); "planned" items belong to Plan 6 Phase B and do
-not exist yet. Change a rule only together with its test.
+How the app keeps long batches and user files safe. Every rule here is enforced in code and most are covered by tests
+(the Time Machine exclusion and the system inputs themselves are not). Change a rule only together with its test.
 
 ## File safety (never break these)
 
 1. **Originals are never deleted or overwritten.** The only way an original leaves its place is Replace, which moves
-   it to the Trash (`DownscaleRunner.replace`, `FileManager.trashItem`). There is no permanent delete anywhere.
+   it to the Trash (`ConvertRunner.replace`, `FileManager.trashItem`) or, for Photos, Recently Deleted via
+   `OriginalsDeleter` (rule 7). There is no permanent delete anywhere.
 2. **Atomic output** (`MediaEngine/Downscale/AtomicOutput.swift`). The encoder writes
    `.<name>.partial-<UUID>` next to the final path (same volume) and renames it into place with
    `renamex_np(RENAME_EXCL)`, so a half-written file is never visible at the final name and an existing file is
    never replaced (`DownscaleError.outputExists`). Volumes without `RENAME_EXCL` fall back to an exclusive
    create plus rename.
 3. **No partial files left behind.** On failure or cancellation the partial is removed. Stale partials from a
-   crash are cleaned by name (UUID suffix must parse) in `DownscaleRunner.removeStalePartials`.
-4. **Verify before Replace** (`DownscaleRunner.run`). An output is kept only if it is at least 10 % smaller; its
+   crash are cleaned by name (UUID suffix must parse) in `ConvertRunner.removeStalePartials`.
+4. **Verify before Replace** (`ConvertRunner.run`). An output is kept only if it is at least 10 % smaller; its
    metadata is read back and diffed against the source (`MetadataDiff`). Replace happens only when there are no
    warnings, the source is still the same file (`FileIdentity`), the optional originals backup was written and
    checked, and the original reached the Trash. Anything else keeps both files and completes the job with a note.
@@ -26,9 +26,10 @@ not exist yet. Change a rule only together with its test.
    (symlinks and `..` resolved), never `Work` itself. The folder is removed on every exit path, swept at launch
    before the queue starts, and excluded from Time Machine.
 7. **Photos: the owner's assets are read-only inputs.** `PhotoInputFetcher` only reads them. The one write is
-   `PhotoSaver`: a single `performChanges` adds one new asset (`PhotoKitStore.saveVideo`), then the saver reads
-   it back and checks length, size, a non-empty file, date and location against the source. On a mismatch the new
-   asset is deleted again (`PhotoSaveError.verifyFailed` with its `Cleanup`). A source asset is never edited. The
+   `PhotoSaver`: a single `performChanges` adds one new asset and puts it in the source's regular albums
+   (`PhotoKitStore.saveVideo`), then the saver reads it back and checks length, size, a non-empty file, date and
+   location against the source. On a mismatch the new asset is deleted again (`PhotoSaveError.verifyFailed` with its
+   `Cleanup`). A source asset is never edited. The
    only delete API is `PhotoKitStore.deleteAssets`, one change that goes through the system's own confirmation
    (declining is reported, not forced). The one caller for an original is `OriginalsDeleter`: after Replace jobs
    finish, or when the user presses the pending-deletion bar's button, it deletes every original in
@@ -58,14 +59,14 @@ not exist yet. Change a rule only together with its test.
   persists after every state change. Every job found `running` at launch (crash, quit) is put back to `queued`.
   Cancelling one job stops only that job; Pause and the automatic hold let all running jobs finish and start nothing new;
   lowering the limit never stops a running job. Duplicate detection counts every queued and running job.
-- `applicationShouldTerminate` first asks "Stop converting and quit?" (a standard `NSAlert`, default button
+- `applicationShouldTerminate` first asks "Stop Converting and Quit?" (a standard `NSAlert`, default button
   "Stop and Quit", `QuitConfirmation`) when work is under way, using `QuitPolicy.needsConfirmation` (the same
   definition of busy as `RelaunchGate`: a job running, or waiting jobs about to start). It does not ask when the queue
   is idle or paused with nothing running, nor while the system is logging out, restarting or shutting down (the quit
   Apple event's `kAEQuitReason`, or a `NSWorkspace.willPowerOffNotification` in the last 30 seconds, cleared when the app
   becomes active again; either signal is enough, `QuitPolicy.isSessionEnding`): then it quits without asking.
 - After the answer, it replies later: pending library saves finish and every running job is returned to the queue
-  (`AppModel.prepareForTermination` -> `JobQueue.shutdown`) before the app exits. The encoder removes its partial
+  (`ConvertModel.prepareForTermination` -> `JobQueue.shutdown`) before the app exits. The encoder removes its partial
   file when cancelled, and every job, the interrupted ones and the rest, is saved as `queued`
   (`quittingKeepsTheRunningJobAndTheRestOfTheQueueForNextLaunch`); Photos input in `Work/` is cleared by the next
   launch's sweep. They continue at the next launch (when auto-start is on).
@@ -93,7 +94,7 @@ not exist yet. Change a rule only together with its test.
   will write to must have `volumeAvailableCapacityForImportantUsage` of at least what goes there plus a 1 GB margin
   (`DiskSpaceCheck.margin`). Needs on one volume add up.
   - A file job: the planner's estimated output on the output folder's volume, plus, for a Replace with an originals
-    backup, the original on the backup volume (`DownscaleRunner.convert`, after the plan and before the encoder
+    backup, the original on the backup volume (`ConvertRunner.convert`, after the plan and before the encoder
     starts).
   - A Photos job, before the download and before the job's folder is created: the video as Photos has it, plus the
     planner's estimate for the converted copy, on the Work volume (the converted copy goes to a chosen folder's
@@ -101,9 +102,9 @@ not exist yet. Change a rule only together with its test.
     converted size counts on the volume of `~/Pictures` too, and again with the real size right before the save);
     with a Replace and an originals backup, the original on the
     backup volume, and, for an edited video, a second copy of the original on the Work volume
-    (`PhotosDownscaleRunner.checkFreeSpaceBeforeDownload`). Skipped when Photos doesn't report the video's size. Once
+    (`PhotosConvertRunner.checkFreeSpaceBeforeDownload`). Skipped when Photos doesn't report the video's size. Once
     the video is read, the exact estimate is checked again as for a file.
-  - The originals backup copy checks its folder's volume right before copying (`DownscaleRunner.backUp`); a failure
+  - The originals backup copy checks its folder's volume right before copying (`ConvertRunner.backUp`); a failure
     keeps the original and says so, like any backup failure.
   - On failure the job fails with `NotEnoughSpaceError`: "Not enough free space on <volume> (needs about X, has Y)"
     (the volume's localized name, `ByteCountFormatter` sizes). Nothing was written, so Retry works. A volume that

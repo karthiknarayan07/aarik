@@ -39,7 +39,7 @@ enum QuitConfirmation {
     static func confirmStop(queueStartsAutomatically: Bool, automaticPause: AutoPauseReason?) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Stop converting and quit?"
+        alert.messageText = "Stop Converting and Quit?"
         alert.informativeText = QuitPolicy.explanation(
             appName: AppInfo.displayName, queueStartsAutomatically: queueStartsAutomatically,
             automaticPause: automaticPause)

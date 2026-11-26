@@ -163,7 +163,7 @@
                         Text("Access to Photos is off, so its videos aren't included.")
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Open Photos Settings") { PrivacySettings.open(PrivacySettings.photos) }
+                        Button("Open System Settings…") { PrivacySettings.open(PrivacySettings.photos) }
                     }
                 }
             }
@@ -440,7 +440,7 @@
                         .accessibilityHint("Shows the system prompt to allow access to your Photos library")
                 }
                 if model.photos.authorization == .denied {
-                    Button("Open Photos Settings") { PrivacySettings.open(PrivacySettings.photos) }
+                    Button("Open System Settings…") { PrivacySettings.open(PrivacySettings.photos) }
                 }
                 Button("Add Local Files…") {
                     model.selection = .localFiles

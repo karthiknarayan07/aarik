@@ -24,7 +24,7 @@ not in the code yet.
   next waiting one start. Pause, cancel (one job or all), quit and the automatic hold act on every running job.
   Progress from all running jobs shares the one throttle; the queue's progress is their mean.
 - **One download at a time.** Whatever the concurrency, Photos jobs fetch one at a time (`DownloadGate` in
-  `PhotosDownscaleRunner`, also for the backup's fetch of an original): the others show "Waiting for another
+  `PhotosConvertRunner`, also for the backup's fetch of an original): the others show "Waiting for another
   download…" and can be cancelled while they wait. Converting and saving still overlap with another job's download.
 - **Progress throttle.** Progress alone is published to the UI at most every 100 ms (`progressInterval`); state
   changes go out immediately.
@@ -71,9 +71,9 @@ The names are stable; `PipelineStage` is the list and a test pins it. Adding a s
 | `transfer` | `DownscaleJob.run` | scaling one frame (`VTPixelTransferSession`) |
 | `encode` | `DownscaleJob.submitPending` | submitting one frame to `VTCompressionSession` |
 | `write` | `DownscaleJob.appendEncoded`, `run` | appending one encoded sample; finishing the file |
-| `verify` | `DownscaleRunner.convert` | reading the output back, and comparing it with the source |
-| `download` | `PhotosDownscaleRunner.fetchInput` | getting a Photos video onto this Mac (iCloud download, or copy, and an edit's render) |
-| `save` | `PhotosDownscaleRunner.saveToPhotos` | adding the new video to Photos and checking it |
+| `verify` | `ConvertRunner.convert` | reading the output back, and comparing it with the source |
+| `download` | `PhotosConvertRunner.fetchInput` | getting a Photos video onto this Mac (iCloud download, or copy, and an edit's render) |
+| `save` | `PhotosConvertRunner.saveToPhotos` | adding the new video to Photos and checking it |
 
 `read`, `transfer`, `encode` and `write` are per frame or sample, so a clip shows thousands of short intervals;
 `verify`, `download` and `save` are one per job. Beyond these, only `os.Logger` is used (`queue` category in

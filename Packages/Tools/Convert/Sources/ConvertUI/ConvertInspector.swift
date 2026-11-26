@@ -4,7 +4,7 @@ import AppUI
 import MediaEngine
 import SwiftUI
 
-/// The Convert part of the inspector, as `Form` sections: quality, Advanced, metadata and Save to.
+/// The Convert part of the inspector, as `Form` sections: quality, Advanced, metadata and Save To.
 /// It takes sizes and inventories only, so it knows nothing about where the videos come from.
 ///
 /// `preset` is the selection's preset: the one its videos share, nil when they differ ("Mixed"). Choosing one
@@ -88,7 +88,7 @@ public struct ConvertInspector: View {
                 }
             }
         }
-        Section("Save to") {
+        Section("Save To") {
             SaveDestinationPicker(location: $saveLocation)
         }
     }
@@ -111,7 +111,7 @@ private struct SelectionTotals: View {
         ).count
         let missing = sources.count - available.count
         LabeledContent(available.count == 1 ? "1 video" : "\(available.count) videos", value: ByteFormat.string(total))
-        LabeledContent("Could free about", value: ByteFormat.string(freed))
+        LabeledContent("Could Free About", value: ByteFormat.string(freed))
         if losing > 0 {
             StatusLabel(
                 losing == 1 ? "1 video will lose metadata" : "\(losing) videos will lose metadata",

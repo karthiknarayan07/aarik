@@ -448,9 +448,12 @@ public actor JobQueue {
     }
 
     /// Error domains the system owns (Foundation, AVFoundation, Photos, Core Media, Core Animation and the
-    /// reverse-DNS ones). A Swift error's domain is its type's name, which starts with a module name instead.
+    /// reverse-DNS ones). A Swift error's domain is `ModuleName.ErrorType`, which contains a dot and is never one of
+    /// the short prefix domains.
     private static func isSystemDomain(_ domain: String) -> Bool {
-        ["NS", "AV", "PH", "CM", "CA", "kCF", "com.apple."].contains { domain.hasPrefix($0) }
+        if domain.hasPrefix("com.apple.") { return true }
+        guard !domain.contains(".") else { return false }
+        return ["NS", "AV", "PH", "CM", "CA", "kCF"].contains { domain.hasPrefix($0) }
     }
 
     private func apply(_ disposition: Disposition, to id: UUID) {

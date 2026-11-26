@@ -31,9 +31,7 @@ import Testing
                 ToolSidebarSection(
                     title: "Two",
                     items: [
-                        ToolSidebarItem(
-                            id: "later", destination: nil, title: "Later", systemImage: "clock",
-                            availability: .comingSoon),
+                        ToolSidebarItem(id: "unselectable", destination: nil, title: "Header", systemImage: "clock"),
                         ToolSidebarItem(
                             id: "third", destination: .third, title: "Third", systemImage: "3.circle", progress: 0.5),
                     ]),
@@ -58,7 +56,7 @@ import Testing
         @Test func shellRendersTheModulesSectionsAndRowsInOrder() {
             let shell = shellModel(FakeModule())
             #expect(shell.sections.map(\.title) == ["One", "Two"])
-            #expect(shell.sections.flatMap(\.rows).map(\.item.title) == ["First", "Second", "Later", "Third"])
+            #expect(shell.sections.flatMap(\.rows).map(\.item.title) == ["First", "Second", "Header", "Third"])
         }
 
         @Test func shellOffersOnlyEnabledRowsForSelection() {
@@ -79,10 +77,10 @@ import Testing
             #expect(!shell.accepts(.third))
         }
 
-        @Test func rowsSpeakTheirTitleAsLabelAndTheirCountProgressAndAvailabilityAsValue() {
+        @Test func rowsSpeakTheirTitleAsLabelAndTheirCountAndProgressAsValue() {
             let items = FakeModule().sidebar.flatMap(\.items)
-            #expect(items.map(\.accessibilityLabel) == ["First", "Second", "Later", "Third"])
-            #expect(items.map(\.accessibilityValue) == ["", "4", "coming soon", "converting 50%"])
+            #expect(items.map(\.accessibilityLabel) == ["First", "Second", "Header", "Third"])
+            #expect(items.map(\.accessibilityValue) == ["", "4", "", "converting 50%"])
         }
 
         @Test func inspectorAvailabilityIsTheModulesCall() {

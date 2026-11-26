@@ -171,7 +171,7 @@ public final class ConvertModel {
     public func start() async {
         await services.start()
         if let message = services.queueLoadError, alert == nil {
-            alert = AppAlert(title: "Couldn't read the queue", message: message)
+            alert = AppAlert(title: "Couldn't Read the Queue", message: message)
         }
     }
 
@@ -198,7 +198,7 @@ public final class ConvertModel {
         selection = .localFiles
     }
 
-    /// Puts the Settings window's Save to default into the inspector.
+    /// Puts the Settings window's Save To default into the inspector.
     public func applyDefaultSaveLocation() {
         saveLocation = AppSettings.defaultSaveLocation(defaults)
     }

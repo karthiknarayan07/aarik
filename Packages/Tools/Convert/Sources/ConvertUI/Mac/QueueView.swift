@@ -8,7 +8,10 @@
     extension View {
         /// What every Activity list does with its selection, from `JobListActions`: a context menu on the selected
         /// rows, double-click and Return for the primary action, and Delete.
-        func jobListActions(model: ConvertModel, kind: JobListKind, selection: Set<UUID>) -> some View {
+        func jobListActions(
+            model: ConvertModel, kind: JobListKind, selection: Set<UUID>,
+            onDelete: ((Set<UUID>) -> Void)? = nil
+        ) -> some View {
             contextMenu(forSelectionType: UUID.self) { ids in
                 ForEach(model.contextMenu(for: ids, in: kind), id: \.action) { command in
                     Button(command.title) { model.perform(command.action, on: ids, in: kind) }
@@ -16,7 +19,9 @@
             } primaryAction: { ids in
                 model.performPrimaryAction(on: ids, in: kind)
             }
-            .onDeleteCommand { model.performDelete(on: selection, in: kind) }
+            .onDeleteCommand {
+                if let onDelete { onDelete(selection) } else { model.performDelete(on: selection, in: kind) }
+            }
         }
     }
 
@@ -24,7 +29,27 @@
     struct QueueView: View {
         let model: ConvertModel
         @State private var isConfirmingCancelAll = false
+        @State private var pendingRunningRemoval: Set<UUID>?
         @State private var selection = Set<UUID>()
+
+        private var isConfirmingRunningRemoval: Binding<Bool> {
+            Binding {
+                pendingRunningRemoval != nil
+            } set: { shown in
+                if !shown { pendingRunningRemoval = nil }
+            }
+        }
+
+        private func deleteSelection(_ ids: Set<UUID>) {
+            let includesRunning = model.jobs(withIDs: ids).contains {
+                if case .running = $0.state { true } else { false }
+            }
+            if includesRunning {
+                pendingRunningRemoval = ids
+            } else {
+                model.performDelete(on: ids, in: .queue)
+            }
+        }
 
         var body: some View {
             let jobs = model.queuedJobs
@@ -43,7 +68,7 @@
                             }
                         }
                     }
-                    .jobListActions(model: model, kind: .queue, selection: selection)
+                    .jobListActions(model: model, kind: .queue, selection: selection, onDelete: deleteSelection)
                 }
             }
             .navigationTitle("Queue")
@@ -65,6 +90,15 @@
                 Button("Keep Converting", role: .cancel) {}
             } message: {
                 Text("Waiting videos leave the queue and the current conversion stops. Originals aren't touched.")
+            }
+            .confirmationDialog("Cancel Running Conversion?", isPresented: isConfirmingRunningRemoval) {
+                Button("Cancel Conversion", role: .destructive) {
+                    if let ids = pendingRunningRemoval { model.performDelete(on: ids, in: .queue) }
+                    pendingRunningRemoval = nil
+                }
+                Button("Keep Converting", role: .cancel) { pendingRunningRemoval = nil }
+            } message: {
+                Text("Stopping a running conversion removes it from the queue. Originals aren't touched.")
             }
         }
     }

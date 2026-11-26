@@ -30,10 +30,8 @@ private struct SidebarRow<Module: MacToolScene>: View {
     let row: ToolSidebarModel<Module.Destination>.Row
 
     var body: some View {
-        if row.isSelectable, let destination = row.item.destination {
+        if let destination = row.item.destination {
             available(destination)
-        } else {
-            unavailable
         }
     }
 
@@ -56,23 +54,6 @@ private struct SidebarRow<Module: MacToolScene>: View {
         .accessibilityValue(item.accessibilityValue)
         .modifier(RowContextMenu(module: module, destination: destination))
         .modifier(RowFileDrop(module: module, destination: destination))
-    }
-
-    private var unavailable: some View {
-        let item = row.item
-        return HStack {
-            Label(item.title, systemImage: item.systemImage)
-            Spacer()
-            Text("Soon")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .foregroundStyle(.secondary)
-        .disabled(true)
-        .selectionDisabled()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(item.accessibilityLabel)
-        .accessibilityValue(item.accessibilityValue)
     }
 }
 

@@ -67,15 +67,9 @@ public struct VideoSidebarState: Sendable, Equatable {
     }
 }
 
-/// The video tool's sidebar: Library, Media types (only the types present), Tools and Activity.
+/// The video tool's sidebar: Library, Media Types (only the types present), and Activity.
 public enum VideoSidebar {
     public static let tools: [ToolDescriptor] = [ConvertTool.descriptor]
-
-    /// Shown disabled with a "Soon" label until they ship.
-    public static let comingSoon: [ToolDescriptor] = [
-        ToolDescriptor(id: "convert-image", name: "Convert Image", symbol: "photo", category: .image),
-        ToolDescriptor(id: "pdf-tools", name: "PDF Tools", symbol: "doc.richtext", category: .pdf),
-    ]
 
     public static func tool(withID id: String) -> ToolDescriptor? {
         tools.first { $0.id == id }
@@ -98,15 +92,13 @@ public enum VideoSidebar {
                     title: "Media Types",
                     items: badges.map { item(.mediaType($0), count: state.badgeCounts[$0] ?? 0) }))
         }
-        sections.append(
-            ToolSidebarSection(
-                title: "Tools",
-                items: tools.map { item(.tool($0.id)) }
-                    + comingSoon.map {
-                        ToolSidebarItem(
-                            id: $0.id, destination: nil, title: $0.name, systemImage: $0.symbol,
-                            availability: .comingSoon)
-                    }))
+        // Only show a Tools section once more than one tool ships (N15).
+        if tools.count > 1 {
+            sections.append(
+                ToolSidebarSection(
+                    title: "Tools",
+                    items: tools.map { item(.tool($0.id)) }))
+        }
         let activity = state.activity
         sections.append(
             ToolSidebarSection(
