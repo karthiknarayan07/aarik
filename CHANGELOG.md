@@ -9,6 +9,11 @@ First public release.
 
 ### Added
 
+- **Quick runs:** shrink videos without opening the window, from a Dock drop or Open With, a menu bar item (drop videos
+  on the icon or its popover, or choose them), the Shrink Videos action and Finder's Services menu. A quick run never
+  replaces an original, skips videos that would lose metadata and ends with one notification. The menu bar popover
+  lists overlapping runs together, and Settings has rows for the menu bar, notifications, Finder and Services. See
+  "Quick runs" in the README.
 - **Long batches survive sleep, heat and low battery:** the Mac stays awake while videos convert (the display may
   still sleep). A hot Mac converts one video at a time, then pauses ("Paused while your Mac cools down") and resumes
   by itself. On battery, conversion pauses at 20 % ("Paused: battery low") and resumes when you plug in or it is above
