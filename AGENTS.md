@@ -34,6 +34,16 @@ scripts/run-app.sh                                   # build Debug and open it
 
 Format with `swift format -i <files>`. Do not open or launch the app from an automated run unless asked.
 
+## Verifying
+
+`scripts/verify.sh` is the one command for the base gate and what CI calls. It runs, for every `Packages/**/Package.swift`,
+`swift test`, the warnings-as-errors build and the tests on an iOS Simulator (found by UDID, iPhone 17 Pro preferred), then
+`swift format lint --strict`, the Mac Debug and Release builds, the iOS app build and test, a brand-neutral check
+(no product name in source, plists, projects or schemes under `Apps/` and `Packages/`) and a stale-path check. It prints a
+pass/fail table and exits non-zero on any failure; missing projects or packages are failures, not skips.
+`--only mac|ios|packages|lint|hygiene` runs a subset (CI uses `mac` and `ios`); `--repeat N` runs the whole suite N times
+(the gate uses 2). Logs and derived data go to `.build/verify`.
+
 ## Constraints
 
 - Swift 6, complete strict concurrency, **zero warnings** (warnings are errors in the app and in CI packages).
