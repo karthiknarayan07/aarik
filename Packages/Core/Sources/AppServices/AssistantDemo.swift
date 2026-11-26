@@ -71,9 +71,21 @@
                         "I can search your library, estimate savings and explain results. What would you like to know?")
                 ]
             }
-            return AssistantChat(
+            let chat = AssistantChat(
                 client: client, availability: AssistantAvailability(client: client, observesActivation: false),
                 store: ChatStore(directory: nil), tools: { tools })
+            // `-AssistantDemoAsk "first|second"` asks these in turn at launch, for screenshots.
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "-AssistantDemoAsk"), arguments.indices.contains(index + 1) {
+                let prompts = arguments[index + 1].split(separator: "|").map(String.init)
+                Task {
+                    for prompt in prompts {
+                        chat.send(prompt)
+                        await chat.waitUntilIdle()
+                    }
+                }
+            }
+            return chat
         }
     }
 #endif

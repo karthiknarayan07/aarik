@@ -104,9 +104,15 @@ struct IOSRootView: View {
     private func restore() {
         guard !hasRestored else { return }
         hasRestored = true
-        if let restored = IOSTab(rawValue: storedTab), restored != .ask || shell.convert.assistant.isAvailable {
+        if let restored = IOSTab(rawValue: storedTab),
+            restored != .ask || shell.services.assistantAvailability.isAvailable
+        {
             tab = restored
         }
+        #if DEBUG
+            // The demo launch (a scripted assistant, for screenshots) opens on Ask.
+            if CommandLine.arguments.contains("-AssistantDemo") { tab = .ask }
+        #endif
         if shell.scenes.contains(where: { $0.id == storedTool }) { toolsPath = [ToolRoute(toolID: storedTool)] }
     }
 }
