@@ -36,6 +36,43 @@ extension ConvertModel {
 
     public var queuedJobs: [Job] { jobs.filter(\.state.isPending) }
 
+    /// Videos are waiting and the user hasn't started the run: the Queue offers Start. (Paused mid-run, with a job
+    /// still converting, it offers Resume instead.)
+    public var waitsForStart: Bool {
+        queuePause.isPausedByUser && jobs.contains { $0.state == .queued }
+            && !jobs.contains {
+                if case .running = $0.state { return true }
+                return false
+            }
+    }
+
+    /// What the waiting videos would save together, from the estimates made when they were added; videos without
+    /// one (added by a hand-off, or before estimates were kept) add nothing.
+    public var queuedSavingEstimate: Int64 {
+        queuedJobs.reduce(into: Int64(0)) { total, job in
+            guard job.toolID == ConvertTool.toolID || job.toolID == ConvertTool.photosToolID,
+                let settings = try? JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
+            else { return }
+            total += settings.estimatedSavedBytes ?? 0
+        }
+    }
+
+    /// A video the share sheet or an intent handed over: queued with the current settings, and only queued; the
+    /// user starts the run from the Queue (unless Auto-start is on).
+    public func queueHandedOff(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let destination = effectiveFileDestination ?? .documents
+        let settings = ConvertJobSettings(kind: .shrink, preset: preset, saveTo: destination, custom: advanced.spec)
+        let batch = JobFactory.makeJobs(for: urls, settings: settings)
+        guard !batch.jobs.isEmpty else { return }
+        let start = takeStartsQueue()
+        if start { isQueuePaused = false }
+        services.send { queue in
+            _ = await queue.enqueue(batch.jobs)
+            if start { await queue.resume() }
+        }
+    }
+
     // The finished lists show the most recently added first.
 
     public var completedJobs: [(job: Job, outcome: JobOutcome)] {
@@ -62,6 +99,8 @@ extension ConvertModel {
     // MARK: - Queue commands (the shared queue's)
 
     public func toggleQueuePaused() { services.toggleQueuePaused() }
+    /// The Queue page's Start: works through what waits.
+    public func startQueue() { services.startQueue() }
     public func remove(_ job: Job) { services.remove(job) }
     public func cancel(_ job: Job) { services.cancel(job) }
     public func cancelAll() { services.cancelAll() }

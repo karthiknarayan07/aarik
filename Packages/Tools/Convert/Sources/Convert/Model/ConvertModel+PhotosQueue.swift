@@ -117,17 +117,22 @@ extension ConvertModel {
         _ items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset], batch: PhotosBatch
     ) {
         replaceConsent.videosAdded()
+        let savings = estimatedSavings(for: items, settings: settings, presets: presets)
         let jobs = PhotosJobFactory.makeJobs(
             for: items.compactMap { item in
                 item.photosIdentifier.map {
                     (assetID: $0, name: item.name, preset: presets[item.id] ?? settings.preset)
                 }
-            }, settings: settings, destination: batch.destination, lost: batch.lost)
-        let autoStart = services.settings.autoStartQueue
-        if autoStart { isQueuePaused = false }
+            }, settings: settings, destination: batch.destination, lost: batch.lost,
+            savings: Dictionary(
+                items.compactMap { item in
+                    item.photosIdentifier.flatMap { id in savings[item.id].map { (id, $0) } }
+                }, uniquingKeysWith: { first, _ in first }))
+        let start = takeStartsQueue()
+        if start { isQueuePaused = false }
         services.send { [weak self] queue in
             let added = await queue.enqueue(jobs)
-            if autoStart { await queue.resume() }
+            if start { await queue.resume() }
             let alreadyQueued = jobs.count - added.count
             await MainActor.run {
                 self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: 0, missing: 0)

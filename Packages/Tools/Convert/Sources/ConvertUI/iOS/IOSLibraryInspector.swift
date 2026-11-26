@@ -25,9 +25,15 @@
                             }
                             if model.canAddSelectionToQueue {
                                 ToolbarItem(placement: .confirmationAction) {
-                                    Button("Add to Queue") {
-                                        dismiss()
-                                        model.requestAddSelectionToQueue()
+                                    Menu("Add") {
+                                        Button("Add to Queue", systemImage: "text.badge.plus") {
+                                            dismiss()
+                                            model.requestAddSelectionToQueue(startsQueue: false)
+                                        }
+                                        Button("Convert Now", systemImage: "play.fill") {
+                                            dismiss()
+                                            model.convertSelectionNow()
+                                        }
                                     }
                                     .buttonStyle(.glassProminent)
                                 }

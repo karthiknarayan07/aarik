@@ -70,9 +70,16 @@ extension ConvertModel {
         requestAddSelectionToQueue(kind: .compress(compressPreset))
     }
 
-    /// Asks for confirmation before the first Replace of the session, otherwise adds right away.
-    public func requestAddSelectionToQueue(kind: ConvertJobKind = .shrink) {
+    /// Convert Now: adds the selection and starts the queue, whatever the Auto-start setting says.
+    public func convertSelectionNow() {
+        requestAddSelectionToQueue(startsQueue: true)
+    }
+
+    /// Asks for confirmation before the first Replace of the session, otherwise adds right away. `startsQueue`
+    /// says whether the queue starts with the add; nil follows the Auto-start setting (on for the Mac, off on iOS).
+    public func requestAddSelectionToQueue(kind: ConvertJobKind = .shrink, startsQueue: Bool? = nil) {
         guard canAddSelectionToQueue else { return }
+        addStartsQueue = startsQueue
         let replaces =
             isPhotosPage ? photosSaveLocation.choice == .replace : effectiveFileDestination == .replace
         if replaces, replaceConsent.needsAsking {
@@ -161,6 +168,7 @@ extension ConvertModel {
     public func cancelLossReview() {
         guard lossReview != nil else { return }
         lossReview = nil
+        addStartsQueue = nil
         replaceConsent.abandon()
     }
 
@@ -171,24 +179,56 @@ extension ConvertModel {
         losses: [URL: PredictedLoss<UUID>], missing: Int
     ) {
         replaceConsent.videosAdded()
+        let savings = estimatedSavings(for: items, settings: settings, presets: presets)
         let batch = JobFactory.makeJobs(
             for: items.compactMap { item in
                 item.fileURL.map {
                     (url: $0, preset: presets[item.id] ?? settings.preset, bookmark: library.bookmark(for: item.id))
                 }
             }, settings: settings,
-            losses: losses)
-        let autoStart = services.settings.autoStartQueue
-        if autoStart { isQueuePaused = false }
+            losses: losses,
+            savings: Dictionary(
+                items.compactMap { item in item.fileURL.flatMap { url in savings[item.id].map { (url, $0) } } },
+                uniquingKeysWith: { first, _ in first }))
+        let start = takeStartsQueue()
+        if start { isQueuePaused = false }
         services.send { [weak self] queue in
             let added = await queue.enqueue(batch.jobs)
-            if autoStart { await queue.resume() }
+            if start { await queue.resume() }
             let alreadyQueued = batch.jobs.count - added.count
             await MainActor.run {
                 self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: batch.skipped.count, missing: missing)
             }
         }
         host.requestNotificationAuthorization()
+    }
+
+    /// Whether this add starts the queue (Convert Now, or the Auto-start setting when the add didn't say); each
+    /// add decides once.
+    func takeStartsQueue() -> Bool {
+        defer { addStartsQueue = nil }
+        return addStartsQueue ?? services.settings.autoStartQueue
+    }
+
+    /// What converting each video would save with its preset, by library item id; videos that would be kept as
+    /// they are have none.
+    func estimatedSavings(
+        for items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset]
+    ) -> [UUID: Int64] {
+        var result: [UUID: Int64] = [:]
+        for item in items {
+            let freed: Int64
+            switch settings.kind {
+            case .shrink:
+                freed = SavingsCalculator.couldFreeBytes(
+                    for: [(source: item.savingsSource, preset: presets[item.id] ?? settings.preset)],
+                    custom: settings.custom)
+            case .compress(let compressPreset):
+                freed = SavingsCalculator.couldFreeBytes(for: [item.savingsSource], compressPreset: compressPreset)
+            }
+            if freed > 0 { result[item.id] = freed }
+        }
+        return result
     }
 
     public func showAddNotice(alreadyQueued: Int, unreadable: Int, missing: Int) {

@@ -37,9 +37,13 @@ final class IOSShell {
                 defaults.set(false, forKey: IOSOnboarding.completedKey)
             }
         #endif
+        // On iOS a run starts only when the person starts it (Convert Now, or Start on the Queue): it holds a Live
+        // Activity and background time. The Mac's auto-start setting, if an earlier build stored one, doesn't apply.
+        defaults.removeObject(forKey: SettingsStore.Keys.autoStartQueue)
         let services = AppServices(
             directory: directory, defaults: defaults, photoStore: photoStore,
-            assistantClient: AppServices.assistantClient(arguments: ProcessInfo.processInfo.arguments))
+            assistantClient: AppServices.assistantClient(arguments: ProcessInfo.processInfo.arguments),
+            autoStartDefault: false)
         let convert = ConvertModel(services: services)
         self.services = services
         self.convert = convert

@@ -207,6 +207,13 @@ public struct Job: Codable, Sendable, Identifiable, Equatable {
         self.phase = phase
     }
 
+    /// Whether the running job is fetching its input ("Downloading from iCloud…", or "Waiting for another download…"
+    /// for its turn) rather than converting. The run is still under way: lists and the Live Activity say so.
+    public var isDownloading: Bool {
+        guard case .running = state, let phase else { return false }
+        return phase.localizedCaseInsensitiveContains("download")
+    }
+
     /// The file the job worked on: the one its finished run read when that is known, else its recorded path.
     public var sourceUsed: URL {
         if case .completed(let outcome) = state, let source = outcome.source { return source }

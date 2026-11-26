@@ -37,7 +37,7 @@ public enum JobFactory {
 
     public static func makeJobs(
         for sources: [(url: URL, preset: Preset, bookmark: Data?)], settings: ConvertJobSettings,
-        losses: [URL: PredictedLoss<UUID>]? = nil, now: Date = Date()
+        losses: [URL: PredictedLoss<UUID>]? = nil, savings: [URL: Int64] = [:], now: Date = Date()
     ) -> JobBatch {
         var batch = JobBatch(jobs: [], skipped: [])
         for (url, preset, storedBookmark) in sources {
@@ -52,6 +52,7 @@ public enum JobFactory {
             settings.preset = preset
             settings.predictedLost = losses.map { $0[url]?.lost ?? [] }
             settings.predictedLostKeys = losses.map { $0[url]?.keys ?? [] }
+            settings.estimatedSavedBytes = savings[url]
             guard let encoded = try? JSONEncoder().encode(settings) else {
                 batch.skipped.append(url)
                 continue

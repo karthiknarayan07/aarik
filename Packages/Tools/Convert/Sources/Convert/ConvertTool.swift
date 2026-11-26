@@ -42,12 +42,15 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
     /// For a Photos job: the video's file name in Photos, for showing in the lists (the job's source is an
     /// address, not a file).
     public var photosFileName: String?
+    /// What the planner estimated converting would save, when the job was added; the Queue's Start button adds
+    /// these up. Nil when unknown (an older job, or a video that would be kept as it is).
+    public var estimatedSavedBytes: Int64?
 
     public init(
         kind: ConvertJobKind = .shrink, preset: Preset = .balanced, saveTo: SaveDestination,
         custom: DownscaleSpec? = nil, predictedLost: [String]? = nil,
         predictedLostKeys: [String]? = nil, photosDestination: PhotosDestination? = nil,
-        photosFileName: String? = nil
+        photosFileName: String? = nil, estimatedSavedBytes: Int64? = nil
     ) {
         self.kind = kind
         self.preset = preset
@@ -57,6 +60,7 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
         self.predictedLostKeys = predictedLostKeys
         self.photosDestination = photosDestination
         self.photosFileName = photosFileName
+        self.estimatedSavedBytes = estimatedSavedBytes
     }
 
     /// Jobs saved before `kind` existed have no `kind` key; they decode as `.shrink`.
@@ -70,6 +74,7 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
         predictedLostKeys = try container.decodeIfPresent([String].self, forKey: .predictedLostKeys)
         photosDestination = try container.decodeIfPresent(PhotosDestination.self, forKey: .photosDestination)
         photosFileName = try container.decodeIfPresent(String.self, forKey: .photosFileName)
+        estimatedSavedBytes = try container.decodeIfPresent(Int64.self, forKey: .estimatedSavedBytes)
     }
 
     public func spec(for inventory: MetadataInventory, byteSize: Int64) -> DownscaleSpec {

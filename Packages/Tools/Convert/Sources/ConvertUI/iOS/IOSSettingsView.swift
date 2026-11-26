@@ -13,7 +13,6 @@
         @Environment(\.dismiss) private var dismiss
 
         @AppStorage(AppSettings.Keys.preset) private var preset = Preset.balanced
-        @AppStorage(AppSettings.Keys.autoStartQueue) private var autoStart = true
         @AppStorage(AppSettings.Keys.speed) private var speed = SpeedSetting.default
         @AppStorage(AppSettings.Keys.defaultSaveTo) private var saveTo = SaveLocation.defaultChoice(for: .iOS)
         @AppStorage(AppSettings.Keys.defaultSaveFolder) private var saveFolder: Data?
@@ -42,13 +41,6 @@
                         Picker("Default Preset", selection: $preset) {
                             ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag($0) }
                         }
-                    }
-                    Section {
-                        Toggle("Start the Queue Automatically", isOn: $autoStart)
-                    } header: {
-                        Text("Queue")
-                    } footer: {
-                        Text("When off, the queue waits until you tap Resume.")
                     }
                     Section {
                         Picker("Conversion Speed", selection: $speed) {

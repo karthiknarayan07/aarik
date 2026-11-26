@@ -160,3 +160,19 @@ private struct PlainRunner: JobRunner {
 
     #expect(added.count == 2)
 }
+
+@Test func aRunningJobFetchingItsInputIsDownloading() {
+    var job = makeJob()
+    #expect(!job.isDownloading)
+    job.state = .running(progress: 0.2)
+    job.phase = "Downloading from iCloud…"
+    #expect(job.isDownloading)
+    // Waiting for its turn at the one download at a time is still the download stage.
+    job.phase = "Waiting for another download…"
+    #expect(job.isDownloading)
+    job.phase = "Converting…"
+    #expect(!job.isDownloading)
+    job.phase = "Downloading from iCloud…"
+    job.state = .queued
+    #expect(!job.isDownloading)
+}

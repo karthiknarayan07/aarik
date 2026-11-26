@@ -37,17 +37,21 @@ class AppTestCase: XCTestCase {
         try? FileManager.default.removeItem(atPath: supportDirectory)
     }
 
-    /// Launches the app. `autoStart` false keeps the queue paused so a queued job stays queued; `contentSize` is a
+    /// Launches the app. A run starts only when the test starts it (Convert Now, or Start on the Queue), like the
+    /// app's own default on iOS; `autoStart` true is the Mac's behaviour, for a test that needs it. `runActive` is the
+    /// remembered "a run was under way" flag: false (the default) isolates a launch from earlier tests, nil lets the
+    /// app read what an earlier launch left (a relaunch after a kill mid-run). `contentSize` is a
     /// `UICTContentSizeCategory…` name.
     func launch(
-        autoStart: Bool = true, contentSize: String? = nil, pinSpeed: Bool = true, extraArguments: [String] = [],
-        terminateFirst: Bool = false, onboarding: Bool = false
+        autoStart: Bool = false, contentSize: String? = nil, pinSpeed: Bool = true, extraArguments: [String] = [],
+        terminateFirst: Bool = false, onboarding: Bool = false, runActive: Bool? = false
     ) {
         if terminateFirst { app.terminate() }
         var arguments = [
             "-uiTesting", supportDirectory, "-uiTestingHandoff", handoffDirectory,
             "-queue.autoStart", autoStart ? "<true/>" : "<false/>",
         ]
+        if let runActive { arguments += ["-queue.runActive", runActive ? "<true/>" : "<false/>"] }
         // The first-launch introduction would cover every test's first screen; only its own test shows it.
         if !onboarding { arguments += ["-onboarding.completed", "<true/>"] }
         if pinSpeed { arguments += ["-performance.speed", "balanced"] }
@@ -135,16 +139,18 @@ class AppTestCase: XCTestCase {
 
     // MARK: Flows
 
-    /// Opens Photos, taps the named fixture (which opens its page, with a zoom) and adds it to the queue there.
+    /// Opens Photos, taps the named fixture (which opens its page, with a zoom) and adds it to the queue there:
+    /// Add to Queue only queues it, `convertNow` also starts the run.
     func queuePhotosFixture(
-        _ name: String = AppTestCase.photosFixture, file: StaticString = #filePath, line: UInt = #line
+        _ name: String = AppTestCase.photosFixture, convertNow: Bool = false, file: StaticString = #filePath,
+        line: UInt = #line
     ) {
         open("Photos", file: file, line: line)
         let tile = tile(named: name)
         XCTAssertTrue(tile.waitForExistence(timeout: 30), "\(name) isn't in the Photos grid", file: file, line: line)
         scrollToHittable(tile)
         tile.tap()
-        let add = app.buttons["detail.addToQueue"].firstMatch
+        let add = app.buttons[convertNow ? "detail.convertNow" : "detail.addToQueue"].firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 10), "\(name) didn't open its page", file: file, line: line)
         if !add.isEnabled {
             dump("Add to Queue disabled on the video's page")

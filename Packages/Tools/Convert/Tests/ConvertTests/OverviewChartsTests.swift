@@ -98,10 +98,14 @@ import Testing
         #expect(charts.savedThisMonth(calendar: Self.calendar, now: october) == 8_000)
     }
 
-    @Test func selectionTitleNamesTheCountAndTheSaving() {
-        #expect(QueueButtonTitle.selectionTitle(count: 1, saved: nil) == "Convert 1 Video")
-        #expect(QueueButtonTitle.selectionTitle(count: 3, saved: nil) == "Convert 3 Videos")
-        #expect(
-            QueueButtonTitle.selectionTitle(count: 2, saved: "1.5 GB") == "Convert 2 Videos · Save 1.5 GB")
+    @Test func selectionSummaryNamesTheCountAndTheSaving() {
+        #expect(QueueButtonTitle.selectionSummary(count: 1, saved: nil) == "1 Video")
+        #expect(QueueButtonTitle.selectionSummary(count: 3, saved: nil) == "3 Videos")
+        #expect(QueueButtonTitle.selectionSummary(count: 2, saved: "1.5 GB") == "2 Videos · Save 1.5 GB")
+    }
+
+    @Test func startTitleNamesTheSavingWhenKnown() {
+        #expect(QueueButtonTitle.startTitle(saved: nil) == "Start")
+        #expect(QueueButtonTitle.startTitle(saved: "1.5 GB") == "Start · Save 1.5 GB")
     }
 }

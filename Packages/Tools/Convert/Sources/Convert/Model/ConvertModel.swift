@@ -82,6 +82,10 @@ public final class ConvertModel {
     public var isConfirmingReplace = false
     /// Which job kind triggered the Replace confirmation, so confirming starts the same operation.
     @ObservationIgnored var pendingReplaceKind: ConvertJobKind = .shrink
+    /// Whether the add in progress (it may wait on the Replace confirmation or the loss sheet) starts the queue:
+    /// Convert Now says yes, Add to Queue says no, and nil follows the Auto-start setting. Set by every request,
+    /// consumed when the jobs are added.
+    @ObservationIgnored var addStartsQueue: Bool?
     /// The first Replace in a session asks for confirmation; later ones don't, once videos were added with it.
     @ObservationIgnored public var replaceConsent = ReplaceConsent()
     /// Videos that would lose metadata, waiting for the user's decision before they are added (spec 8.4).
