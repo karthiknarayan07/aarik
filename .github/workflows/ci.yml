@@ -30,34 +30,28 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Lint
-        run: swift format lint --recursive --strict Packages/Core/Sources Packages/Core/Tests Packages/Tools/Convert/Sources Packages/Tools/Convert/Tests Apps/macOS/Sources Apps/iOS
+      - name: Verify (Mac)
+        run: scripts/verify.sh --only mac
 
-      - name: Build Core
-        working-directory: Packages/Core
-        run: swift build -Xswiftc -warnings-as-errors --build-tests
+  build-test-ios:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Test Core
-        working-directory: Packages/Core
-        run: swift test
-
-      - name: Build Convert
-        working-directory: Packages/Tools/Convert
-        run: swift build -Xswiftc -warnings-as-errors --build-tests
-
-      - name: Test Convert
-        working-directory: Packages/Tools/Convert
-        run: swift test
-
-      - name: Build app (Release)
+      - name: Select newest Xcode
         run: |
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
-            -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -z "$newest" ]]; then
+            echo "No versioned Xcode found under /Applications" >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
 
-      - name: Build iOS app (Simulator)
-        run: |
-          xcodebuild -workspace App.xcworkspace -scheme App-iOS -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      # The simulator is picked by UDID from `simctl list devices available` (iPhone 17 Pro if present).
+      - name: Verify (iOS)
+        run: scripts/verify.sh --only ios
 
   sanitizers:
     # Thread and address sanitizer runs of the package tests, one job each.
