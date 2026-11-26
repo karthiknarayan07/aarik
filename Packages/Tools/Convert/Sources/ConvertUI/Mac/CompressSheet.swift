@@ -79,7 +79,7 @@
                     }
 
                     Section {
-                        LabeledContent("Save to", value: destinationText)
+                        LabeledContent("Save To", value: destinationText)
                     } footer: {
                         if model.isPhotosPage {
                             Text("Details and exact savings are checked when each video is converted.")

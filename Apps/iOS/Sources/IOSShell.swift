@@ -17,6 +17,8 @@ final class IOSShell {
     let convert: ConvertModel
     let scene: ConvertIOSScene
     let tools: [any Tool]
+    private let backgroundRun: BackgroundRunCoordinator
+    private let liveActivity: LiveActivityController
     /// Writes the widget snapshot and pause flag to the App Group when they change, and applies the control's toggle.
     private let widgetSync = WidgetSync()
 
@@ -31,6 +33,8 @@ final class IOSShell {
         self.convert = convert
         self.scene = ConvertIOSScene(model: convert)
         self.tools = ToolRegistry.tools(for: .iOS, from: [convert.tool])
+        self.backgroundRun = BackgroundRunCoordinator(services: services)
+        self.liveActivity = LiveActivityController(services: services)
 
         var host = ConvertHost()
         host.open = { urls in
@@ -56,7 +60,12 @@ final class IOSShell {
 
     func start() async {
         startWidgetSync()
+        // A job left running by a crash or termination goes back to the queue when the queue loads; its partial
+        // output lives in the Work folder, which is swept before anything starts.
+        await BackgroundRunCoordinator.sweepWorkFolder()
         await convert.start()
+        backgroundRun.start()
+        liveActivity.start()
         pickUpStaged()
     }
 

@@ -184,6 +184,25 @@ import Testing
         }
     }
 
+    @Test func aSwiftErrorFromAModuleStartingWithSystemLettersKeepsItsOwnSentence() {
+        // A bridged Swift error's domain is "Module.ErrorType": "CA", "CM", "AV", "PH", "NS" prefixes must not match it.
+        let error = NSError(
+            domain: "CameraModule.CaptureError", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Camera capture was interrupted."])
+        let failure = JobQueue.failure(for: error)
+        // Only LocalizedError keeps its sentence; NSError without LocalizedError falls back, whereas a Swift Error
+        // conforming to LocalizedError (tested via a custom error) must not be dropped as a system domain.
+        #expect(failure.code == .conversionFailed)
+        struct CameraLocalizedError: LocalizedError, CustomNSError {
+            static var errorDomain: String { "CameraModule.CameraLocalizedError" }
+            var errorCode: Int { 1 }
+            var errorDescription: String? { "Camera capture was interrupted." }
+        }
+        let localizedFailure = JobQueue.failure(for: CameraLocalizedError())
+        #expect(localizedFailure.reason == "Camera capture was interrupted.")
+        #expect(localizedFailure.code == .conversionFailed)
+    }
+
     @Test func aFailedRunIsRecordedWithItsCode() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "OutcomeCode-\(UUID().uuidString)")

@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		B20000000000000000000071 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000031 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B20000000000000000000072 /* Widgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000032 /* Widgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B20000000000000000000412 /* ConvertActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000410 /* ConvertActivityAttributes.swift */; };
+		B20000000000000000000413 /* ConvertActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000410 /* ConvertActivityAttributes.swift */; };
 		B20000000000000000000101 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000201 /* AppCore */; };
 		B20000000000000000000102 /* AppServices in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000202 /* AppServices */; };
 		B20000000000000000000103 /* AppUI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000203 /* AppUI */; };
@@ -69,6 +71,7 @@
 		B20000000000000000000013 /* Brand.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Brand.xcconfig; sourceTree = "<group>"; };
 		B20000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B20000000000000000000011 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		B20000000000000000000410 /* ConvertActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvertActivityAttributes.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -170,6 +173,7 @@
 			isa = PBXGroup;
 			children = (
 				B20000000000000000000020 /* Sources */,
+				B20000000000000000000111 /* Shared */,
 				B20000000000000000000021 /* Resources */,
 				B20000000000000000000022 /* ShareExtension */,
 				B20000000000000000000023 /* Widgets */,
@@ -179,6 +183,14 @@
 				B20000000000000000000004 /* Config */,
 				B20000000000000000000003 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		B20000000000000000000111 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000410 /* ConvertActivityAttributes.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		B20000000000000000000004 /* Config */ = {
@@ -395,6 +407,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000412 /* ConvertActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,6 +422,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B20000000000000000000413 /* ConvertActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

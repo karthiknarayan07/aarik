@@ -2,12 +2,6 @@ import Foundation
 
 /// One row of a tool's sidebar. The shell draws the rows; the tool says what they are.
 public struct ToolSidebarItem<Destination: Hashable & Sendable>: Identifiable, Hashable, Sendable {
-    public enum Availability: Hashable, Sendable {
-        case available
-        /// Shown disabled and not selectable.
-        case comingSoon
-    }
-
     public let id: String
     /// Nil for a row that can't be selected.
     public let destination: Destination?
@@ -17,11 +11,10 @@ public struct ToolSidebarItem<Destination: Hashable & Sendable>: Identifiable, H
     public let count: Int?
     /// A running job's progress, from 0 to 1; shows a small ring.
     public let progress: Double?
-    public let availability: Availability
 
     public init(
         id: String, destination: Destination?, title: String, systemImage: String, count: Int? = nil,
-        progress: Double? = nil, availability: Availability = .available
+        progress: Double? = nil
     ) {
         self.id = id
         self.destination = destination
@@ -29,15 +22,13 @@ public struct ToolSidebarItem<Destination: Hashable & Sendable>: Identifiable, H
         self.systemImage = systemImage
         self.count = count
         self.progress = progress
-        self.availability = availability
     }
 
     /// What VoiceOver reads for the row: its title.
     public var accessibilityLabel: String { title }
 
-    /// What VoiceOver reads after the title: the count and the running progress, or that the tool is coming soon.
+    /// What VoiceOver reads after the title: the count and the running progress.
     public var accessibilityValue: String {
-        if availability == .comingSoon { return "coming soon" }
         var parts: [String] = []
         if let count { parts.append("\(count)") }
         if let progress { parts.append("converting \(Int((progress * 100).rounded()))%") }
@@ -65,7 +56,7 @@ public struct ToolSidebarModel<Destination: Hashable & Sendable>: Equatable {
         public var id: String { item.id }
         /// The value the row selects; nil for a row that can't be selected.
         public var tag: Destination? { isSelectable ? item.destination : nil }
-        public var isSelectable: Bool { item.availability == .available && item.destination != nil }
+        public var isSelectable: Bool { item.destination != nil }
     }
 
     public struct Section: Identifiable, Equatable {

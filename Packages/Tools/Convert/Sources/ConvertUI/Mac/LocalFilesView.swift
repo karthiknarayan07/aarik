@@ -83,8 +83,7 @@
         /// "218 of 1,203 videos · 29.8 GB · 3 selected, 1.2 GB"; what is still being read goes at the end.
         private var subtitle: String {
             guard !model.library.items.isEmpty else { return "" }
-            let badge = model.badgeFilter
-            let total = model.library.items.count { item in badge.map(item.badges.contains) ?? true }
+            let total = model.badgeFilter.map { model.library.badgeCounts[$0] ?? 0 } ?? model.library.items.count
             return model.subtitle(
                 for: model.browser, total: total, selected: model.selectedItems,
                 activity: model.library.isScanning ? "Scanning…" : nil)
@@ -99,8 +98,7 @@
             VStack {
                 welcome
                 if let error {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                    StatusLabel(error, systemImage: "exclamationmark.triangle", tint: .orange)
                         .padding()
                 }
             }
@@ -108,7 +106,7 @@
 
         private var welcome: some View {
             WelcomeState(
-                "Add videos from Finder", systemImage: "film.stack",
+                "Add Videos from Finder", systemImage: "film.stack",
                 lines: [
                     "Nothing changes until you add videos to the queue.",
                     "Converted copies keep the date, location and camera details.",

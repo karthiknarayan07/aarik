@@ -3,6 +3,7 @@ import Foundation
 import MediaEngine
 import MediaTestSupport
 import PhotosLibrary
+import Synchronization
 import Testing
 
 @testable import Convert
@@ -416,6 +417,64 @@ import Testing
 
         #expect(rig.store.saves.count == 1)
         await queue.shutdown()
+    }
+
+    @Test(.timeLimit(.minutes(5))) func twoPhotosJobsShareTheDownloadGateAndWaitInTurn() async throws {
+        let rig = try await PhotosRig()
+        let secondID = "7A2C9B3D-2E4F-5A6B-8C7D-1F3E5A7B9C2D/L0/001"
+        let secondAsset = PhotoAsset(
+            id: secondID, creationDate: rig.asset.creationDate, location: rig.asset.location,
+            pixelSize: rig.asset.pixelSize, duration: 1.0, isFavorite: false, hasAdjustments: false,
+            originalFileName: "IMG_0002.MOV", originalByteSize: rig.asset.originalByteSize,
+            isLocallyAvailable: false)
+        rig.store.assets = [rig.asset, secondAsset]
+        rig.store.originalFiles[secondID] = rig.clip
+        rig.store.currentVersionFiles[secondID] = rig.clip
+
+        let (holdFirst, releaseFirst) = AsyncStream.makeStream(of: Void.self)
+        let (firstStarted, firstStartedSink) = AsyncStream.makeStream(of: Void.self)
+        var firstIterator = firstStarted.makeAsyncIterator()
+        let heldOnce = Mutex(false)
+        rig.store.beforeInputStep = { step in
+            guard step == 1 else { return }
+            let shouldHold = heldOnce.withLock { held in
+                guard !held else { return false }
+                held = true
+                return true
+            }
+            guard shouldHold else { return }
+            firstStartedSink.yield()
+            for await _ in holdFirst { break }
+        }
+
+        let runner = rig.runner()
+        let job1 = try rig.job()
+        let job2 = try rig.job(id: secondID)
+        let log1 = RunLog()
+
+        let task1 = Task { try await log1.run(runner, job1) }
+        await firstIterator.next()
+
+        let (secondWaiting, secondWaitingSink) = AsyncStream.makeStream(of: Void.self)
+        var waitingIterator = secondWaiting.makeAsyncIterator()
+        let task2 = Task {
+            try await runner.run(
+                job2,
+                progress: { _ in },
+                phase: { phase in
+                    guard let phase else { return }
+                    if phase == PhotosConvertRunner.waitingPhase { secondWaitingSink.yield() }
+                })
+        }
+        await waitingIterator.next()
+        #expect(rig.store.inputRequests.count == 1)
+
+        releaseFirst.yield()
+        let state1 = try await task1.value
+        let state2 = try await task2.value
+        #expect(completed(state1) != nil)
+        #expect(completed(state2) != nil)
+        #expect(rig.store.inputRequests.count == 2)
     }
 
     private static func waitUntil(_ queue: JobQueue, _ predicate: @Sendable ([Job]) -> Bool) async {

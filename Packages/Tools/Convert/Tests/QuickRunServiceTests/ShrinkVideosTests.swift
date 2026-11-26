@@ -587,7 +587,7 @@ private enum Calendars {
             overrides: nil)
 
         #expect(receipt.queuedJobIDs.count == 1)
-        #expect(receipt.notes == ["Saved as new videos in Photos: the Save to folder is for files."])
+        #expect(receipt.notes == ["Saved as new videos in Photos: the Save To folder is for files."])
     }
 
     @Test func notWaitingReturnsAtOnceWithNoOutputs() async throws {

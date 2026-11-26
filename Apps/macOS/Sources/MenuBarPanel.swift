@@ -12,11 +12,17 @@ struct MenuBarPanel: View {
     let close: () -> Void
     @State private var isDropTargeted = false
 
-    private var runningJob: (job: Job, progress: Double)? {
-        for job in shell.services.jobs {
+    private var runningJobs: [(job: Job, progress: Double)] {
+        shell.services.jobs.compactMap { job in
             if case .running(let progress) = job.state { return (job, progress) }
+            return nil
         }
-        return nil
+    }
+
+    private var waitingCount: Int {
+        shell.services.jobs.count {
+            if case .queued = $0.state { true } else { false }
+        }
     }
 
     var body: some View {
@@ -92,16 +98,26 @@ struct MenuBarPanel: View {
     }
 
     @ViewBuilder private var currentJob: some View {
-        if let running = runningJob {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(running.job.displayName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                ProgressView(value: running.progress)
-                    .accessibilityLabel("Converting \(running.job.displayName)")
-                Text(runningDetail(running.job, progress: running.progress))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        let running = runningJobs
+        if !running.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(running, id: \.job.id) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.job.displayName)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        ProgressView(value: item.progress)
+                            .accessibilityLabel("Converting \(item.job.displayName)")
+                        Text(runningDetail(item.job, progress: item.progress))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if waitingCount > 0 {
+                    Text(waitingCount == 1 ? "1 waiting" : "\(waitingCount) waiting")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let paused = shell.services.queuePause.statusText {
                     Text(paused)
                         .font(.caption)
@@ -115,10 +131,8 @@ struct MenuBarPanel: View {
     }
 
     private func runningDetail(_ job: Job, progress: Double) -> String {
-        let waiting = max(shell.services.activity.queue - 1, 0)
         let percent = "\(Int((progress * 100).rounded())) percent"
-        let head = job.phase.map { "\($0) \(percent)" } ?? percent
-        return waiting > 0 ? "\(head), \(waiting) waiting" : head
+        return job.phase.map { "\($0) \(percent)" } ?? percent
     }
 
     private var idleText: String {

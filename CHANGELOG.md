@@ -67,8 +67,7 @@ First public release.
   Search says "Search"; the filters Ask in Plain Words makes stay system search tokens.
 - **Safe updates:** an update that finishes installing waits to relaunch the app until the queue has no running or
   waiting jobs (a paused queue doesn't hold it).
-
-- **Downscale Video:** shrinks 4K iPhone video to 1080p (or 1440p or 720p) in HEVC or H.264, keeping Dolby Vision HDR,
+- **Convert:** shrinks 4K iPhone video to 1080p (or 1440p or 720p) in HEVC or H.264, keeping Dolby Vision HDR,
   location, capture date, camera make and model and other metadata. Anything that would be lost is shown before the
   video is queued, and you decide.
 - **Local library:** a grid of the videos you add, grouped and sorted, with search, thumbnails and Quick Look. Files on
@@ -83,3 +82,10 @@ First public release.
   and can optionally be copied to an originals folder first.
 - **Updates:** the app checks for new versions with Sparkle; updates are signed, and automatic checks can be turned
   off in Settings.
+
+### Changed
+
+- **Convert naming and Mac polish:** the first tool is named **Convert**; controls, menus, alerts and Settings follow
+  Title Case and ellipsis conventions across the Mac app; disabled "Soon" placeholder rows and the single-item Tools
+  sidebar section are removed; pressing Delete on a running conversion in the Queue asks first; the menu bar popover
+  shows every running conversion; and clicking or dragging a section header no longer clears the grid selection.

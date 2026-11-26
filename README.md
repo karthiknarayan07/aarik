@@ -4,7 +4,7 @@
 
 A free, offline, open-source Mac toolbox for converting video, images, PDFs and documents without losing metadata.
 
-The first tool shrinks iPhone 4K video to 1080p while keeping what makes the footage yours: Dolby Vision HDR, location, and camera metadata such as capture date, make and model. Smaller files mean you can reclaim a lot of space in Photos and iCloud, because the large originals can be replaced with the compact versions.
+The first tool, **Convert**, shrinks iPhone 4K video to 1080p while keeping what makes the footage yours: Dolby Vision HDR, location, and camera metadata such as capture date, make and model. Smaller files mean you can reclaim a lot of space in Photos and iCloud, because the large originals can be replaced with the compact versions.
 
 ## Status
 
@@ -59,7 +59,7 @@ The Videos page lists the videos in your Photos library, in the same grid, filte
 ## Quick runs
 
 A quick run shrinks videos in the background, without opening the window. It uses your saved defaults (Settings: Default
-Preset and Save converted videos) and never asks a question. There are several ways to start one.
+Preset and Save Converted Videos) and never asks a question. There are several ways to start one.
 
 **Dock drop and Open With.** Drop videos on the app's Dock icon, or right-click a video and choose Open With. One rule
 decides what happens:
@@ -99,9 +99,9 @@ Quick Action above is the more dependable way to get this into Finder.
 - It never replaces an original. If Replace is your saved choice, the copy is saved next to the original instead and the
   notification says so. Replacing always needs a confirmation in the window.
 - It skips any video that would lose metadata, and any video the app would keep as is (already small, or less than
-  10 % smaller). Skipped videos are counted and listed: "Review skipped files" in the notification, or Show Skipped… in
+  10 % smaller). Skipped videos are counted and listed: "Review Skipped Files" in the notification, or Show Skipped… in
   the menu bar popover, opens them in Local Files.
-- It never converts two videos at once: quick runs share the queue with the window. With Start the queue automatically
+- It never converts two videos at once: quick runs share the queue with the window. With Start the Queue Automatically
   off in Settings, quick-run videos wait until you press Resume.
 - It posts one notification per run when it ends. Runs from the Dock, Open With, Services and Shortcuts post none while
   the app's window is in front; runs from the menu bar post none while the menu bar panel is open. If you don't get
@@ -138,7 +138,7 @@ ships with macOS, so nothing is sent to a server, ours or anyone else's.
 - **Ask in Plain Words:** type a sentence such as "4K videos from last summer that I haven't shrunk" in the search
   field, press Return or the sparkle button, and it becomes filters you can see and remove.
 - **Why?:** a short explanation of a result that was kept as is, finished with warnings or failed.
-- **Smart Picks:** on Overview, up to three groups of videos worth shrinking first. Add These to the Queue goes
+- **Smart Picks:** on Overview, up to three groups of videos worth shrinking first. Add These to the Queue… goes
   through the usual checks, and nothing is added by itself.
 
 **What the model sees.** Only metadata, never the video itself: names of formats (for example 4K60 or HEVC), sizes,

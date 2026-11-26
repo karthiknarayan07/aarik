@@ -32,16 +32,16 @@ private struct NotificationsHelpSection: View {
     var body: some View {
         Section("Notifications") {
             LabeledContent {
-                Button("Open Notification Settings…") {
+                Button("Open System Settings…") {
                     if let url = SystemSettingsPane.notifications(bundleIdentifier: Bundle.main.bundleIdentifier) {
                         NSWorkspace.shared.open(url)
                     }
                 }
                 .accessibilityHint("Opens the Notifications pane of System Settings")
             } label: {
-                Text("Quick Run Notifications")
+                Text("Conversion Notifications")
                 Text(
-                    "A quick run says how it went in one notification. It stays quiet while the window is in front, or, for a run started from the menu bar, while its panel is open. "
+                    "Choose how the app tells you when conversions finish. A quick run stays quiet while the window is in front, or, for a run started from the menu bar, while its panel is open. "
                         + "If none arrive, allow notifications for the app in System Settings.")
             }
         }

@@ -97,8 +97,8 @@ extension ConvertModel {
     }
 }
 
-/// A poster frame written for Quick Look, in a folder of the app's own under the temporary directory. The previous
-/// poster is replaced; the system clears the folder.
+/// A poster frame written for Quick Look, in a folder of the app's own under the temporary directory. Each poster
+/// gets its own subfolder so writing a new poster never removes a file Quick Look is still reading.
 public enum PosterFile {
     public static func write(_ image: CGImage, named name: String) -> URL? {
         // Named after the app's own identifier, so removing it can only remove what this app wrote.
@@ -106,17 +106,42 @@ public enum PosterFile {
         let folder = FileManager.default.temporaryDirectory
             .appending(path: id, directoryHint: .isDirectory)
             .appending(path: "QuickLookPosters", directoryHint: .isDirectory)
-        try? FileManager.default.removeItem(at: folder)
+        let entryFolder = folder.appending(path: UUID().uuidString, directoryHint: .isDirectory)
         do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: entryFolder, withIntermediateDirectories: true)
         } catch {
             return nil
         }
         let base = URL(filePath: name).deletingPathExtension().lastPathComponent.replacing("/", with: "-")
-        let url = folder.appending(path: "\(base.isEmpty ? "Video" : base) Poster Frame.png")
+        let url = entryFolder.appending(path: "\(base.isEmpty ? "Video" : base) Poster Frame.png")
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
-        else { return nil }
+        else {
+            try? FileManager.default.removeItem(at: entryFolder)
+            return nil
+        }
         CGImageDestinationAddImage(destination, image, nil)
-        return CGImageDestinationFinalize(destination) ? url : nil
+        guard CGImageDestinationFinalize(destination) else {
+            try? FileManager.default.removeItem(at: entryFolder)
+            return nil
+        }
+        pruneOldPosters(in: folder, keeping: entryFolder)
+        return url
+    }
+
+    private static func pruneOldPosters(in folder: URL, keeping current: URL) {
+        guard
+            let entries = try? FileManager.default.contentsOfDirectory(
+                at: folder, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
+        else { return }
+        let older = entries.filter { $0.standardizedFileURL != current.standardizedFileURL }
+            .sorted { lhs, rhs in
+                let lDate = (try? lhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let rDate = (try? rhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                return lDate > rDate
+            }
+        // Keep a few recent posters so an active Quick Look sheet transitioning to the next poster isn't deleted.
+        for obsolete in older.dropFirst(4) {
+            try? FileManager.default.removeItem(at: obsolete)
+        }
     }
 }

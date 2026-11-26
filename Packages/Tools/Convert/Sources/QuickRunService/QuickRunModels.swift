@@ -123,7 +123,7 @@ public struct QuickRunTally: Sendable, Equatable {
 public struct QuickRunNotice: Sendable, Equatable {
     public static let category = "QUICK_RUN_DONE"
     public static let reviewAction = "REVIEW_SKIPPED"
-    public static let reviewActionTitle = "Review skipped files"
+    public static let reviewActionTitle = "Review Skipped Files"
     /// The `userInfo` key holding the run's ID, for the response handler.
     public static let runIDKey = "runID"
 

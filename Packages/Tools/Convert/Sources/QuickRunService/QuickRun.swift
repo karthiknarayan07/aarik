@@ -107,12 +107,12 @@ public actor QuickRun {
             for: accepted.map { (assetID: $0.assetID, name: $0.name, preset: preset) },
             settings: ConvertJobSettings(kind: overrides?.kind ?? .shrink, preset: preset, saveTo: .nextToOriginal),
             destination: destination, lost: [:], now: now())
-        // The saved Save to is for files; say so when it isn't what the copies got.
+        // The saved Save To is for files; say so when it isn't what the copies got.
         var notes: [String] = []
         if overrides?.saveLocation == nil {
             switch saved.saveLocation.choice {
             case .nextToOriginal, .documents: break
-            case .folder: notes.append("Saved as new videos in Photos: the Save to folder is for files.")
+            case .folder: notes.append("Saved as new videos in Photos: the Save To folder is for files.")
             case .replace:
                 notes.append("Saved as new videos in Photos: replacing originals needs your confirmation in the app.")
             }
@@ -317,7 +317,7 @@ public actor QuickRun {
             )
         case .folder:
             if let destination = location.destination { return (destination, []) }
-            return (.nextToOriginal, ["Saved next to the originals: the Save to folder isn't available."])
+            return (.nextToOriginal, ["Saved next to the originals: the Save To folder isn't available."])
         case .nextToOriginal:
             return (.nextToOriginal, [])
         case .documents:

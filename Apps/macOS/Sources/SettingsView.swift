@@ -15,7 +15,7 @@ struct SettingsView: View {
             Tab("General", systemImage: "gearshape") { GeneralSettings(shell: shell, updater: updater) }
             Tab("Output", systemImage: "square.and.arrow.down") { OutputSettings(shell: shell) }
         }
-        .frame(width: 480)
+        .frame(minWidth: 450)
         .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -33,7 +33,7 @@ private struct GeneralSettings: View {
                 ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
             Toggle(isOn: $autoStart) {
-                Text("Start the queue automatically")
+                Text("Start the Queue Automatically")
                 Text("When off, the queue waits until you press Resume.")
             }
             Section {
@@ -60,17 +60,6 @@ private struct GeneralSettings: View {
                     Text("Updates are off in development builds.")
                         .foregroundStyle(.secondary)
                 }
-            }
-            Section {
-                Button("Open System Settings…") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            } header: {
-                Text("Notifications")
-            } footer: {
-                Text("Choose how the app tells you when the queue finishes.")
             }
             FinderQuickActionSection()
             QuickRunSettingsSections()
