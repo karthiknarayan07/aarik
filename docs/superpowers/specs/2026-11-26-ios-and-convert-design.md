@@ -23,7 +23,7 @@ Aarik becomes a family of small, offline, native media tools on **both macOS and
 
 ## Goals
 
-- `Apps/macOS` and `Apps/iOS` app projects, one root `Aarik.xcworkspace`.
+- `Apps/macOS` and `Apps/iOS` app projects, one root `App.xcworkspace`.
 - Shared code in Swift packages outside `Apps/`; each tool its own package under `Packages/Tools/`.
 - A tool declares which platforms it supports; the apps only show tools available on that platform.
 - The Mac app keeps every v0.1.0 feature and behaviour already built (no regressions; its tests keep passing).
@@ -60,28 +60,28 @@ Aarik becomes a family of small, offline, native media tools on **both macOS and
 ## Layout
 
 ```
-Aarik.xcworkspace
+App.xcworkspace
 Apps/
-  macOS/   Aarik.xcodeproj   Sources/ (AppKit shell: AppDelegate, MainWindow, MenuFixups,
+  macOS/   App.xcodeproj   Sources/ (AppKit shell: AppDelegate, MainWindow, MenuFixups,
                              status item, Services, Sparkle, Settings scene), UITests/
-  iOS/     Aarik.xcodeproj   Sources/ (SwiftUI App, scenes, BG task, Live Activity host)
+  iOS/     App.xcodeproj   Sources/ (SwiftUI App, scenes, BG task, Live Activity host)
                              ShareExtension/  Widgets/ (widget + Control + Live Activity UI)
                              UITests/
 Config/    Brand.xcconfig, macOS.xcconfig, iOS.xcconfig
 Packages/
-  AarikKit/            one package, platform-neutral where possible
-    AarikCore          (today AppCore: jobs, queue, settings, ToolModule, pressure policy)
+  Core/            one package, platform-neutral where possible
+    AppCore          (today AppCore: jobs, queue, settings, ToolModule, pressure policy)
     MediaEngine        (unchanged; AVFoundation/VideoToolbox, both platforms)
     LocalLibrary       (files; iOS via document picker / security-scoped URLs)
     PhotosLibrary      (PhotoKit; Mac Photos.sqlite fps path stays Mac-only)
     Assistant          (Foundation Models; both)
-    SharedUI           (today AppUI: cross-platform views, rows, inspector, badges)
+    AppUI           (today AppUI: cross-platform views, rows, inspector, badges)
     AppState           (today App/Sources/AppModel*: the observable model, moved out of the app)
     Platform           (seams: power/thermal source, trash/recently-deleted, open-in, reveal)
   Tools/
     Convert/           Convert (jobs: shrink, compress; ConvertModule: ToolModule)
                        ConvertUI (tool views; platform pieces behind seams)
-  (QuickRunService stays Mac-only inside the macOS shell or AarikKit behind os check)
+  (QuickRunService stays Mac-only inside the macOS shell or Core behind os check)
 ```
 
 Exact target names are the builder's call within this shape; the rule is: **platform-neutral by default, platform code behind a protocol seam in `Platform`, and `#if os` only at the seam implementations and the app shells.**
@@ -126,7 +126,7 @@ Moves to `Apps/macOS`, consumes the renamed packages; behaviour unchanged. Mac-o
 ## Sequencing
 
 1. Now (parallel with the in-flight Mac branches): this design, the plan, and iOS-only work that does not touch `App/` (iOS shell skeleton, extensions, `Platform` seams as new files).
-2. After the three Mac branches merge: one restructure branch — move `App/` → `Apps/macOS`, split packages into `Packages/AarikKit` + `Packages/Tools/Convert`, rename Downscale/VideoShrinker → Convert, move `AppModel` into a package. Mac tests must pass unchanged.
+2. After the three Mac branches merge: one restructure branch — move `App/` → `Apps/macOS`, split packages into `Packages/Core` + `Packages/Tools/Convert`, rename Downscale/VideoShrinker → Convert, move `AppModel` into a package. Mac tests must pass unchanged.
 3. Then in parallel: iOS feature tasks; Convert compression; Mac polish (Plan 9 Task 4 copy pass, which now also renames copy to "Convert").
 4. Joint release v0.1.0.
 
@@ -136,7 +136,7 @@ Owner's answer:
 - **iOS "done":** everything built and tested in the Simulator, with thermal, Low Power Mode, battery and background-task signals faked through `Platform` seams. Before tagging v0.1.0, the owner runs a short real-iPhone checklist (free or paid Apple ID) covering background continuation, Live Activity, pressure rules and energy. That checklist is part of the release gate.
 
 Designer's calls (owner may correct):
-- **Package graph, no cycles:** `AarikKit` holds only tool-agnostic code: queue, jobs protocol, settings, pressure policy, `ToolModule`, `LanguageModelClient`, availability and deadline, shared views, and `Platform` seams. Everything Convert-specific moves into `Packages/Tools/Convert`: the shrink/compress model extensions now in `AppModel+ShrinkVideos` and `AppModel+SmartPicks`, plus `QueryTranslator`, `OutcomeExplainer`, `SmartPicks` and the engine runners. The app shells compose the generic `AppState` with each tool's model via `ToolModule`. Dependencies point one way: Apps → Tools → AarikKit.
+- **Package graph, no cycles:** `Core` holds only tool-agnostic code: queue, jobs protocol, settings, pressure policy, `ToolModule`, `LanguageModelClient`, availability and deadline, shared views, and `Platform` seams. Everything Convert-specific moves into `Packages/Tools/Convert`: the shrink/compress model extensions now in `AppModel+ShrinkVideos` and `AppModel+SmartPicks`, plus `QueryTranslator`, `OutcomeExplainer`, `SmartPicks` and the engine runners. The app shells compose the generic `AppState` with each tool's model via `ToolModule`. Dependencies point one way: Apps → Tools → Core.
 - **Extensions never convert.** iOS runs long work only in the app process, under `BGContinuedProcessingTask` started from a user action. The share extension stages the files into the App Group's Staging folder and offers "Open Aarik". The App Intent stages its inputs and opens the app (foreground mode); the app starts the run on arrival. The Control and the widget open the app or toggle pause through the App Group, and never start encoding out of process. Staging rules carry over from the Mac: only staged copies are removed, symlinks are never followed.
 - **Killed or expired mid-job:** the partial output is discarded (atomic output already guarantees no half-file is ever visible), the job goes back to queued, and it restarts from the beginning on the next launch or the next continued-processing grant. The original is never touched. The UI test kills the app mid-run and checks this.
 - **Replace originals on iOS:** this is never done in the background. Saved copies and pending originals accumulate, the same as on the Mac with `PendingDeletions`. When the app is in the foreground, a bar offers "Move N Originals to Recently Deleted…". That is one system confirmation per batch, and every entry is re-checked at delete time by the same `OriginalsDeleter` rules. The copy keeps exactly what the Mac copy keeps (ADR 0002); albums and favourites follow the Mac behaviour.
@@ -146,4 +146,4 @@ Designer's calls (owner may correct):
 
 ## Left to the builder
 
-Exact target/file names within the layout; compression bitrate ratios (ADR); widget/Live Activity visual design within native defaults; how much of `SharedUI` is reused vs platform views (prefer reuse when it is idiomatic on both).
+Exact target/file names within the layout; compression bitrate ratios (ADR); widget/Live Activity visual design within native defaults; how much of `AppUI` is reused vs platform views (prefer reuse when it is idiomatic on both).

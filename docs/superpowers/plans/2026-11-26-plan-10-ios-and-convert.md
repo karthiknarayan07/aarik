@@ -4,7 +4,7 @@
 
 **Goal:** Ship Aarik v0.1.0 as two native apps, macOS and iOS (iPhone, iPad, iPhone Duo), built from shared packages. The first tool is renamed **Convert** and gains video compression.
 
-**Architecture:** Two thin native app shells under `Apps/` sit on Swift packages. Dependencies point one way: Apps → `Packages/Tools/Convert` → `Packages/AarikKit`. Platform differences live behind protocol seams; `#if os` appears only in seam implementations and the shells.
+**Architecture:** Two thin native app shells under `Apps/` sit on Swift packages. Dependencies point one way: Apps → `Packages/Tools/Convert` → `Packages/Core`. Platform differences live behind protocol seams; `#if os` appears only in seam implementations and the shells.
 
 **Tech Stack:** Swift 6 (strict concurrency), SwiftUI, AppKit (Mac shell), UIKit only where SwiftUI lacks an API, AVFoundation, VideoToolbox, PhotoKit, FoundationModels, AppIntents, ActivityKit, WidgetKit, BackgroundTasks (`BGContinuedProcessingTask`), Swift Testing, XCUITest.
 
@@ -13,10 +13,11 @@
 ## Global Constraints
 
 - Minimum macOS 26 and **iOS 26**. Swift 6 language mode, and `-warnings-as-errors` stays clean. `swift format lint --strict` stays clean.
-- Dependency direction is Apps → Tools → AarikKit. AarikKit never imports a tool. A tool never imports an app.
+- Dependency direction is Apps → Tools → Core. Core never imports a tool. A tool never imports an app.
 - `ToolModule.platforms: ToolPlatforms` (OptionSet `.macOS`, `.iOS`). Convert is `[.macOS, .iOS]`.
 - Persisted identifiers do not change: UserDefaults keys, job-store file names and paths, Application Support folders, the App Intent type identifier, and the Mac bundle ID. Renames touch code and copy only.
 - Brand lives only in `Config/Brand.xcconfig`. The iOS bundle ID is `$(APP_BUNDLE_ID_PREFIX).aarik.ios` (or the Mac ID + `.ios`, whichever matches the Mac's derivation), extensions use sub-IDs, and the App Group is `group.<Mac bundle ID>`. Signing goes in the untracked `Config/Signing.local.xcconfig` (gitignored, with an optional `#include?`).
+- **Brand-neutral code (owner rule, 2026-11-26):** every project, target, scheme, type, file, package and module name stays brand-neutral on both platforms, matching the Mac app today: `App.xcworkspace`, `Apps/*/App.xcodeproj`, targets `App`, `ShareExtension`, `Widgets`, `UITests`, the `Packages/Core` package, `MainApp`. The display name, product name and IDs come only from xcconfig variables. User-facing copy that names the app (such as "Open Aarik") reads the bundle display name at runtime and is never hard-coded. `grep -ri aarik Apps Packages` over source, plist, pbxproj and xcscheme files must return nothing.
 - Native first, on both platforms: system controls, SF Symbols, semantic colours, Liquid Glass defaults (never hand-applied glass), standard gestures, menus and shortcuts, context menus, Quick Look, Share, drag and drop, Undo, VoiceOver, Dynamic Type. Title Case for controls, sentence case for descriptions, an ellipsis on controls that open more UI.
 - Safety:
   - Never delete or overwrite user files. Output is atomic.
@@ -42,14 +43,14 @@
 ### Task 1: iOS app skeleton and shared config
 
 **Files:**
-- Create: `Apps/iOS/Aarik.xcodeproj`. Targets: `Aarik` (app), `AarikShare` (share extension), `AarikWidgets` (widget + Control + Live Activity UI), `AarikUITests`.
-- Create: `Apps/iOS/Sources/AarikApp.swift`, `Apps/iOS/Info.plist`, entitlements (App Group), and `Apps/iOS/Resources/` (asset catalog pointing at `Branding/`).
+- Create: `Apps/iOS/App.xcodeproj`. Targets: `App` (app), `ShareExtension` (share extension), `Widgets` (widget + Control + Live Activity UI), `UITests`.
+- Create: `Apps/iOS/Sources/MainApp.swift`, `Apps/iOS/Info.plist`, entitlements (App Group), and `Apps/iOS/Resources/` (asset catalog pointing at `Branding/`).
 - Create: `Config/iOS.xcconfig` (includes `Brand.xcconfig` and an optional `Signing.local.xcconfig`).
 - Modify: `.gitignore` (`Config/Signing.local.xcconfig`).
 
 - [ ] Each target builds for the iOS 26 Simulator with placeholder SwiftUI views. There are no package dependencies yet.
 - [ ] The UI test `testLaunchShowsRoot` launches the app on an iPhone Simulator and finds the root view by accessibility identifier.
-- [ ] Run `xcodebuild -project Apps/iOS/Aarik.xcodeproj -scheme Aarik -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build test`. Expected: it succeeds.
+- [ ] Run `xcodebuild -project Apps/iOS/App.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build test`. Expected: it succeeds.
 - [ ] Commit.
 
 ---
@@ -58,7 +59,7 @@
 
 ### Task 2: move the Mac app to Apps/macOS and add the workspace
 
-**Files:** `git mv App Apps/macOS` (project renamed to `Apps/macOS/Aarik.xcodeproj`), `Aarik.xcworkspace` at the root (both projects plus the packages), `Config/macOS.xcconfig` (the old `App.xcconfig`), paths in `scripts/`, `.github/workflows/*.yml`, `AGENTS.md`, `docs/RELEASING.md`, and the Sparkle and release scripts.
+**Files:** `git mv App Apps/macOS` (project renamed to `Apps/macOS/App.xcodeproj`), `App.xcworkspace` at the root (both projects plus the packages), `Config/macOS.xcconfig` (the old `App.xcconfig`), paths in `scripts/`, `.github/workflows/*.yml`, `AGENTS.md`, `docs/RELEASING.md`, and the Sparkle and release scripts.
 
 - [ ] The Mac Debug and Release builds succeed from the workspace, and `swift test` is unchanged and green.
 - [ ] The CI workflow builds the Mac app from its new path.
@@ -67,13 +68,13 @@
 ### Task 3: split packages, rename to Convert, move AppModel out of the app
 
 **Target layout:**
-- `Packages/AarikKit/Package.swift` contains:
-  - `AarikCore` (the old `AppCore`: queue, jobs protocol, settings, pressure policy, `ToolModule`, `ToolPlatforms`)
+- `Packages/Core/Package.swift` contains:
+  - `AppCore` (the old `AppCore`: queue, jobs protocol, settings, pressure policy, `ToolModule`, `ToolPlatforms`)
   - `MediaEngine`
   - `LocalLibrary`
   - `PhotosLibrary`
   - `Assistant` (the generic `LanguageModelClient`, availability and `Deadline` only)
-  - `SharedUI` (the old `AppUI`)
+  - `AppUI` (the old `AppUI`)
   - `AppState` (the tool-agnostic part of `App/Sources/AppModel*`)
   - `MediaTestSupport`
   - `devtool`
@@ -92,9 +93,9 @@
 
 ## Phase 3: in parallel after Task 3
 
-### Task 4: make AarikKit and Convert iOS-ready
+### Task 4: make Core and Convert iOS-ready
 
-- [ ] Add `.iOS(.v26)` to both packages. Each piece of AppKit or IOKit code goes behind the existing seams (`ThermalSource`, `PowerSource`, `ActivityStarter` in `AarikCore/Pressure`) or a new seam in `AarikCore/Platform/`:
+- [ ] Add `.iOS(.v26)` to both packages. Each piece of AppKit or IOKit code goes behind the existing seams (`ThermalSource`, `PowerSource`, `ActivityStarter` in `AppCore/Pressure`) or a new seam in `AppCore/Platform/`:
   - trash or recently-deleted
   - reveal and open-in
   - images (`PlatformImage` typealias)
@@ -103,7 +104,7 @@
 - [ ] Add a pressure rule, Low Power Mode → 1 slot. Test it as `lowPowerModeLimitsToOneSlot`.
 - [ ] Add iOS implementations: `UIDevice` battery monitoring, `ProcessInfo.thermalState` and `isLowPowerModeEnabled` with their notifications, and an iOS activity token (`beginActivity` is still correct).
 - [ ] The Photos.sqlite fps path is `#if os(macOS)` only. On iOS, fps is `nil` until known; test it as `iosFpsUnknownUntilLocal` with a fake asset source.
-- [ ] Both packages' tests run on an iOS Simulator destination with `xcodebuild test -scheme AarikKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`, and the same for Convert. Add both to CI.
+- [ ] Both packages' tests run on an iOS Simulator destination with `xcodebuild test -scheme Core-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`, and the same for Convert. Add both to CI.
 
 ### Task 5: Convert video compression
 
@@ -118,12 +119,12 @@
 
 This task depends on Task 4.
 
-- [ ] The `Aarik` iOS app composes `AppState` and `ConvertModule` through an iOS tool registry filtered by `.iOS`.
+- [ ] The iOS `App` target composes `AppState` and `ConvertModule` through an iOS tool registry filtered by `.iOS`.
 - [ ] `NavigationSplitView` shows a sidebar on iPad and the unfolded Duo, and a stack on iPhone and the folded Duo. Selection persists through size-class and posture changes (Review Focus 1).
 - [ ] The Photos browser uses PhotoKit, shows native limited and denied states, and never downloads originals to browse.
 - [ ] Files import uses the document picker with security-scoped URLs.
 - [ ] Outputs for Files inputs go to the app's Documents, which shows in Files as On My iPhone › Aarik. Replace is not offered for Files inputs on iOS in v0.1.0 (ruling: there is no safe system Trash for arbitrary file providers).
-- [ ] Queue, Completed, inspector and Settings screens (with the Mac-only options removed) use `SharedUI` where it is idiomatic and native iOS views elsewhere.
+- [ ] Queue, Completed, inspector and Settings screens (with the Mac-only options removed) use `AppUI` where it is idiomatic and native iOS views elsewhere.
 - [ ] Apple Intelligence features: plain-words search tokens, Why? and Smart Picks. Availability is re-checked on `scenePhase == .active`.
 
 ### Task 7: iOS background running and Live Activity
@@ -131,15 +132,15 @@ This task depends on Task 4.
 This task depends on Task 6.
 
 - [ ] Starting a run submits a `BGContinuedProcessingTaskRequest`, with its wildcard identifier in `BGTaskSchedulerPermittedIdentifiers`. The handler reports progress, honours expiration by cancelling cleanly, and re-queues the job (Review Focus 2). Test it with a fake scheduler seam, `expirationRequeuesAndDiscardsPartial`.
-- [ ] A Live Activity in `AarikWidgets` shows the current item, progress and queue count on the Lock Screen and in the Dynamic Island. It is updated at most once a second, and ended on finish, cancel or pause.
+- [ ] A Live Activity in `Widgets` shows the current item, progress and queue count on the Lock Screen and in the Dynamic Island. It is updated at most once a second, and ended on finish, cancel or pause.
 - [ ] On launch, a job left `.running` is reset to `.queued` and its partial output removed. The existing Work sweep covers the removal.
 
 ### Task 8: iOS share extension and App Intent
 
 This task depends on Task 6.
 
-- [ ] `AarikShare` accepts `public.movie`. It stream-copies each item into the App Group `Staging/<uuid>/`, then shows a native confirmation with "Open Aarik". It stays under the extension memory cap (Review Focus 4). Tests: `stagingStreamsLargeFile`, `stagingSkipsNonVideos`, `stagingNeverFollowsSymlinks`.
-- [ ] The app picks up staged items on activation. Both the intent and the share flow reuse `StagedInputs`, which moves to `AarikCore` with an App Group root on iOS.
+- [ ] `ShareExtension` accepts `public.movie`. It stream-copies each item into the App Group `Staging/<uuid>/`, then shows a native confirmation with "Open Aarik". It stays under the extension memory cap (Review Focus 4). Tests: `stagingStreamsLargeFile`, `stagingSkipsNonVideos`, `stagingNeverFollowsSymlinks`.
+- [ ] The app picks up staged items on activation. Both the intent and the share flow reuse `StagedInputs`, which moves to `AppCore` with an App Group root on iOS.
 - [ ] The shared App Intent runs in the foreground (opens the app). Its parameters match the Mac.
 
 ### Task 9: iOS widget and Control
