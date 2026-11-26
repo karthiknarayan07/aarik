@@ -71,6 +71,9 @@ public final class AppServices {
     @ObservationIgnored private var hasStarted = false
     /// Set once the queue's first snapshot (the saved jobs) arrived.
     @ObservationIgnored private var hasReceivedJobs = false
+    /// The last value written to `SettingsStore.runActive`, so each change is written once and the stored value is
+    /// replaced at the first snapshot whatever an earlier launch left.
+    @ObservationIgnored private var rememberedRunActive: Bool?
     /// A started run has had work since it was started: when the work is gone the run is over.
     @ObservationIgnored private var runHadWork = false
     /// Set once `start()` has finished; entry points that arrive earlier (an intent that launched the app) wait.
@@ -351,7 +354,10 @@ public final class AppServices {
         // Remembered only after the saved queue was read, so the launch's first pressure update can't clear it.
         if hasReceivedJobs {
             let active = !isQueuePaused && jobs.contains { $0.state.isPending }
-            if settings.runActive != active { settings.runActive = active }
+            if rememberedRunActive != active {
+                rememberedRunActive = active
+                settings.runActive = active
+            }
         }
         relaunchGate.update(jobs: jobs, isQueuePaused: pause.isPaused)
     }

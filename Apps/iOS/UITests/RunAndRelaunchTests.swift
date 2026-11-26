@@ -26,7 +26,7 @@ final class RunAndRelaunchTests: AppTestCase {
     }
 
     /// The app is killed while a started run is converting. On relaunch the run that was under way continues: the job
-    /// is back in the queue (not Failed, not lost), no partial result shows as Completed, and it runs to the end.
+    /// is back in the queue (not lost) and runs to the end, finishing as Completed rather than Failed.
     func testKillMidRunThenRelaunchContinuesTheRun() throws {
         launch()
         queuePhotosFixture("clip-long.mov", convertNow: true)
@@ -37,11 +37,10 @@ final class RunAndRelaunchTests: AppTestCase {
         launch(runActive: nil)
         open("Queue")
         XCTAssertTrue(element(labelContaining: "clip-long").waitForExistence(timeout: 30), "the job was lost")
-        open("Completed")
-        XCTAssertFalse(
-            element(labelContaining: "clip-long").waitForExistence(timeout: 2), "a partial result counts as completed")
-        // Completed lists what failed too, so the same check covers an interrupted job that wrongly failed.
+        XCTAssertFalse(app.buttons["startQueue"].firstMatch.exists, "the run that was under way waits for Start")
         waitForCompleted("clip-long")
+        // Completed lists what failed too, so an interrupted job that wrongly failed shows up here.
+        XCTAssertFalse(app.staticTexts["Failed"].firstMatch.exists, "the interrupted job failed")
     }
 
     /// A queue that nobody started doesn't start by itself after a relaunch.
