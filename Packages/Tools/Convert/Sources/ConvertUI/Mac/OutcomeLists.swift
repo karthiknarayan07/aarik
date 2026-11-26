@@ -35,7 +35,7 @@
         }
     }
 
-    private struct CompletedRow: View {
+    struct CompletedRow: View {
         let job: Job
         let outcome: JobOutcome
         let thumbnails: ThumbnailCache

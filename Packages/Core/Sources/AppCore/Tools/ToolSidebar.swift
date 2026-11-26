@@ -1,5 +1,10 @@
 import Foundation
 
+/// The colour of a sidebar row's symbol, by name; the shell maps it to the system colour.
+public enum SidebarTint: Sendable, Hashable {
+    case blue, green, orange, red, purple, pink, teal, indigo, yellow, gray
+}
+
 /// One row of a tool's sidebar. The shell draws the rows; the tool says what they are.
 public struct ToolSidebarItem<Destination: Hashable & Sendable>: Identifiable, Hashable, Sendable {
     public let id: String
@@ -7,19 +12,22 @@ public struct ToolSidebarItem<Destination: Hashable & Sendable>: Identifiable, H
     public let destination: Destination?
     public let title: String
     public let systemImage: String
+    /// The symbol's colour; nil leaves it the default.
+    public let tint: SidebarTint?
     /// A badge number; nil shows none.
     public let count: Int?
     /// A running job's progress, from 0 to 1; shows a small ring.
     public let progress: Double?
 
     public init(
-        id: String, destination: Destination?, title: String, systemImage: String, count: Int? = nil,
-        progress: Double? = nil
+        id: String, destination: Destination?, title: String, systemImage: String, tint: SidebarTint? = nil,
+        count: Int? = nil, progress: Double? = nil
     ) {
         self.id = id
         self.destination = destination
         self.title = title
         self.systemImage = systemImage
+        self.tint = tint
         self.count = count
         self.progress = progress
     }

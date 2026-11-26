@@ -38,40 +38,47 @@
             VideoDetail(model: model, destination: destination)
         }
 
+        /// The same items on every page, disabled where they don't apply: a toolbar that appears or disappears with the
+        /// page changes the title bar's height, and with it the window's frame.
         @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {
             let model = model
-            if hasInspector(for: destination) {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Compress…", systemImage: "rectangle.compress.vertical") {
-                        model.presentCompress()
-                    }
-                    .disabled(!model.canAddSelectionToQueue)
-                    .help("Compress the selected videos without changing resolution")
+            ToolbarItem(placement: .primaryAction) {
+                Button("Compress…", systemImage: "rectangle.compress.vertical") {
+                    model.presentCompress()
                 }
-                // The inspector's main action sits in the toolbar, as Xcode and Photos put theirs. ⌘⏎ belongs to the
-                // Queue menu's item of the same name.
-                ToolbarItem(placement: .primaryAction) {
-                    Button(model.toolbarAddToQueueTitle, systemImage: "plus") {
-                        model.requestAddSelectionToQueue()
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(!model.canAddSelectionToQueue)
-                    .help("Add the selected videos to the queue (⌘⏎)")
+                .disabled(!model.canAddSelectionToQueue)
+                .help("Compress the selected videos without changing resolution")
+            }
+            // The inspector's main action sits in the toolbar, as Xcode and Photos put theirs. ⌘⏎ belongs to the
+            // Queue menu's item of the same name.
+            ToolbarItem(placement: .primaryAction) {
+                Button(model.toolbarAddToQueueTitle, systemImage: "plus") {
+                    model.requestAddSelectionToQueue()
                 }
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-                ToolbarItem(placement: .primaryAction) {
-                    InspectorToggle(isPresented: Bindable(model).isInspectorPresented)
-                }
+                .buttonStyle(.glassProminent)
+                .disabled(!model.canAddSelectionToQueue)
+                .help("Add the selected videos to the queue (⌘⏎)")
+            }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) {
+                InspectorToggle(isPresented: Bindable(model).isInspectorPresented)
             }
         }
 
-        public func hasInspector(for destination: VideoPage?) -> Bool {
-            destination?.showsLibrary == true || destination == .photosVideos
-        }
+        /// Every page has the inspector column, so the detail area keeps its width when the page changes.
+        public func hasInspector(for destination: VideoPage?) -> Bool { true }
 
         @ViewBuilder public func inspector(for destination: VideoPage?) -> some View {
-            LibraryInspector(model: model)
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
+            Group {
+                if destination?.showsLibrary == true || destination == .photosVideos {
+                    LibraryInspector(model: model)
+                } else {
+                    EmptyState(
+                        "No Selection", systemImage: "sidebar.trailing",
+                        message: "Select videos in Videos or Local Files to see their details here.")
+                }
+            }
+            .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
         }
 
         public var dialogs: VideoDialogs { VideoDialogs(model: model) }

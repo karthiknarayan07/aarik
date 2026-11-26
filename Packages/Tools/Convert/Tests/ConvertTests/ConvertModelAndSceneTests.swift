@@ -110,7 +110,7 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             #expect(!model.isInspectorPresented)
         }
 
-        @Test func sceneReportsInspectorAvailabilityByPage() throws {
+        @Test func everyPageHasTheInspectorColumnSoTheLayoutStaysPut() throws {
             let directory = try makeDirectory()
             defer { try? FileManager.default.removeItem(at: directory) }
             let scene = ConvertMacScene(model: makeModel(directory: directory))
@@ -118,12 +118,12 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             #expect(scene.hasInspector(for: .localFiles))
             #expect(scene.hasInspector(for: .mediaType(.k4)))
             #expect(scene.hasInspector(for: .photosVideos))
-            #expect(!scene.hasInspector(for: .overview))
-            #expect(!scene.hasInspector(for: .queue))
-            #expect(!scene.hasInspector(for: .completed))
-            #expect(!scene.hasInspector(for: .keptAsIs))
-            #expect(!scene.hasInspector(for: .failed))
-            #expect(!scene.hasInspector(for: nil))
+            #expect(scene.hasInspector(for: .overview))
+            #expect(scene.hasInspector(for: .queue))
+            #expect(scene.hasInspector(for: .completed))
+            #expect(scene.hasInspector(for: .keptAsIs))
+            #expect(scene.hasInspector(for: .failed))
+            #expect(scene.hasInspector(for: nil))
         }
 
         @Test func sceneReportsContextMenusAndFileDropsByPage() throws {

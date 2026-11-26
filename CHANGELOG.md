@@ -9,6 +9,10 @@ First public release.
 
 ### Added
 
+- **Overview charts:** a savings ring with a one-line insight, summary cards with small charts, and trend charts
+  (before and after, savings by group, space saved over time, queue throughput) with VoiceOver summaries. The numbers
+  are kept between launches, so the page draws at once and refreshes in the background.
+- Colourful symbols in the Mac sidebar; the Mac window keeps its size and layout when you change pages.
 - **Photos videos:** a page for the videos in your Photos library, with the same grid, filters, presets and queue as
   Local Files. Browsing never downloads from iCloud; a video is downloaded (with its own progress and a way to cancel)
   only when its turn comes, and the converted copy is saved to Photos as a new video with the original's date,

@@ -49,17 +49,21 @@ public struct SavingsHeader<Accessory: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                title
-                    .font(.title3)
-                    .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 16) {
+                figure
+                if summary.showsBar {
+                    // What is left after converting, as a system gauge: the track is the size now.
+                    Gauge(value: min(max(summary.afterFraction, 0), 1)) {
+                        Text("Size after converting")
+                    }
+                    .gaugeStyle(.linearCapacity)
+                    .tint(.accentColor)
+                    .frame(maxWidth: 220)
+                    .accessibilityHidden(true)
+                }
                 Spacer(minLength: 12)
                 accessory
-            }
-            if summary.showsBar {
-                SavingsBar(fraction: summary.afterFraction)
-                    .accessibilityHidden(true)
             }
             Text(summary.detail)
                 .font(.callout)
@@ -72,12 +76,25 @@ public struct SavingsHeader<Accessory: View>: View {
         .padding(.vertical, verticalPadding)
     }
 
-    @ViewBuilder private var title: some View {
+    /// A caption over the amount, as in a Screen Time summary, or one plain sentence when nothing can be freed.
+    @ViewBuilder private var figure: some View {
         if summary.showsBar {
-            Text("Could free about \(Text(ByteFormat.string(summary.couldFree)).foregroundStyle(.tint))")
-                .accessibilityLabel(summary.title)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Could free about")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(ByteFormat.string(summary.couldFree))
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.tint)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(summary.title)
+            .accessibilityAddTraits(.isHeader)
         } else {
             Text(summary.title)
+                .font(.title3)
+                .accessibilityAddTraits(.isHeader)
         }
     }
 }
@@ -87,23 +104,5 @@ public enum VideoCount {
     public static func summary(count: Int, bytes: Int64) -> String {
         let videos = count == 1 ? "1 video" : "\(count) videos"
         return count == 0 ? videos : "\(videos) · \(ByteFormat.string(bytes))"
-    }
-}
-
-/// The whole track is the size now; the filled part is what's left after converting.
-private struct SavingsBar: View {
-    let fraction: Double
-
-    var body: some View {
-        Capsule()
-            .fill(.quaternary)
-            .frame(height: 6)
-            .overlay(alignment: .leading) {
-                GeometryReader { proxy in
-                    Capsule()
-                        .fill(.tint)
-                        .frame(width: proxy.size.width * min(max(fraction, 0), 1))
-                }
-            }
     }
 }

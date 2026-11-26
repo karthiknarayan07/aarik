@@ -2,7 +2,7 @@ import Convert
 import LocalLibrary
 import SwiftUI
 
-/// The Local Files toolbar: Group By in the middle, then Share, Filter and Sort, then Add Files.
+/// The Local Files toolbar: Group By, Share, Filter and Sort, then Add Files.
 struct LocalFilesToolbar: ToolbarContent {
     let model: ConvertModel
     @Bindable private var browser: LibraryBrowser
@@ -26,24 +26,24 @@ struct LocalFilesToolbar: ToolbarContent {
     }
 }
 
-/// Group By, Share (files only), Filter and Sort, shared by both libraries' grids. Group By sits in the centre, as in
-/// Photos; the rest group at the trailing edge.
+/// Group By, Share (files only), Filter and Sort, shared by both libraries' grids, grouped at the trailing edge.
 struct GridToolbar: ToolbarContent {
     @Bindable var browser: LibraryBrowser
     /// The files Share sends; nil for a library whose videos aren't files, which has no Share button.
     var shareURLs: [URL]?
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            Picker("Group By", selection: $browser.grouping) {
+        ToolbarItemGroup(placement: .primaryAction) {
+            // A menu, like Finder's Group By, instead of a segmented bar in the middle of the title bar.
+            Picker(selection: $browser.grouping) {
                 Text("Years").tag(Grouping.year)
                 Text("Months").tag(Grouping.month)
                 Text("All").tag(Grouping.none)
+            } label: {
+                Label("Group By", systemImage: "rectangle.3.group")
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .help("Group videos by year or month, or show them all")
-        }
-        ToolbarItemGroup(placement: .primaryAction) {
             if let shareURLs {
                 ShareLink(items: shareURLs) {
                     Label("Share", systemImage: "square.and.arrow.up")
