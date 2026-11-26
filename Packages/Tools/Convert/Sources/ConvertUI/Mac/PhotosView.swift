@@ -24,6 +24,7 @@
     /// inspector as Local Files.
     struct PhotosView: View {
         @Bindable var model: ConvertModel
+        @State private var resumeTask: Task<Void, Never>?
 
         var body: some View {
             let photos = model.photos
@@ -45,10 +46,16 @@
             .task { await photos.start() }
             // Access or Full Disk Access may have been changed in System Settings while the app was in the background.
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                Task {
+                resumeTask?.cancel()
+                resumeTask = Task {
                     await photos.start()
+                    guard !Task.isCancelled else { return }
                     if photos.indexStatus == .noAccess { await photos.reloadIndex() }
                 }
+            }
+            .onDisappear {
+                resumeTask?.cancel()
+                resumeTask = nil
             }
         }
     }
@@ -164,13 +171,7 @@
             if sections.isEmpty {
                 Group {
                     if browser.quality.isActive && browser.search.isEmpty {
-                        ContentUnavailableView {
-                            Label("No Matching Videos", systemImage: "line.3.horizontal.decrease.circle")
-                        } description: {
-                            Text("No videos here match these filters.")
-                        } actions: {
-                            Button("Clear Filters") { browser.quality = QualityFilter() }
-                        }
+                        NoMatchingVideos { browser.quality = QualityFilter() }
                     } else {
                         ContentUnavailableView.search(text: browser.search)
                     }

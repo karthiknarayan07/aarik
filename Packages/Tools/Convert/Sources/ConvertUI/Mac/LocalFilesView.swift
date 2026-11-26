@@ -163,7 +163,7 @@
     }
 
     /// The quality filters hide every video in the collection.
-    private struct NoMatchingVideos: View {
+    struct NoMatchingVideos: View {
         let clear: () -> Void
 
         var body: some View {
