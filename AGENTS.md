@@ -6,14 +6,25 @@ deletes files, and `PERFORMANCE.md` before touching the engine, the queue or the
 
 ## Layout
 
-- `Packages/AppModules`: all logic, as SwiftPM targets (Swift 6, macOS 26).
-  - `AppCore`: job model, `JobQueue` (actor), `JobStore`, `RelaunchGate`, output naming, metadata diff.
+Dependencies point one way: Apps -> Tools -> Core. Core never imports a tool, a tool never imports an app.
+
+- `Packages/Core` (package `Core`, Swift 6, macOS 26): everything that is not specific to one tool.
+  - `AppCore`: job model, `JobQueue` (actor), `JobStore`, `RelaunchGate`, output naming, metadata diff, pressure
+    policy, `ToolModule`, `ToolPlatforms` and `ToolRegistry`.
   - `MediaEngine`: inspection and the downscale engine (`VideoDownscaler`, `WorkSlots`, `AtomicOutput`).
-  - `DownscaleVideo`: the tool: planner, presets, estimator, `DownscaleRunner` (verify, Replace, Trash).
   - `LocalLibrary`, `PhotosLibrary`: file and Photos browsing, `WorkFolder`, `PhotoInputFetcher`.
+  - `Assistant`: the generic `LanguageModelClient`, availability and `Deadline`.
   - `AppUI`: shared view models. `MediaTestSupport` and `devtool`: fixtures and a command line for the engine.
-- `App/`: the SwiftUI + AppKit shell (`App/Sources`), `App.xcodeproj`, Sparkle updater (`Updater.swift`).
-- `Config/*.xcconfig`: build settings and brand values (`Brand.xcconfig`). `.github/workflows`: CI and release.
+- `Packages/Tools/Convert` (package `Convert`): the first tool.
+  - `Convert`: planner, presets, estimator, `ConvertRunner` (verify, Replace, Trash), and the assistant features that
+    read its results (`QueryTranslator`, `OutcomeExplainer`, smart picks).
+  - `ConvertUI`: its SwiftUI inspector views. `QuickRunService`: Shortcuts, Services, menu bar and Dock entry points
+    (only the Mac app links it).
+- `Apps/macOS`: the SwiftUI + AppKit shell (`Apps/macOS/Sources`, `App.xcodeproj`, Sparkle updater `Updater.swift`).
+  `Apps/iOS`: the iOS app (`App.xcodeproj`, scheme `App-iOS`, with the share and widget extensions).
+  `App.xcworkspace` at the root holds both projects and the packages; the Mac scheme is `App`.
+- `Config/*.xcconfig` (`macOS.xcconfig`, `iOS.xcconfig`, `Brand.xcconfig`): build settings and brand values.
+  `.github/workflows`: CI and release.
 - `docs/`: ADRs, specs, plans (`docs/superpowers/plans`), `RELEASING.md`.
 
 ## Commands
@@ -21,14 +32,19 @@ deletes files, and `PERFORMANCE.md` before touching the engine, the queue or the
 Run from the repository root unless stated.
 
 ```sh
-cd Packages/AppModules && swift build -Xswiftc -warnings-as-errors --build-tests
-cd Packages/AppModules && swift test
-cd Packages/AppModules && RUN_PERF_TESTS=1 swift test --filter PerformanceTests   # benchmark vs stored baseline
-cd Packages/AppModules && swift test --sanitize=thread     # CI runs this and the address one as separate jobs
-cd Packages/AppModules && swift test --sanitize=address
-swift format lint --recursive --strict Packages/AppModules/Sources Packages/AppModules/Tests App/Sources
-xcodebuild -project App/App.xcodeproj -scheme App -configuration Debug -derivedDataPath .build/xcode-p6 \
+cd Packages/Core && swift build -Xswiftc -warnings-as-errors --build-tests
+cd Packages/Core && swift test
+cd Packages/Tools/Convert && swift build -Xswiftc -warnings-as-errors --build-tests
+cd Packages/Tools/Convert && swift test
+cd Packages/Core && RUN_PERF_TESTS=1 swift test --filter PerformanceTests   # benchmark vs stored baseline
+cd Packages/Core && swift test --sanitize=thread     # CI runs this and the address one as separate jobs
+cd Packages/Core && swift test --sanitize=address    # same for Packages/Tools/Convert
+swift format lint --recursive --strict Packages/Core/Sources Packages/Core/Tests \
+  Packages/Tools/Convert/Sources Packages/Tools/Convert/Tests Apps/macOS/Sources Apps/iOS
+xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -derivedDataPath .build/xcode-p6 \
   -destination 'platform=macOS,arch=arm64' build    # also Release
+xcodebuild -workspace App.xcworkspace -scheme App-iOS -destination 'generic/platform=iOS Simulator' \
+  CODE_SIGNING_ALLOWED=NO build
 scripts/run-app.sh                                   # build Debug and open it
 ```
 
@@ -47,8 +63,8 @@ pass/fail table and exits non-zero on any failure; missing projects or packages 
 ## Constraints
 
 - Swift 6, complete strict concurrency, **zero warnings** (warnings are errors in the app and in CI packages).
-- `swift format lint --strict` must be clean over `Sources`, `Tests` and `App/Sources`.
-- Brand-neutral code: no product name in identifiers, module names or bundle ids; the name lives in
+- `swift format lint --strict` must be clean over every package's `Sources` and `Tests`, `Apps/macOS/Sources` and `Apps/iOS`.
+- Brand-neutral code: no product name in identifiers, module names, project or target names, or bundle ids; the name lives in
   `Config/Brand.xcconfig` and in prose only.
 - No third-party dependencies except Sparkle. Offline: no analytics, no network except the update check.
 - Never delete or overwrite user files; originals go to the Trash only after verification (see `STABILITY.md`).

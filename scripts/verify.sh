@@ -5,7 +5,7 @@
 #   scripts/verify.sh [--only GROUP[,GROUP...]] [--repeat N]
 #
 # Groups: mac ios packages lint hygiene brand stale   (default: everything)
-# Env:    SIM_UDID (force a simulator), MAC_SCHEME (default App), IOS_SCHEME (default: the iOS project's first scheme),
+# Env:    SIM_UDID (force a simulator), MAC_SCHEME (default App), IOS_SCHEME (default App-iOS),
 #         VERIFY_DIR (logs and derived data, default .build/verify)
 # Compatible with the bash 3.2 that ships with macOS.
 set -uo pipefail
@@ -64,22 +64,17 @@ fail_check() { # RUN NAME "TAGS" MESSAGE: a check whose prerequisite is missing
   ROWS+=("$run|$name|FAIL|0s|$msg"); FAILED=1
 }
 
-# ---- discovery (globs, so it works before and after the layout move) ----
+# ---- discovery: packages by glob, apps at their fixed paths in App.xcworkspace ----
 PACKAGES=()
 while IFS= read -r p; do
   [[ -n $p ]] && PACKAGES+=("$(dirname "$p")")
 done < <(find Packages -name Package.swift -not -path '*/.build/*' -not -path '*/checkouts/*' 2>/dev/null | sort)
 
-first_match() { local f; for f in "$@"; do [[ -e $f ]] && { echo "$f"; return 0; }; done; return 1; }
-MAC_PROJECT=$(first_match Apps/macOS/App.xcodeproj App/App.xcodeproj Apps/macOS/*.xcodeproj || true)
-IOS_PROJECT=$(first_match Apps/iOS/App.xcodeproj Apps/iOS/*.xcodeproj || true)
-WORKSPACE=$(first_match App.xcworkspace || true)
+WORKSPACE=App.xcworkspace
+MAC_PROJECT=Apps/macOS/App.xcodeproj
+IOS_PROJECT=Apps/iOS/App.xcodeproj
 MAC_SCHEME=${MAC_SCHEME:-App}
-if [[ -z ${IOS_SCHEME:-} && -n $IOS_PROJECT ]]; then
-  s=$(first_match "$IOS_PROJECT"/xcshareddata/xcschemes/*.xcscheme || true)
-  [[ -n $s ]] && IOS_SCHEME=$(basename "$s" .xcscheme)
-fi
-IOS_SCHEME=${IOS_SCHEME:-}
+IOS_SCHEME=${IOS_SCHEME:-App-iOS}
 
 pick_simulator() { # prints a UDID: iPhone 17 Pro (newest runtime) if present, else the newest available iPhone
   if [[ -n ${SIM_UDID:-} ]]; then echo "$SIM_UDID"; return; fi
@@ -111,7 +106,7 @@ lint_paths() {
     [[ -d $p/Sources ]] && echo "$p/Sources"
     [[ -d $p/Tests ]] && echo "$p/Tests"
   done
-  for p in Apps/*/Sources App/Sources; do [[ -d $p ]] && echo "$p"; done
+  for p in Apps/macOS/Sources Apps/iOS; do [[ -d $p ]] && echo "$p"; done
 }
 brand_check() { # no product name in source, plists, project files or schemes
   local hits
@@ -142,13 +137,11 @@ sim_test_package() {
     -derivedDataPath "$VERIFY_DIR/derived-sim-$(basename "$dir")")
 }
 mac_build() { # CONFIG
-  local target=(-project "$MAC_PROJECT")
-  [[ -n $WORKSPACE ]] && target=(-workspace "$WORKSPACE")
-  xcodebuild "${target[@]}" -scheme "$MAC_SCHEME" -configuration "$1" -derivedDataPath "$VERIFY_DIR/derived-mac" \
+  xcodebuild -workspace "$WORKSPACE" -scheme "$MAC_SCHEME" -configuration "$1" -derivedDataPath "$VERIFY_DIR/derived-mac" \
     -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build
 }
 ios_xcode() { # ACTION
-  xcodebuild "$1" -project "$IOS_PROJECT" -scheme "$IOS_SCHEME" -derivedDataPath "$VERIFY_DIR/derived-ios" \
+  xcodebuild "$1" -workspace "$WORKSPACE" -scheme "$IOS_SCHEME" -derivedDataPath "$VERIFY_DIR/derived-ios" \
     -destination "id=$SIM" CODE_SIGNING_ALLOWED=NO
 }
 
@@ -177,15 +170,15 @@ for ((n = 1; n <= REPEAT; n++)); do
     run $n "format lint" "mac lint" swift format lint --recursive --strict "${LP[@]}"
   fi
 
-  if [[ -z $MAC_PROJECT ]]; then
-    fail_check $n "Mac build" mac "no Apps/macOS/*.xcodeproj or App/App.xcodeproj found"
+  if [[ ! -d $WORKSPACE || ! -d $MAC_PROJECT ]]; then
+    fail_check $n "Mac build" mac "missing $WORKSPACE or $MAC_PROJECT"
   else
     run $n "Mac Debug build" mac mac_build Debug
     run $n "Mac Release build" mac mac_build Release
   fi
 
-  if [[ -z $IOS_PROJECT || -z $IOS_SCHEME ]]; then
-    fail_check $n "iOS app" ios "no Apps/iOS/*.xcodeproj (with a shared scheme) found"
+  if [[ ! -d $WORKSPACE || ! -d $IOS_PROJECT ]]; then
+    fail_check $n "iOS app" ios "missing $WORKSPACE or $IOS_PROJECT"
   elif [[ -n $SIM ]]; then
     run $n "iOS app build" ios ios_xcode build
     run $n "iOS app test" ios ios_xcode test

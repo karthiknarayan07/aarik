@@ -125,7 +125,8 @@ You need Xcode 27 (or any Xcode with the macOS 26 SDK and Swift 6) on Apple sili
 
 ```sh
 scripts/run-app.sh                          # build and launch the app
-cd Packages/AppModules && swift test        # run the unit tests
+cd Packages/Core && swift test        # run the unit tests
+cd Packages/Tools/Convert && swift test
 scripts/make-dmg.sh                         # build a release DMG into build/dist
 ```
 

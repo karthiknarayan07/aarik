@@ -73,8 +73,12 @@ jobs:
           fi
           sudo xcode-select -s "$newest"
 
-      - name: Test (${{ matrix.sanitizer }} sanitizer)
-        working-directory: Packages/AppModules
+      - name: Test Core (${{ matrix.sanitizer }} sanitizer)
+        working-directory: Packages/Core
+        run: swift test --sanitize=${{ matrix.sanitizer }}
+
+      - name: Test Convert (${{ matrix.sanitizer }} sanitizer)
+        working-directory: Packages/Tools/Convert
         run: swift test --sanitize=${{ matrix.sanitizer }}
 
   performance-report:
@@ -97,7 +101,7 @@ jobs:
           sudo xcode-select -s "$newest"
 
       - name: Measure
-        working-directory: Packages/AppModules
+        working-directory: Packages/Core
         env:
           RUN_PERF_TESTS: "1"
           PERF_REPORT_PATH: ${{ runner.temp }}/perf-report.json
