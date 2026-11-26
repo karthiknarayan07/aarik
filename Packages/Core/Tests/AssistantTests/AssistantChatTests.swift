@@ -262,7 +262,7 @@ struct AssistantChatTests {
         let client = ScriptedChatClient { _ in
             calls.next() == 1 ? [.text(written)] : [.text("You have 3 videos.")]
         }
-        let chat = makeChat(client: client)
+        let chat = makeChat(client: client, tools: [CountingTool(name: "search_library", requiresConfirmation: false)])
         chat.send("How many videos do I have?")
         await chat.waitUntilIdle()
         #expect(client.requests.count == 2)
@@ -271,13 +271,48 @@ struct AssistantChatTests {
         #expect(chat.items.map(\.content) == [.user("How many videos do I have?"), .assistant("You have 3 videos.")])
     }
 
-    @Test func aToolCallWrittenAsTextTwiceShowsNothingRaw() async {
-        let client = ScriptedChatClient { _ in [.text("search_library{}")] }
-        let chat = makeChat(client: client)
-        chat.send("How many videos do I have?")
+    @Test func aToolCallWrittenAsTextTwiceIsRunByTheChatAndAnsweredFromItsOutput() async {
+        let tool = CountingTool(name: "search_library", requiresConfirmation: false)
+        let client = ScriptedChatClient { _ in [.text("search_library{library:any}")] }
+        let chat = makeChat(client: client, tools: [tool])
+        chat.send("How much space do my videos take up?")
         await chat.waitUntilIdle()
         #expect(client.requests.count == 2)
-        #expect(chat.items.map(\.content) == [.user("How many videos do I have?")])
+        #expect(tool.runCount == 1)
+        #expect(chat.items.last?.content == .assistant("ran search_library"))
+        #expect(!chat.items.contains { if case .notice = $0.content { true } else { false } })
+    }
+
+    @Test func aToolCallWrittenAsTextTwiceThatCannotBeRunShowsTheRetryNotice() async {
+        let tool = CountingTool(name: "search_library", requiresConfirmation: false)
+        let client = ScriptedChatClient { _ in [.text("search_library{oops")] }
+        let chat = makeChat(client: client, tools: [tool])
+        chat.send("How many videos do I have?")
+        await chat.waitUntilIdle()
+        #expect(tool.runCount == 0)
+        #expect(
+            chat.items.map(\.content) == [
+                .user("How many videos do I have?"), .notice(AssistantChat.emptyReplyMessage),
+            ])
+        #expect(chat.canRegenerate)
+    }
+
+    @Test func anUnknownOrConfirmingToolWrittenAsTextIsNotRun() async {
+        let tool = CountingTool(name: "convert_videos", requiresConfirmation: true)
+        let client = ScriptedChatClient { _ in [.text("convert_videos{}")] }
+        let chat = makeChat(client: client, tools: [tool])
+        chat.send("Shrink everything")
+        await chat.waitUntilIdle()
+        #expect(tool.runCount == 0)
+        #expect(chat.items.last?.content == .notice(AssistantChat.emptyReplyMessage))
+    }
+
+    @Test func aReplyThatIsEmptyShowsTheRetryNotice() async {
+        let client = ScriptedChatClient { _ in [] }
+        let chat = makeChat(client: client)
+        chat.send("Hi")
+        await chat.waitUntilIdle()
+        #expect(chat.items.map(\.content) == [.user("Hi"), .notice(AssistantChat.emptyReplyMessage)])
     }
 
     @Test func ordinaryAnswersAreNotTakenForToolCalls() {

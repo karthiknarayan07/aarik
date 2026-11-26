@@ -91,6 +91,49 @@ public final class AssistantChat {
         return toolNames.contains { text.contains("\($0){") || text.contains("\($0) {") }
     }
 
+    static let emptyReplyMessage = "I couldn't come up with an answer. Try again."
+
+    /// The call a reply wrote out as text, if it names one of these tools that only reads and its arguments parse:
+    /// `search_library{}`, `search_library{library:any}` or `search_library {"library": "any"}`.
+    static func parseToolCall(_ text: String, tools: [any AssistantTool]) -> (
+        name: String, arguments: AssistantArguments
+    )? {
+        for tool in tools where !tool.requiresConfirmation {
+            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: tool.name))\\s*\\{([^{}]*)\\}"
+            guard let match = text.range(of: pattern, options: .regularExpression) else { continue }
+            let call = String(text[match])
+            guard let open = call.firstIndex(of: "{"), let close = call.lastIndex(of: "}") else { continue }
+            let body = String(call[call.index(after: open)..<close]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let values = parseArguments(body) else { return nil }
+            return (tool.name, AssistantArguments(values))
+        }
+        return nil
+    }
+
+    private static func parseArguments(_ body: String) -> [String: String]? {
+        if body.isEmpty { return [:] }
+        if body.hasPrefix("\""), let data = "{\(body)}".data(using: .utf8),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        {
+            return object.mapValues { "\($0)" }
+        }
+        var values: [String: String] = [:]
+        for pair in body.split(separator: ",") {
+            guard let split = pair.firstIndex(where: { $0 == ":" || $0 == "=" }) else { return nil }
+            let quotes = CharacterSet(charactersIn: "\"' \n")
+            let key = pair[..<split].trimmingCharacters(in: quotes)
+            let value = pair[pair.index(after: split)...].trimmingCharacters(in: quotes)
+            guard !key.isEmpty else { return nil }
+            values[key] = value
+        }
+        return values
+    }
+
+    private var hasReplyAfterLastUser: Bool {
+        guard let index = items.lastIndex(where: Self.isUser) else { return false }
+        return items[(index + 1)...].contains { if case .assistant = $0.content { true } else { false } }
+    }
+
     /// The short prompt for the one retry after a refusal: no history, no examples, only the job.
     static let simpleInstructions = """
         You help someone manage the video files in their own library on this device. Use the tools to look things \
@@ -213,6 +256,7 @@ public final class AssistantChat {
         // A reply that is a tool call written out as text gets one more try with a nudge, and is never shown.
         var simplified = false
         var nudged = false
+        var hiddenCall: String?
         var attempt = 0
         while attempt < 3 {
             attempt += 1
@@ -232,6 +276,7 @@ public final class AssistantChat {
                     if Task.isCancelled { break }
                     if Self.looksLikeToolCall(text, toolNames: names) {
                         wroteToolCall = true
+                        hiddenCall = text
                         // Nothing of it is shown: a partial reply that turned out to be a call is removed.
                         if let existing = replyID {
                             items.removeAll { $0.id == existing }
@@ -261,6 +306,15 @@ public final class AssistantChat {
                 continue
             }
             break
+        }
+        // Never end a turn empty or with hidden text only: run the call the model wrote out, or say so.
+        if replyID == nil, failure == nil, !Task.isCancelled, epoch == self.epoch {
+            if let hiddenCall, let call = Self.parseToolCall(hiddenCall, tools: tools()) {
+                let answer = await handleToolCall(call.name, call.arguments, in: id)
+                if !Task.isCancelled { replyID = append(.assistant(answer), in: id) }
+            } else if !Task.isCancelled, !hasReplyAfterLastUser, !hasPendingConfirmation {
+                append(.notice(Self.emptyReplyMessage), in: id)
+            }
         }
         if let failure { append(.notice(Self.message(for: failure)), in: id) }
         // Whatever was written stays; a reply that ended up empty leaves no row.
