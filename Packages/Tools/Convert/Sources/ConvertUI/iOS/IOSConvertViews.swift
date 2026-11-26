@@ -124,16 +124,25 @@
                             .foregroundStyle(page.tint)
                             .symbolEffect(.bounce, value: page == .completed ? model.activity.completed : 0)
                     }
-                    if let progress {
+                    if progress != nil || (count ?? 0) > 0 {
                         Spacer()
-                        ProgressView(value: progress)
-                            .progressViewStyle(.circular)
-                            .controlSize(.mini)
-                            .accessibilityHidden(true)
+                        HStack(spacing: 8) {
+                            if let progress {
+                                ProgressView(value: progress)
+                                    .progressViewStyle(.circular)
+                                    .controlSize(.mini)
+                                    .accessibilityHidden(true)
+                            }
+                            if let count, count > 0 {
+                                Text(count, format: .number)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                                    .accessibilityHidden(true)
+                            }
+                        }
                     }
                 }
             }
-            .badge(count ?? 0)
             .accessibilityIdentifier("page.\(page.rawValue)")
             .accessibilityLabel(page.title)
             .accessibilityValue(value)
