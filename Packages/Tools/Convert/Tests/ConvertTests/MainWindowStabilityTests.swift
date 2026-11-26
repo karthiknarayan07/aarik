@@ -3,6 +3,7 @@
     import AppKit
     import AppServices
     import AppUI
+    import Assistant
     import Foundation
     import PhotosLibrary
     import SwiftUI
@@ -37,14 +38,17 @@
             RunLoop.main.run(until: Date(timeIntervalSinceNow: seconds))
         }
 
-        private static func makeHarness() throws -> Harness? {
+        private static func makeHarness(askAvailable: Bool = false) throws -> Harness? {
             guard !NSScreen.screens.isEmpty else { return nil }
             _ = NSApplication.shared
             let directory = URL.temporaryDirectory.appending(
                 path: "window-stability-\(UUID().uuidString)", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let defaults = UserDefaults(suiteName: "MainWindowStabilityTests-\(UUID().uuidString)")!
-            let services = AppServices(directory: directory, defaults: defaults, photoStore: FakePhotoStore())
+            // A scripted model stands in for Apple Intelligence, so the Ask page is in the sidebar when asked for.
+            let client = ScriptedChatClient(isAvailable: askAvailable, reason: .notEnabled) { _ in [] }
+            let services = AppServices(
+                directory: directory, defaults: defaults, photoStore: FakePhotoStore(), assistantClient: client)
             let scene = ConvertMacScene(model: ConvertModel(services: services))
             scene.selection = .overview
             let visibility = Box(NavigationSplitViewVisibility.automatic)
@@ -81,6 +85,24 @@
                 }
             }
             #expect(changes.isEmpty, "The window frame changed on navigation: \(changes)")
+        }
+
+        @Test func theAskPageKeepsTheWindowFrameToo() throws {
+            guard let harness = try Self.makeHarness(askAvailable: true) else { return }
+            defer { harness.tearDown() }
+            #expect(harness.scene.selectableDestinations.last == .ask)
+            let initial = harness.window.frame
+            for page in [VideoPage.localFiles, .ask, .queue, .ask, .overview] {
+                harness.scene.selection = page
+                Self.pump()
+                #expect(harness.window.frame == initial, "\(page)")
+            }
+            harness.scene.selection = .ask
+            for _ in 0..<2 {
+                harness.scene.isInspectorPresented.toggle()
+                Self.pump()
+                #expect(harness.window.frame == initial)
+            }
         }
 
         @Test func togglingTheInspectorNeverChangesTheWindowFrame() throws {
