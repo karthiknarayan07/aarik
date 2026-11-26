@@ -1,6 +1,7 @@
 import AppCore
 import Foundation
 import MediaEngine
+import MediaTestSupport
 import Synchronization
 import Testing
 
@@ -8,7 +9,7 @@ import Testing
 
 /// Keep a copy of originals: a Replace copies the original into the backup folder, checks the copy's size, and only
 /// then trashes the original. Any problem with the copy leaves the original where it is.
-@Suite struct OriginalsBackupTests {
+@Suite(.enabled(if: EncoderEnvironment.isRepresentative)) struct OriginalsBackupTests {
     private let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: RunnerFixture.spec)
 
     /// A stand-in for the Trash: moves the file into `<directory>/Trash` so tests never touch the real one.
