@@ -85,7 +85,8 @@ private enum Calendars {
             quickRun = QuickRun(
                 queue: queue, store: store, notifier: notifier, inspector: FakeInspector(sources: sourcesByURL),
                 settings: {
-                    QuickRunSettings(preset: .balanced, saveLocation: SaveLocation(platform: .macOS), startsQueue: startsQueue)
+                    QuickRunSettings(
+                        preset: .balanced, saveLocation: SaveLocation(platform: .macOS), startsQueue: startsQueue)
                 },
                 now: { clock.now })
             shrink = ShrinkVideos(
