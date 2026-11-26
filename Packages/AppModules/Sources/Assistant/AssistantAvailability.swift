@@ -1,6 +1,11 @@
-import AppKit
 import Foundation
 import Observation
+
+#if os(macOS)
+    import AppKit
+#else
+    import UIKit
+#endif
 
 /// Whether the assistant's controls may appear at all. Reads the system model's availability; any reason it
 /// isn't available (no Apple Intelligence, turned off, model still downloading, unsupported language) hides
@@ -14,13 +19,21 @@ public final class AssistantAvailability {
     @ObservationIgnored private let client: any LanguageModelClient
     @ObservationIgnored private var activationObserver: (any NSObjectProtocol)?
 
+    private static var becameActive: Notification.Name {
+        #if os(macOS)
+            NSApplication.didBecomeActiveNotification
+        #else
+            UIApplication.didBecomeActiveNotification
+        #endif
+    }
+
     /// `observesActivation` re-checks when the app becomes active; tests turn it off and call `refresh()`.
     public init(client: any LanguageModelClient = .real, observesActivation: Bool = true) {
         self.client = client
         self.isAvailable = client.isAvailable
         guard observesActivation else { return }
         activationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            forName: Self.becameActive, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }

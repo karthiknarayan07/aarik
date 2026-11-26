@@ -1,5 +1,7 @@
 import AppCore
-import AppKit
+#if os(macOS)
+    import AppKit
+#endif
 import CoreTransferable
 import Observation
 import SwiftUI
@@ -70,7 +72,9 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     @State private var frames = TileFrames<Item.ID>()
     @State private var marquee = MarqueeState<Item.ID>()
     @FocusState private var isFocused: Bool
-    @Environment(\.controlActiveState) private var controlActiveState
+    #if os(macOS)
+        @Environment(\.controlActiveState) private var controlActiveState
+    #endif
     @ScaledMetric(relativeTo: .body) private var spacing: CGFloat = 12
     @ScaledMetric(relativeTo: .body) private var padding: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var minimumTileWidth: CGFloat = 150
@@ -98,7 +102,11 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     private var ids: [[Item.ID]] { sections.map { $0.items.map(\.id) } }
 
     private var emphasis: SelectionEmphasis {
-        .resolve(isWindowActive: controlActiveState != .inactive, isGridFocused: isFocused)
+        #if os(macOS)
+            .resolve(isWindowActive: controlActiveState != .inactive, isGridFocused: isFocused)
+        #else
+            .resolve(isWindowActive: true, isGridFocused: isFocused)
+        #endif
     }
 
     public var body: some View {
@@ -140,7 +148,9 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                 handle(press, scrollTo: { proxy.scrollTo($0) })
             }
             // Edit ▸ Select All reaches the focused grid through the responder chain, so a focused text field keeps its own.
-            .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
+            #if os(macOS)
+                .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
+            #endif
         }
     }
 
@@ -168,8 +178,12 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     // MARK: Mouse
 
     private func click(_ id: Item.ID) {
-        let event = NSApp.currentEvent
-        click(id, count: event?.clickCount ?? 1, modifiers: Self.clickModifiers(event?.modifierFlags ?? []))
+        #if os(macOS)
+            let event = NSApp.currentEvent
+            click(id, count: event?.clickCount ?? 1, modifiers: Self.clickModifiers(event?.modifierFlags ?? []))
+        #else
+            click(id, count: 1, modifiers: [])
+        #endif
     }
 
     private func click(_ id: Item.ID, count: Int, modifiers: GridClickModifiers) {
@@ -191,12 +205,14 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
 
     /// The event being dispatched carries the modifiers held at the click; the global NSEvent.modifierFlags
     /// can already be stale or empty by the time SwiftUI runs the tap action.
-    private static func clickModifiers(_ flags: NSEvent.ModifierFlags) -> GridClickModifiers {
-        var modifiers: GridClickModifiers = []
-        if flags.contains(.command) { modifiers.insert(.toggle) }
-        if flags.contains(.shift) { modifiers.insert(.extend) }
-        return modifiers
-    }
+    #if os(macOS)
+        private static func clickModifiers(_ flags: NSEvent.ModifierFlags) -> GridClickModifiers {
+            var modifiers: GridClickModifiers = []
+            if flags.contains(.command) { modifiers.insert(.toggle) }
+            if flags.contains(.shift) { modifiers.insert(.extend) }
+            return modifiers
+        }
+    #endif
 
     /// Rubber-band selection from empty space; a click on empty space clears the selection.
     private var marqueeGesture: some Gesture {
@@ -205,7 +221,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                 if marquee.start != value.startLocation {
                     marquee.begin(
                         at: value.startLocation, base: selection,
-                        mode: Self.marqueeMode(NSApp.currentEvent?.modifierFlags ?? []),
+                        mode: Self.currentMarqueeMode(),
                         startsOnEmptySpace: MarqueeSelection.startsOnEmptySpace(
                             value.startLocation, frames: frames.values))
                 }
@@ -233,9 +249,13 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
             }
     }
 
-    private static func marqueeMode(_ flags: NSEvent.ModifierFlags) -> MarqueeSelection.Mode {
-        if flags.contains(.command) { return .toggle }
-        if flags.contains(.shift) { return .add }
+    /// Command toggles and Shift adds on the Mac; a touch drag always replaces.
+    private static func currentMarqueeMode() -> MarqueeSelection.Mode {
+        #if os(macOS)
+            let flags = NSApp.currentEvent?.modifierFlags ?? []
+            if flags.contains(.command) { return .toggle }
+            if flags.contains(.shift) { return .add }
+        #endif
         return .replace
     }
 

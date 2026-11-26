@@ -23,10 +23,13 @@ public struct PowerSnapshot: Sendable, Equatable {
     public var onBattery: Bool
     /// Charge in percent; nil on a Mac without a battery.
     public var percent: Int?
+    /// Low Power Mode is on (iOS, and a Mac that has it).
+    public var isLowPowerMode: Bool
 
-    public init(onBattery: Bool, percent: Int?) {
+    public init(onBattery: Bool, percent: Int?, isLowPowerMode: Bool = false) {
         self.onBattery = onBattery
         self.percent = percent
+        self.isLowPowerMode = isLowPowerMode
     }
 
     /// A desktop Mac, or a laptop on its charger with no reading.
@@ -44,6 +47,7 @@ public enum AutoPauseReason: Sendable, Equatable {
 ///
 /// - Thermal: `.critical` pauses; it resumes only at `.fair` or better, so `.serious` on the way down stays paused.
 ///   `.serious` alone (not paused) limits conversion to one video at a time.
+/// - Low Power Mode: one video at a time, whatever the speed.
 /// - Battery: conversion continues on battery. It pauses at 20 % or less, and resumes when the Mac is plugged in or
 ///   above 25 %. A Mac that reports no percentage never pauses.
 public struct PressureState: Sendable, Equatable {
@@ -93,7 +97,7 @@ public struct PressureState: Sendable, Equatable {
     /// limit). Quiet: 1. Balanced: half the cores, at least 2. Fastest: the performance cores, never fewer than
     /// Balanced and never more than the cores there are. The speed's number, and one at most while the Mac is hot.
     public func concurrencyLimit(cores: CoreCounts) -> Int {
-        if thermal >= .serious { return 1 }
+        if thermal >= .serious || power.isLowPowerMode { return 1 }
         switch speed {
         case .quiet: return 1
         case .balanced: return balanced(cores)
