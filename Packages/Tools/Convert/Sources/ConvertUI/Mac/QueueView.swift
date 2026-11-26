@@ -103,7 +103,7 @@
         }
     }
 
-    private struct QueueRow: View {
+    struct QueueRow: View {
         let job: Job
         /// "Paused", or why the queue stopped itself; nil while it runs.
         let pauseText: String?

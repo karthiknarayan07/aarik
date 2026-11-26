@@ -26,6 +26,8 @@ public final class AppServices {
     @ObservationIgnored public let library: LibraryService
     /// Photos originals whose copy is saved and verified, waiting for the batch delete.
     @ObservationIgnored public let pendingDeletions: PendingDeletions
+    /// The Overview's last savings numbers, kept in a SwiftData store in `directory` so the page draws at once.
+    @ObservationIgnored public let savingsStats: SavingsStatsCache
     /// The app's own copies of inputs that reached an action as data only. Not the Photos Work folder: that one is
     /// swept at every launch, this one keeps what a queued job still reads.
     @ObservationIgnored public let staging: StagedInputs
@@ -106,6 +108,7 @@ public final class AppServices {
             directory: directory.appending(path: Self.stagingFolderName, directoryHint: .isDirectory))
         self.library = LibraryService(directory: directory, photoStore: photoStore)
         self.pendingDeletions = PendingDeletions(directory: directory)
+        self.savingsStats = SavingsStatsCache(store: SwiftDataSavingsStatsStore(directory: directory))
         // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause.
         let autoStart = settings.autoStartQueue
         self.isQueuePaused = !autoStart

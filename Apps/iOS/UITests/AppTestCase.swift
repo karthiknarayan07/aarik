@@ -161,8 +161,10 @@ class AppTestCase: XCTestCase {
         _ name: String = "clip-a", timeout: TimeInterval = 240, file: StaticString = #filePath, line: UInt = #line
     ) {
         open("Completed", file: file, line: line)
+        let appeared = element(labelContaining: name).waitForExistence(timeout: timeout)
+        if !appeared { dump("\(name) never reached Completed") }
         XCTAssertTrue(
-            element(labelContaining: name).waitForExistence(timeout: timeout),
+            appeared,
             "\(name) never reached Completed", file: file, line: line)
     }
 
