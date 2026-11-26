@@ -14,6 +14,8 @@
     struct OverviewView: View {
         @Bindable var model: ConvertModel
         @State private var summary: OverviewSummary?
+        /// The numbers of this session's own read, drawn even if the stored cache is slow or its refresh is cancelled.
+        @State private var liveSnapshot: SavingsSnapshot?
         @State private var refreshTick = 0
 
         /// Everything the summary depends on; when it changes the summary is made again.
@@ -45,7 +47,9 @@
         }
 
         var body: some View {
-            Group {
+            // A container, not a Group: the tasks below belong to this one view. On a Group they attach to each branch,
+            // and switching branch (spinner to content) cancelled the refresh that had just drawn the page.
+            ZStack {
                 if model.photos.items.isEmpty && model.library.items.isEmpty {
                     // Not before Photos has answered, so the welcome doesn't flash ahead of the totals.
                     if model.photos.isAuthorizationKnown
@@ -55,19 +59,18 @@
                     } else {
                         ProgressView()
                     }
-                } else if summary != nil || cache.snapshot != nil {
+                } else if summary != nil || cache.snapshot != nil || liveSnapshot != nil {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
                             // The cached numbers draw at once; the live groups below follow when they are read.
-                            if let snapshot = cache.snapshot {
+                            if let snapshot = cache.snapshot ?? liveSnapshot {
                                 OverviewInsights(
                                     charts: OverviewCharts(snapshot: snapshot), presetName: model.preset.displayName,
                                     isRefreshing: cache.isRefreshing)
                             }
                             if let summary {
-                                LibraryGroup(model: model, summary: summary)
                                 SmartPicksGroup(model: model)
-                                BiggestSavingsGroup(summary: summary, reveal: model.reveal)
+                                SourcesGroup(model: model, summary: summary)
                             } else {
                                 ProgressView("Reading your videos…")
                                     .frame(maxWidth: .infinity)
@@ -130,13 +133,16 @@
                     model.assistant.smartPicks.update(
                         buckets: analysis.buckets, undatedCount: analysis.undated, key: key)
                 }
-                await self.show(analysis.summary)
-                return OverviewCharts.snapshot(summary: analysis.summary, buckets: analysis.buckets, finished: finished)
+                let snapshot = OverviewCharts.snapshot(
+                    summary: analysis.summary, buckets: analysis.buckets, finished: finished)
+                await self.show(analysis.summary, snapshot)
+                return snapshot
             }
         }
 
-        private func show(_ summary: OverviewSummary) {
+        private func show(_ summary: OverviewSummary, _ snapshot: SavingsSnapshot) {
             self.summary = summary
+            liveSnapshot = snapshot
         }
 
         /// The totals, the groups and the count of undated videos. Estimating a video reads its metadata, so it is
@@ -187,73 +193,75 @@
         }
     }
 
-    /// Count, size and what could be freed, for Photos videos and for Local Files.
-    private struct LibraryGroup: View {
+    /// Where the videos come from: the Photos access prompt (or its state) and Local Files, as two compact rows
+    /// under the charts. The totals themselves are in the cards above.
+    private struct SourcesGroup: View {
         let model: ConvertModel
         let summary: OverviewSummary
 
         var body: some View {
-            OverviewGroup(title: "Videos in Photos") {
-                switch model.photos.isAuthorizationKnown ? model.photos.authorization : nil {
-                case nil:
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Checking access to Photos")
-                case .authorized, .limited:
-                    TotalsRows(totals: summary.videos)
-                case .notDetermined:
-                    HStack {
-                        Text("Include the videos in your Photos library.")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Allow Access to Photos…") { model.allowPhotos() }
-                            .accessibilityHint("Shows the system prompt to allow access to your Photos library")
-                    }
-                case .denied, .restricted:
-                    HStack {
-                        Text("Access to Photos is off, so its videos aren't included.")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Open System Settings…") { PrivacySettings.open(PrivacySettings.photos) }
-                    }
-                }
-            }
-            OverviewGroup(title: "Local Files") {
-                if summary.localFiles.count == 0 {
-                    HStack {
-                        Text("Add videos or folders from this Mac.")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Add Local Files…") {
-                            model.selection = .localFiles
-                            model.isImporterPresented = true
-                        }
-                    }
-                } else {
-                    TotalsRows(totals: summary.localFiles)
+            OverviewGroup(title: "Sources", systemImage: "externaldrive") {
+                VStack(alignment: .leading) {
+                    photosRow
+                    Divider()
+                    localFilesRow
                 }
             }
         }
-    }
 
-    private struct TotalsRows: View {
-        let totals: OverviewSummary.Totals
-
-        var body: some View {
-            VStack(alignment: .leading) {
-                LabeledContent("Videos", value: totals.count.formatted())
-                LabeledContent("Size", value: ByteFormat.string(totals.bytes))
-                LabeledContent("Could Free") {
-                    if totals.couldFree > 0 {
-                        Text("about \(ByteFormat.string(totals.couldFree))")
-                            .foregroundStyle(.tint)
-                    } else {
-                        Text("Nothing")
-                            .foregroundStyle(.secondary)
-                    }
+        @ViewBuilder private var photosRow: some View {
+            switch model.photos.isAuthorizationKnown ? model.photos.authorization : nil {
+            case nil:
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Checking access to Photos")
+            case .authorized, .limited:
+                LabeledContent {
+                    Text(Self.detail(summary.videos))
+                } label: {
+                    Label("Photos", systemImage: "photo.on.rectangle")
+                }
+            case .notDetermined:
+                LabeledContent {
+                    Button("Allow Access to Photos…") { model.allowPhotos() }
+                        .accessibilityHint("Shows the system prompt to allow access to your Photos library")
+                } label: {
+                    Label("Photos", systemImage: "photo.on.rectangle")
+                    Text("Include the videos in your Photos library.")
+                }
+            case .denied, .restricted:
+                LabeledContent {
+                    Button("Open System Settings…") { PrivacySettings.open(PrivacySettings.photos) }
+                } label: {
+                    Label("Photos", systemImage: "photo.on.rectangle")
+                    Text("Access to Photos is off, so its videos aren't included.")
                 }
             }
-            .accessibilityElement(children: .combine)
+        }
+
+        @ViewBuilder private var localFilesRow: some View {
+            if summary.localFiles.count == 0 {
+                LabeledContent {
+                    Button("Add Local Files…") {
+                        model.selection = .localFiles
+                        model.isImporterPresented = true
+                    }
+                } label: {
+                    Label("Local Files", systemImage: "folder")
+                    Text("Add videos or folders from this Mac.")
+                }
+            } else {
+                LabeledContent {
+                    Text(Self.detail(summary.localFiles))
+                } label: {
+                    Label("Local Files", systemImage: "folder")
+                }
+            }
+        }
+
+        private static func detail(_ totals: OverviewSummary.Totals) -> String {
+            let videos = totals.count == 1 ? "1 video" : "\(totals.count.formatted()) videos"
+            return "\(videos) · \(ByteFormat.string(totals.bytes))"
         }
     }
 
@@ -284,7 +292,7 @@
                                     .foregroundStyle(.secondary)
                                 UndatedNote(count: store.undatedCount)
                             }
-                        } else {
+                        } else if store.state == .loading {
                             HStack {
                                 ProgressView()
                                     .controlSize(.small)
@@ -387,66 +395,6 @@
                     .accessibilityHint("Opens \(bucket.sourceName) with filters for these videos")
             }
             .accessibilityElement(children: .contain)
-        }
-    }
-
-    /// The ten videos that would free the most, from both libraries. Clicking one shows it in its grid.
-    private struct BiggestSavingsGroup: View {
-        let summary: OverviewSummary
-        let reveal: (OverviewSummary.Entry) -> Void
-
-        var body: some View {
-            OverviewGroup(title: "Biggest Savings") {
-                if summary.biggest.isEmpty {
-                    Text("Nothing here would get meaningfully smaller at this preset.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading) {
-                        ForEach(Array(summary.biggest.enumerated()), id: \.element.id) { index, entry in
-                            if index > 0 { Divider() }
-                            BiggestSavingsRow(entry: entry) { reveal(entry) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private struct BiggestSavingsRow: View {
-        let entry: OverviewSummary.Entry
-        let reveal: () -> Void
-
-        private var libraryName: String { entry.library == .photos ? "Photos" : "Local Files" }
-
-        var body: some View {
-            Button(action: reveal) {
-                HStack {
-                    Image(systemName: entry.library == .photos ? "photo.on.rectangle" : "folder")
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading) {
-                        Text(entry.name)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text("\(libraryName) · \(ByteFormat.string(entry.bytes))")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text("about \(ByteFormat.string(entry.couldFree))")
-                        .foregroundStyle(.tint)
-                }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .help("Show in \(libraryName)")
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                "\(entry.name), \(libraryName), \(ByteFormat.string(entry.bytes)), could free about "
-                    + "\(ByteFormat.string(entry.couldFree))"
-            )
-            .accessibilityHint("Shows it in the \(libraryName) grid")
-            .accessibilityAddTraits(.isButton)
         }
     }
 

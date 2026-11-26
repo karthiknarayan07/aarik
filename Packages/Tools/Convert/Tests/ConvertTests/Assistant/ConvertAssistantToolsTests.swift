@@ -2,6 +2,7 @@ import AppCore
 import AppServices
 import CoreGraphics
 import Foundation
+import MediaTestSupport
 import PhotosLibrary
 import Testing
 
@@ -77,6 +78,29 @@ import Testing
 
     // MARK: Search
 
+    @Test func searchSeesLocalFilesWhenPhotosIsEmptyAndIgnoresWordsAboutSize() async throws {
+        let rig = try await rig(assets: []) { _ in
+            [.tool("search_library", ["name_contains": "Biggest Videos"]), .text("Found.")]
+        }
+        defer { rig.cleanUp() }
+        var options = ClipOptions()
+        options.includeAudio = false
+        let clip = try await FixtureFactory.makeClip(options)
+        let file = rig.directory.appending(path: "Local Clip.mov")
+        try FileManager.default.copyItem(at: clip, to: file)
+        rig.model.library.add([file])
+        await rig.model.library.waitUntilIdle()
+        try #require(!rig.model.library.items.isEmpty)
+        await ask(rig)
+        let result = try #require(rig.client.toolResults.first)
+        #expect(result.hasPrefix("Found 1 video in total") && result.contains("Local Clip.mov"))
+    }
+
+    @Test func nameWordsDropWordsAboutSizeAndKind() {
+        #expect(ConvertAssistantContext.nameWords("Biggest videos") == [])
+        #expect(ConvertAssistantContext.nameWords("beach videos 2025") == ["beach", "2025"])
+    }
+
     @Test func searchFindsByNameAndSummarisesCountAndSize() async throws {
         let rig = try await rig(assets: Self.library) { _ in
             [.tool("search_library", ["name_contains": "beach"]), .text("Found.")]
@@ -113,7 +137,7 @@ import Testing
         await ask(rig)
         #expect(rig.client.toolResults.count == 2)
         #expect(rig.client.toolResults[0].hasPrefix("Found 1 video in total"))
-        #expect(rig.client.toolResults[1] == "No videos found.")
+        #expect(rig.client.toolResults[1].hasPrefix("No videos matched."))
     }
 
     // MARK: Savings
