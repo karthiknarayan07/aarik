@@ -295,7 +295,7 @@ public actor JobQueue {
 
     private func execute(_ job: Job) async -> Disposition {
         guard let runner = runners[job.toolID] else {
-            return .finished(.failed(reason: "No tool can run this job"))
+            return .finished(.failed(reason: Self.noToolReason))
         }
         let id = job.id
         // Progress arrives in order through a stream that keeps only the newest value, so a fast runner never
@@ -350,6 +350,8 @@ public actor JobQueue {
 
     /// The sentence shown for a failure. A Swift error that isn't localized bridges to "The operation couldn't be
     /// completed. (… error N.)", which names types and codes; it is replaced by a plain sentence.
+    static let noToolReason = "No tool can run this job"
+
     static func reason(for error: any Error) -> String {
         let description = error.localizedDescription
         if description.hasPrefix("The operation couldn\u{2019}t be completed")

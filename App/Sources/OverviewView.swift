@@ -74,41 +74,38 @@ struct OverviewView: View {
             let photos = model.photos.items
             let files = model.library.items
             let completed = model.completedJobs.map(\.outcome)
-            summary = await Self.summarize(
-                photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-                custom: model.advanced.spec, completed: completed)
             let shrunk = model.shrunkIDs(in: model.browser)
-            let (buckets, undated) = await Self.groups(
+            let analysis = await Self.analyze(
                 photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-                custom: model.advanced.spec, shrunk: shrunk)
+                custom: model.advanced.spec, completed: completed, shrunk: shrunk)
+            guard !Task.isCancelled else { return }
+            summary = analysis.summary
             // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
-            if !Task.isCancelled {
-                model.assistant.smartPicks.update(buckets: buckets, undatedCount: undated, key: inputs)
-            }
+            model.assistant.smartPicks.update(
+                buckets: analysis.buckets, undatedCount: analysis.undated, key: inputs)
         }
         .task(id: picksTrigger) { await model.assistant.smartPicks.generateIfNeeded() }
     }
 
-    /// The groups read every video's metadata too, so they run off the main actor.
-    @concurrent private static func groups(
+    /// The totals, the groups and the count of undated videos. Estimating a video reads its metadata, so it is
+    /// done once for each video and shared by all three, off the main actor.
+    @concurrent private static func analyze(
         photos: [VideoItem], files: [VideoItem], preset: Preset, overrides: PresetOverrides<UUID>,
-        custom: DownscaleSpec?, shrunk: Set<UUID>
-    ) async -> (buckets: [SavingsBucket], undated: Int) {
-        (
+        custom: DownscaleSpec?, completed: [JobOutcome], shrunk: Set<UUID>
+    ) async -> (summary: OverviewSummary, buckets: [SavingsBucket], undated: Int) {
+        let estimates = OverviewSummary.estimates(
+            photos: photos, files: files, preset: preset, overrides: overrides, custom: custom)
+        return (
+            OverviewSummary(
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
+                completed: completed, estimates: estimates),
             SavingsAnalyzer.buckets(
-                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk),
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk,
+                estimates: estimates),
             SavingsAnalyzer.undatedCount(
-                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk)
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk,
+                estimates: estimates)
         )
-    }
-
-    /// The estimates read every video's metadata, so they run off the main actor.
-    @concurrent private static func summarize(
-        photos: [VideoItem], files: [VideoItem], preset: Preset, overrides: PresetOverrides<UUID>,
-        custom: DownscaleSpec?, completed: [JobOutcome]
-    ) async -> OverviewSummary {
-        OverviewSummary(
-            photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, completed: completed)
     }
 }
 
@@ -294,6 +291,7 @@ private struct SmartPickRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(pick.title)
                 .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
             Text(pick.why)
                 .foregroundStyle(.secondary)
             Text(pick.bucket.detail)
@@ -302,20 +300,21 @@ private struct SmartPickRow: View {
             HStack {
                 Button("Show", action: show)
                     .help("Show these videos in \(pick.bucket.sourceName)")
-                    .accessibilityLabel("Show \(pick.bucket.title), \(pick.bucket.sourceName)")
+                    .accessibilityLabel("Show \(pick.bucket.title)")
                     .accessibilityHint("Opens \(pick.bucket.sourceName) with filters for these videos")
                 Button("Add These to the Queue…", action: add)
                     .disabled(!canAdd)
                     .help(
                         canAdd ? "Select these videos and add them to the queue" : "Choose where to save copies first"
                     )
-                    .accessibilityLabel("Add \(pick.bucket.title), \(pick.bucket.sourceName), to the queue")
+                    .accessibilityLabel("Add \(pick.bucket.title) to the queue")
                     .accessibilityHint("Selects these videos and adds them to the queue after the usual checks")
             }
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(pick.title). \(pick.why). \(pick.bucket.detail)")
     }
 }
 
@@ -334,7 +333,7 @@ private struct BiggestGroupRow: View {
             Spacer()
             Button("Show", action: show)
                 .help("Show these videos in \(bucket.sourceName)")
-                .accessibilityLabel("Show \(bucket.title), \(bucket.sourceName)")
+                .accessibilityLabel("Show \(bucket.title)")
                 .accessibilityHint("Opens \(bucket.sourceName) with filters for these videos")
         }
         .accessibilityElement(children: .contain)

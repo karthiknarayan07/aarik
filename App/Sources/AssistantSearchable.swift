@@ -22,6 +22,7 @@ private struct AssistantSearchable: ViewModifier {
     @Bindable var browser: LibraryBrowser
     let sidebarBadge: MediaBadge?
     let shrunkIDs: (@MainActor () -> Set<UUID>)?
+    @FocusState private var isSearchFocused: Bool
 
     private var tokens: Binding<[FilterToken]> {
         Binding(
@@ -33,6 +34,13 @@ private struct AssistantSearchable: ViewModifier {
         content
             .searchable(text: $browser.search, tokens: tokens, placement: .toolbar, prompt: "Search by name") { token in
                 Label(token.title, systemImage: token.symbolName)
+                    .accessibilityLabel("Filter: \(token.title)")
+                    .accessibilityHint("Press Delete to remove this filter")
+            }
+            .searchFocused($isSearchFocused)
+            // A person who turned Apple Intelligence on in System Settings sees the button without leaving the app.
+            .onChange(of: isSearchFocused) { _, isFocused in
+                if isFocused { search.searchFieldGainedFocus() }
             }
             .onSubmit(of: .search) {
                 if search.isVisible, AssistantSearch.looksLikeSentence(browser.search) { ask() }
@@ -42,8 +50,11 @@ private struct AssistantSearchable: ViewModifier {
                     ToolbarItem {
                         Button("Ask in Plain Words", systemImage: "sparkles") { ask() }
                             .disabled(browser.search.trimmingCharacters(in: .whitespaces).isEmpty || search.isWorking)
-                            .help("Turn what you typed into filters, on this Mac")
+                            .keyboardShortcut(.return, modifiers: .command)
+                            .help("Turn what you typed into filters, on this Mac (\u{2318}\u{21A9})")
                             .accessibilityLabel("Ask in Plain Words")
+                            .accessibilityHint(
+                                "Turns what you typed in the search field into filters. Runs on this Mac.")
                     }
                 }
             }

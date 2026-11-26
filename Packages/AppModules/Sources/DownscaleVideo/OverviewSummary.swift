@@ -46,11 +46,25 @@ public struct OverviewSummary: Sendable, Equatable {
 
     public var totalCouldFree: Int64 { videos.couldFree + localFiles.couldFree }
 
+    /// What converting each available video would free, by item id: reading a video's metadata to estimate it is
+    /// the costly part, so a refresh makes this once and hands it to everything that needs the numbers
+    /// (`init`, `SavingsAnalyzer`). A video kept as is maps to 0.
+    public static func estimates(
+        photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
+        custom: DownscaleSpec? = nil
+    ) -> [UUID: Int64] {
+        var result: [UUID: Int64] = [:]
+        for item in photos + files where item.isAvailable {
+            result[item.id] = couldFree(item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+        }
+        return result
+    }
+
     /// `overrides` holds the presets chosen for single videos over `preset`; `custom`, when set, wins for all.
-    /// `completed` are the outcomes of finished jobs.
+    /// `completed` are the outcomes of finished jobs. `estimates` (from `estimates(...)`) saves estimating again.
     public init(
         photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
-        custom: DownscaleSpec? = nil, completed: [JobOutcome] = []
+        custom: DownscaleSpec? = nil, completed: [JobOutcome] = [], estimates: [UUID: Int64]? = nil
     ) {
         var videos = Totals()
         var localFiles = Totals()
@@ -61,7 +75,9 @@ public struct OverviewSummary: Sendable, Equatable {
                 totals.count += 1
                 totals.bytes += item.byteSize
                 guard item.isAvailable else { continue }
-                let free = Self.couldFree(item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+                let free =
+                    estimates?[item.id]
+                    ?? Self.couldFree(item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
                 totals.couldFree += free
                 if free > 0 {
                     entries.append(

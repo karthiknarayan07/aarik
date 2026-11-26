@@ -9,6 +9,9 @@ public enum PlanDecision: Sendable, Equatable {
 
 public enum DownscalePlanner {
     static let spatialReason = "Spatial video isn't supported yet — it would lose one eye"
+    static let alreadySmallReason = "Already small"
+    static let savesLittleReason = "Would save less than 10%"
+    static let lengthUnreadableReason = "Couldn't read the video's length"
     /// A clip at this frame rate or above is slo-mo: its frame rate is always kept (spec 8.1).
     public static let sloMoFrameRate = 100.0
 
@@ -44,15 +47,15 @@ public enum DownscalePlanner {
         if source.isSloMo { spec.maxFrameRate = nil }
         let byteSize = source.byteSize
         if inventory["hdr.stereo"] != nil { return .keptAsIs(reason: spatialReason) }
-        guard source.durationSeconds > 0 else { return .keptAsIs(reason: "Couldn't read the video's length") }
+        guard source.durationSeconds > 0 else { return .keptAsIs(reason: lengthUnreadableReason) }
         if let target = spec.targetShortSide {
-            if source.shortSide > 0, source.shortSide <= target { return .keptAsIs(reason: "Already small") }
+            if source.shortSide > 0, source.shortSide <= target { return .keptAsIs(reason: alreadySmallReason) }
         } else if source.videoBitRate > 0, source.videoBitRate <= Double(spec.averageBitRate) {
-            return .keptAsIs(reason: "Already small")
+            return .keptAsIs(reason: alreadySmallReason)
         }
         let estimate = Estimator.estimatedBytes(source: source, spec: spec)
         if Double(estimate) > Double(byteSize) * 0.9 {
-            return .keptAsIs(reason: "Would save less than 10%")
+            return .keptAsIs(reason: savesLittleReason)
         }
         var report = predicted(inventory: inventory, source: source, spec: spec)
         if fallsBackToQuickTime { report = movingToQuickTime(report, inventory: inventory) }

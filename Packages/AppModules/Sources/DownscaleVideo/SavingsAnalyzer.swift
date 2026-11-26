@@ -37,20 +37,27 @@ public struct SavingsBucket: Sendable, Equatable, Identifiable {
         self.itemIDs = itemIDs
     }
 
+    /// The group's videos that are still in `items` and available now. `itemIDs` is as of the last refresh, so a
+    /// click acts on this instead: a video that has gone since is left out.
+    public func availableItemIDs(in items: [LibraryItem]) -> [UUID] {
+        let present = Set(items.filter(\.isAvailable).map(\.id))
+        return itemIDs.filter(present.contains)
+    }
+
     /// Names the group itself (quality, year, library), unlike `id`, which is its rank and changes when the
     /// ranking does. Use it to follow a group across refreshes.
     public var identity: String { "\(library == .photos ? "photos" : "files")-\(year)-\(quality.title)" }
 
     public var sourceName: String { library == .photos ? "Photos" : "Local Files" }
 
-    /// "4K60 from 2024"
-    public var title: String { "\(quality.title) from \(String(year))" }
+    /// "4K60 from 2024 · Photos". The library is part of the title, so a Photos group and a Local Files group
+    /// for the same quality and year never read alike.
+    public var title: String { "\(quality.title) from \(String(year)) · \(sourceName)" }
 
-    /// "Photos · 120 videos · 38 GB · could free about 22 GB"
+    /// "120 videos · 38 GB · could free about 22 GB"
     public var detail: String {
         let videos = count == 1 ? "1 video" : "\(count.formatted()) videos"
-        return "\(sourceName) · \(videos) · \(ByteFormat.string(bytes)) · could free about "
-            + ByteFormat.string(couldFree)
+        return "\(videos) · \(ByteFormat.string(bytes)) · could free about " + ByteFormat.string(couldFree)
     }
 }
 
@@ -77,14 +84,16 @@ public enum SavingsAnalyzer {
     /// that already have a finished conversion don't count).
     public static func undatedCount(
         photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
-        custom: DownscaleSpec? = nil, shrunk: Set<UUID> = []
+        custom: DownscaleSpec? = nil, shrunk: Set<UUID> = [], estimates: [UUID: Int64]? = nil
     ) -> Int {
         var count = 0
         for (library, items) in [(OverviewSummary.Library.photos, photos), (.localFiles, files)] {
             for item in items where item.captureDate == nil && item.isAvailable {
                 if library == .localFiles, shrunk.contains(item.id) { continue }
-                let free = OverviewSummary.couldFree(
-                    item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+                let free =
+                    estimates?[item.id]
+                    ?? OverviewSummary.couldFree(
+                        item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
                 if free > 0 { count += 1 }
             }
         }
@@ -96,7 +105,8 @@ public enum SavingsAnalyzer {
     /// The estimate is the Overview's own (`OverviewSummary.couldFree`), at each video's preset.
     public static func buckets(
         photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
-        custom: DownscaleSpec? = nil, shrunk: Set<UUID> = [], calendar: Calendar = .current
+        custom: DownscaleSpec? = nil, shrunk: Set<UUID> = [], calendar: Calendar = .current,
+        estimates: [UUID: Int64]? = nil
     ) -> [SavingsBucket] {
         var tallies: [Key: Tally] = [:]
         for (library, items) in [(OverviewSummary.Library.photos, photos), (.localFiles, files)] {
@@ -111,8 +121,10 @@ public enum SavingsAnalyzer {
                 tally.bytes += item.byteSize
                 if item.isAvailable {
                     tally.itemIDs.append(item.id)
-                    tally.couldFree += OverviewSummary.couldFree(
-                        item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+                    tally.couldFree +=
+                        estimates?[item.id]
+                        ?? OverviewSummary.couldFree(
+                            item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
                 }
                 tallies[key] = tally
             }

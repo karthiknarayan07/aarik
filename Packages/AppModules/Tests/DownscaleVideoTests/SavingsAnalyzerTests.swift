@@ -142,8 +142,8 @@ import Testing
 
     @Test func titleAndDetailNameOnlyAggregates() {
         let bucket = Self.buckets(photos: [Self.photo(megabytes: 800)]).first
-        #expect(bucket?.title == "4K30 from 2024")
-        #expect(bucket?.detail.hasPrefix("Photos · 1 video · 800 MB · could free about") == true)
+        #expect(bucket?.title == "4K30 from 2024 · Photos")
+        #expect(bucket?.detail.hasPrefix("1 video · 800 MB · could free about") == true)
     }
 
     @Test func aBucketsIdentityNamesItsGroupNotItsRank() {
@@ -169,5 +169,42 @@ import Testing
 
         // The Photos video and the one undated file: not the shrunk, the small, the missing or the dated one.
         #expect(count == 2)
+    }
+
+    @Test func theLibraryIsPartOfTheTitleSoTwoLibrariesNeverReadAlike() {
+        let list = Self.buckets(photos: [Self.photo(megabytes: 800)], files: [Self.file(megabytes: 800)])
+        #expect(list.count == 2)
+        #expect(Set(list.map(\.title)).count == 2)
+        #expect(Set(list.map(\.title)) == ["4K30 from 2024 \u{00B7} Photos", "4K30 from 2024 \u{00B7} Local Files"])
+    }
+
+    @Test func sharedEstimatesAreUsedInsteadOfEstimatingAgain() {
+        let photo = Self.photo(megabytes: 800)
+        let file = Self.file(megabytes: 800)
+        let undated = Self.file(megabytes: 900, year: nil)
+        let estimates = OverviewSummary.estimates(photos: [photo], files: [file, undated], preset: .balanced)
+        #expect(Set(estimates.keys) == [photo.id, file.id, undated.id])
+        #expect(estimates[photo.id] == OverviewSummary.couldFree(photo, preset: .balanced, custom: nil))
+
+        // The same numbers come out with or without them.
+        let plain = SavingsAnalyzer.buckets(photos: [photo], files: [file], preset: .balanced, calendar: Self.calendar)
+        let shared = SavingsAnalyzer.buckets(
+            photos: [photo], files: [file], preset: .balanced, calendar: Self.calendar, estimates: estimates)
+        #expect(plain == shared)
+        #expect(
+            SavingsAnalyzer.undatedCount(photos: [photo], files: [undated], preset: .balanced)
+                == SavingsAnalyzer.undatedCount(
+                    photos: [photo], files: [undated], preset: .balanced, estimates: estimates))
+        let summary = OverviewSummary(photos: [photo], files: [file], preset: .balanced)
+        #expect(OverviewSummary(photos: [photo], files: [file], preset: .balanced, estimates: estimates) == summary)
+
+        // The table is what is read: a made-up number shows up, so nothing was estimated a second time.
+        var marked = estimates
+        marked[photo.id] = 42
+        let fromTable = SavingsAnalyzer.buckets(
+            photos: [photo], files: [], preset: .balanced, calendar: Self.calendar, estimates: marked)
+        #expect(fromTable.first?.couldFree == 42)
+        #expect(
+            OverviewSummary(photos: [photo], files: [], preset: .balanced, estimates: marked).videos.couldFree == 42)
     }
 }

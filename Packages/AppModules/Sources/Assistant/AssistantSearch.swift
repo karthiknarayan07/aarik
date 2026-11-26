@@ -38,6 +38,12 @@ public final class AssistantSearch {
         self.translator = translator
     }
 
+    /// The search field gained focus: reads the model's availability again, so a person who turned Apple
+    /// Intelligence on or off in System Settings sees the button appear or go without leaving the app.
+    public func searchFieldGainedFocus() {
+        availability.refresh()
+    }
+
     /// Return in the search field goes to the model only for something that reads as a sentence.
     public static func looksLikeSentence(_ text: String) -> Bool {
         text.split(whereSeparator: \.isWhitespace).count >= 3
