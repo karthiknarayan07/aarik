@@ -32,7 +32,9 @@
         }
 
         @ViewBuilder public func root() -> some View {
-            IOSRootView(scene: self, model: model)
+            ForegroundObserver(model: model) {
+                IOSRootView(scene: self, model: model)
+            }
         }
 
         @ViewBuilder public func detail(for destination: VideoPage?) -> some View {
@@ -150,11 +152,7 @@
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaBar(edge: .bottom) {
-                if let content = model.pendingDeletionBar {
-                    PendingDeletionBar(
-                        content: content, perform: model.performPendingDeletionAction,
-                        removeKept: model.removeKeptOriginalsFromList, openSettings: model.openPhotosAccessSettings)
-                }
+                IOSPendingDeletionBar(model: model)
             }
         }
     }
@@ -242,6 +240,19 @@
                 }
                 .sheet(isPresented: $scene.isSettingsPresented) {
                     IOSSettingsView(model: model)
+                }
+        }
+    }
+
+    private struct ForegroundObserver<Content: View>: View {
+        let model: ConvertModel
+        @ViewBuilder let content: () -> Content
+        @Environment(\.scenePhase) private var scenePhase
+
+        var body: some View {
+            content()
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    model.isForeground = (phase == .active)
                 }
         }
     }
