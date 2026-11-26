@@ -19,7 +19,9 @@ final class AdaptiveLayoutTests: AppTestCase {
 
     func testSelectionSurvivesRotation() throws {
         launch(autoStart: false)
-        open("Videos")
+        open("Photos")
+        // Tapping opens a video's page; Select turns on multi-selection, which rotation must keep.
+        app.buttons["selectToggle"].firstMatch.tap()
         let tile = tile(named: AppTestCase.photosFixture)
         XCTAssertTrue(tile.waitForExistence(timeout: 30))
         tile.tap()

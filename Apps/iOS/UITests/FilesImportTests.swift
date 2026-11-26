@@ -7,7 +7,7 @@ final class FilesImportTests: AppTestCase {
     /// lists under On My iPhone, in a folder named after the app.
     func testImportFromFilesAddsTheVideoToLocalFiles() throws {
         launch(autoStart: false)
-        open("Local Files")
+        open("Files")
         let add = app.buttons["Add Files…"].firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         add.tap()
@@ -33,6 +33,6 @@ final class FilesImportTests: AppTestCase {
 
         XCTAssertTrue(
             tile(named: AppTestCase.filesFixture).waitForExistence(timeout: 30),
-            "the imported video isn't in Local Files")
+            "the imported video isn't in Files")
     }
 }

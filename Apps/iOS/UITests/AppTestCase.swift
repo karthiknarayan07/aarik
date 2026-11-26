@@ -59,31 +59,47 @@ class AppTestCase: XCTestCase {
 
     // MARK: Navigation
 
-    /// Brings the sidebar into view: in the compact stack it is the root, so the detail's Back button leads to it; in a
-    /// regular width with the sidebar collapsed (iPad portrait) the toolbar's Show Sidebar button reveals it.
-    func revealSidebar() {
-        let back = app.buttons["BackButton"].firstMatch
-        if back.exists, back.isHittable {
-            back.tap()
-            return
+    /// The page ids behind the identifiers `page.<id>` of Convert's page list; the old section titles still work.
+    private static let pageIDs = [
+        "Overview": "overview", "Photos": "photos", "Videos": "photos", "Files": "files", "Local Files": "files",
+        "Queue": "queue", "Completed": "completed",
+    ]
+
+    /// Brings the tool's page list into view. The app is a stack on iPhone (Tools, then the tool's pages, then a page),
+    /// so this goes back from a page, or opens the tool from the Tools list.
+    func revealPages() {
+        let anyPage = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'page.'")).firstMatch
+        let anyTool = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tool.'")).firstMatch
+        for _ in 0..<4 {
+            if anyPage.exists, anyPage.isHittable { return }
+            if anyTool.exists, anyTool.isHittable {
+                anyTool.tap()
+                _ = anyPage.waitForExistence(timeout: 5)
+                continue
+            }
+            let back = app.buttons["BackButton"].firstMatch
+            if back.exists, back.isHittable { back.tap() }
+            _ = anyPage.waitForExistence(timeout: 2)
         }
-        let show = app.buttons["Show Sidebar"].firstMatch
-        if show.exists, show.isHittable { show.tap() }
     }
 
-    /// Selects a sidebar page by its title ("Videos", "Local Files", "Queue", "Completed"...).
+    /// Opens one of Convert's pages ("Overview", "Photos", "Files", "Queue", "Completed").
     func open(_ page: String, file: StaticString = #filePath, line: UInt = #line) {
-        let item = app.buttons[page].firstMatch
-        if !item.waitForExistence(timeout: 2) || !item.isHittable { revealSidebar() }
-        if !item.waitForExistence(timeout: 15) { dump("missing sidebar item \(page)") }
-        XCTAssertTrue(item.exists, "No sidebar item \(page)", file: file, line: line)
+        guard let id = Self.pageIDs[page] else {
+            XCTFail("No page called \(page)", file: file, line: line)
+            return
+        }
+        let item = app.buttons["page.\(id)"].firstMatch
+        if !item.waitForExistence(timeout: 2) || !item.isHittable { revealPages() }
+        if !item.waitForExistence(timeout: 15) { dump("missing page \(page)") }
+        XCTAssertTrue(item.exists, "No page \(page)", file: file, line: line)
         item.tap()
     }
 
-    /// Opens Settings from the sidebar's toolbar.
+    /// Opens Settings from the page list's toolbar.
     func openSettings(file: StaticString = #filePath, line: UInt = #line) {
-        let settings = app.buttons["Settings…"].firstMatch
-        if !settings.waitForExistence(timeout: 2) || !settings.isHittable { revealSidebar() }
+        let settings = app.buttons["settings"].firstMatch
+        if !settings.waitForExistence(timeout: 2) || !settings.isHittable { revealPages() }
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "No Settings button", file: file, line: line)
         settings.tap()
         XCTAssertTrue(
@@ -103,21 +119,21 @@ class AppTestCase: XCTestCase {
 
     // MARK: Flows
 
-    /// Opens Photos videos, selects the named fixture and adds it to the queue.
+    /// Opens Photos, taps the named fixture (which opens its page, with a zoom) and adds it to the queue there.
     func queuePhotosFixture(
         _ name: String = AppTestCase.photosFixture, file: StaticString = #filePath, line: UInt = #line
     ) {
-        open("Videos", file: file, line: line)
+        open("Photos", file: file, line: line)
         let tile = tile(named: name)
         XCTAssertTrue(tile.waitForExistence(timeout: 30), "\(name) isn't in the Photos grid", file: file, line: line)
         scrollToHittable(tile)
         tile.tap()
-        let add = app.buttons["Add to Queue"].firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 10), file: file, line: line)
+        let add = app.buttons["detail.addToQueue"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 10), "\(name) didn't open its page", file: file, line: line)
         if !add.isEnabled {
-            dump("Add to Queue disabled after selecting")
+            dump("Add to Queue disabled on the video's page")
         }
-        XCTAssertTrue(add.isEnabled, "Add to Queue stayed disabled after selecting a video", file: file, line: line)
+        XCTAssertTrue(add.isEnabled, "Add to Queue stayed disabled on the video's page", file: file, line: line)
         add.tap()
         confirmLossIfAsked()
     }
