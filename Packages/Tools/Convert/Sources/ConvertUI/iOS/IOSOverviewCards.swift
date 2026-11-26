@@ -86,7 +86,6 @@
                     }
                     .accessibilityHidden(true)
                 }
-                .animation(reduceMotion ? nil : .smooth, value: snapshot)
             }
         }
 
