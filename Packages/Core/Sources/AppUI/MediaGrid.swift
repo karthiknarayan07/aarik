@@ -347,24 +347,35 @@ private struct DragOutContainer<ID: Hashable & Sendable>: ViewModifier {
     let payload: ([ID]) -> [MediaDragItem<ID>]
 
     func body(content: Content) -> some View {
-        if isEnabled {
+        #if os(macOS)
+            macBody(content)
+        #else
+            // The multi-item drag container is iOS 27 API; iOS drags out through `DragOut.itemProvider`.
             content
-                .dragContainer(for: MediaDragItem<ID>.self) { (dragged: [ID]) in payload(dragged) }
-                .dragContainerSelection(Array(selection))
-                // While a tile is being dragged, the window's own drop must not import it (`ImportDropGuard`).
-                .onDragSessionUpdated { session in
-                    if session.phase == .initial || session.phase == .active {
-                        InternalDrag.isActive = true
-                    } else if session.phase == .dataTransferCompleted {
-                        InternalDrag.isActive = false
-                    } else if case .ended = session.phase {
-                        InternalDrag.isActive = false
-                    }
-                }
-        } else {
-            content
-        }
+        #endif
     }
+
+    #if os(macOS)
+        @ViewBuilder private func macBody(_ content: Content) -> some View {
+            if isEnabled {
+                content
+                    .dragContainer(for: MediaDragItem<ID>.self) { (dragged: [ID]) in payload(dragged) }
+                    .dragContainerSelection(Array(selection))
+                    // While a tile is being dragged, the window's own drop must not import it (`ImportDropGuard`).
+                    .onDragSessionUpdated { session in
+                        if session.phase == .initial || session.phase == .active {
+                            InternalDrag.isActive = true
+                        } else if session.phase == .dataTransferCompleted {
+                            InternalDrag.isActive = false
+                        } else if case .ended = session.phase {
+                            InternalDrag.isActive = false
+                        }
+                    }
+            } else {
+                content
+            }
+        }
+    #endif
 }
 
 private struct DragOutItem<ID: Hashable & Sendable>: ViewModifier {
@@ -372,11 +383,15 @@ private struct DragOutItem<ID: Hashable & Sendable>: ViewModifier {
     let id: ID
 
     func body(content: Content) -> some View {
-        if isEnabled {
-            content.draggable(containerItemID: id)
-        } else {
+        #if os(macOS)
+            if isEnabled {
+                content.draggable(containerItemID: id)
+            } else {
+                content
+            }
+        #else
             content
-        }
+        #endif
     }
 }
 
@@ -416,11 +431,19 @@ private final class MarqueeState<ID: Hashable> {
 private struct MarqueeOverlay<ID: Hashable>: View {
     let state: MarqueeState<ID>
 
+    private static var selectionColor: Color {
+        #if os(macOS)
+            Color(nsColor: .selectedContentBackgroundColor)
+        #else
+            Color.accentColor
+        #endif
+    }
+
     var body: some View {
         if let rect = state.rect {
             Rectangle()
-                .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.18))
-                .overlay { Rectangle().strokeBorder(Color(nsColor: .selectedContentBackgroundColor), lineWidth: 1) }
+                .fill(Self.selectionColor.opacity(0.18))
+                .overlay { Rectangle().strokeBorder(Self.selectionColor, lineWidth: 1) }
                 .frame(width: rect.width, height: rect.height)
                 .offset(x: rect.minX, y: rect.minY)
                 .allowsHitTesting(false)

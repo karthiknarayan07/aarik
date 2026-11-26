@@ -55,7 +55,9 @@ import Testing
                 $0.extendedAttributes = ["com.example.fixture": Data("x".utf8)]
             })
         let inventory = try await MediaInspector().inventory(of: url)
-        #expect(inventory["fs.tags"]?.value == "Blue,Red")
+        #if os(macOS)
+            #expect(inventory["fs.tags"]?.value == "Blue,Red")
+        #endif
         let xattr = try #require(inventory["fs.xattr.com.example.fixture"])
         // SHA-256 of "x"
         #expect(xattr.value == "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881")
@@ -152,14 +154,18 @@ import Testing
         try Data("dest".utf8).write(to: destination)
         try FileAttributes.copy(from: source, to: destination)
 
-        let values = try destination.resourceValues(forKeys: [.tagNamesKey, .creationDateKey])
-        #expect(values.tagNames == ["Green"])
+        let values = try destination.resourceValues(forKeys: [.creationDateKey])
+        #if os(macOS)
+            #expect(try destination.resourceValues(forKeys: [.tagNamesKey]).tagNames == ["Green"])
+        #endif
         #expect(values.creationDate == created)
         let sourceItems = try FileAttributes.read(source)
         let destinationItems = try FileAttributes.read(destination)
         let sourceXattr = try #require(sourceItems.first { $0.key == "fs.xattr.com.example.fixture.copy" })
         #expect(destinationItems.first { $0.key == "fs.xattr.com.example.fixture.copy" }?.value == sourceXattr.value)
-        #expect(destinationItems.first { $0.key == "fs.tags" }?.value == "Green")
+        #if os(macOS)
+            #expect(destinationItems.first { $0.key == "fs.tags" }?.value == "Green")
+        #endif
     }
 
     @Test func fileAttributesCopySkipsExcludedSystemAttributes() async throws {
@@ -187,8 +193,10 @@ import Testing
         try FileAttributes.copy(from: source, to: destination)
 
         #expect(getxattr(destination.path, "com.apple.macl", nil, 0, 0, 0) == -1)
-        let values = try destination.resourceValues(forKeys: [.tagNamesKey, .creationDateKey])
-        #expect(values.tagNames == ["Green"])
+        let values = try destination.resourceValues(forKeys: [.creationDateKey])
+        #if os(macOS)
+            #expect(try destination.resourceValues(forKeys: [.tagNamesKey]).tagNames == ["Green"])
+        #endif
         #expect(values.creationDate == created)
         #expect(try FileAttributes.read(destination).contains { $0.key == "fs.xattr.com.example.fixture.keep" })
     }

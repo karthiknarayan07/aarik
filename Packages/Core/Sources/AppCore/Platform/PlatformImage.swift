@@ -10,6 +10,15 @@ import SwiftUI
 #endif
 
 extension PlatformImage {
+    /// The image's pixels, or nil when it has none.
+    public var platformCGImage: CGImage? {
+        #if os(macOS)
+            cgImage(forProposedRect: nil, context: nil, hints: nil)
+        #else
+            cgImage
+        #endif
+    }
+
     /// An image of the given pixels, shown at 1x.
     public static func make(cgImage: CGImage) -> PlatformImage {
         #if os(macOS)

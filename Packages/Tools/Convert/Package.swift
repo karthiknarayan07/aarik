@@ -7,7 +7,7 @@ import PackageDescription
 // Convert's jobs, but only the Mac app links it.
 let package = Package(
     name: "Convert",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
         .library(name: "Convert", targets: ["Convert"]),
         .library(name: "ConvertUI", targets: ["ConvertUI"]),

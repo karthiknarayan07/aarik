@@ -8,7 +8,8 @@ public protocol FileTrasher: Sendable {
     func moveToTrash(_ url: URL) throws -> URL
 }
 
-/// `FileManager.trashItem`, which both platforms provide.
+/// `FileManager.trashItem`. On iOS it throws for files outside a Files-managed location, which is why Replace there
+/// only ever deletes Photos originals (Recently Deleted).
 public struct SystemFileTrasher: FileTrasher {
     public init() {}
 

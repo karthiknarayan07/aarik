@@ -33,7 +33,11 @@ struct PresetEstimateRows: View {
                     .accessibilityLabel(option.spoken)
             }
         }
-        .pickerStyle(.radioGroup)
+        #if os(macOS)
+            .pickerStyle(.radioGroup)
+        #else
+            .pickerStyle(.inline)
+        #endif
         .disabled(isCustom)
     }
 }

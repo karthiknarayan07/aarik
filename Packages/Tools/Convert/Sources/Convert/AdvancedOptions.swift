@@ -1,3 +1,4 @@
+import AppCore
 import Foundation
 import MediaEngine
 
@@ -129,7 +130,7 @@ public struct SaveLocation: Sendable, Equatable {
     /// Remembers a picked folder as a bookmark (security-scoped when the system allows it).
     public mutating func setFolder(_ url: URL) throws {
         let bookmark: Data
-        if let scoped = try? url.bookmarkData(options: [.withSecurityScope]) {
+        if let scoped = try? url.bookmarkData(options: PlatformBookmark.creation) {
             bookmark = scoped
         } else {
             bookmark = try url.bookmarkData(options: [])

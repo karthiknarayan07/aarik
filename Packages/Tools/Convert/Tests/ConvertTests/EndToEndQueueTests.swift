@@ -1,3 +1,4 @@
+import MediaTestSupport
 import AppCore
 import Foundation
 import Testing
@@ -7,7 +8,8 @@ import Testing
 /// The app's path without the UI: real jobs from `JobFactory`, the real queue and the real runner, on two
 /// generated clips. One converts, one is kept as is.
 @Suite struct EndToEndQueueTests {
-    @Test(.timeLimit(.minutes(3))) func queueConvertsOneAndKeepsOneAsIs() async throws {
+    @Test(.timeLimit(.minutes(3)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func queueConvertsOneAndKeepsOneAsIs() async throws {
         let big = try await RunnerFixture.source(name: "big.mov")
         let small = try await RunnerFixture.smallSource(name: "small.mov")
         let storeDirectory = FileManager.default.temporaryDirectory.appending(path: "e2e-\(UUID().uuidString)")

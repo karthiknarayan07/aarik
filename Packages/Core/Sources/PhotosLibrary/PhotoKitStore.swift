@@ -1,3 +1,4 @@
+import AppCore
 import CoreGraphics
 import CoreLocation
 import Foundation
@@ -101,7 +102,7 @@ public final class PhotoKitStore: PhotoStore {
     // MARK: - Resource fields
 
     private static func fileName(_ resource: PHAssetResource) -> String {
-        if #available(macOS 27, *) {
+        if #available(macOS 27, iOS 27, *) {
             if let name = resource.filename { return name }
         }
         return resource.originalFilename
@@ -109,7 +110,7 @@ public final class PhotoKitStore: PhotoStore {
 
     /// The public `dataSize` where the OS has it, else the `fileSize` key PhotoKit has long had.
     private static func byteSize(_ resource: PHAssetResource) -> Int64? {
-        if #available(macOS 27, *) {
+        if #available(macOS 27, iOS 27, *) {
             if let size = resource.dataSize { return Int64(size) }
         }
         return (value(resource, key: "fileSize") as? NSNumber).map { $0.int64Value }
@@ -181,7 +182,7 @@ public final class PhotoKitStore: PhotoStore {
                 let requestID = manager.requestImage(
                     for: asset, targetSize: size, contentMode: .aspectFill, options: options
                 ) { image, info in
-                    let cgImage = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                    let cgImage = image?.platformCGImage
                     let degraded = (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
                     request.deliver(cgImage, isFinal: !degraded)
                 }

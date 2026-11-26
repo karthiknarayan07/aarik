@@ -530,26 +530,29 @@ enum Fixtures {
         #expect(library.persistenceError == nil)
     }
 
-    @Test func trashedFileIsUnavailableAndItsPathIsNotPersisted() async throws {
-        let folder = try Fixtures.tempDirectory()
-        let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "trash-me.mov")
-        let store = BookmarkStore(directory: try Fixtures.tempDirectory())
-        let library = LocalLibrary(store: store)
-        library.add([clip])
-        await Fixtures.settle(library)
-        let originalPath = try #require(try store.load().first?.path)
+    // iOS has no Trash for app files, so the real `trashItem` isn't available there.
+    #if os(macOS)
+        @Test func trashedFileIsUnavailableAndItsPathIsNotPersisted() async throws {
+            let folder = try Fixtures.tempDirectory()
+            let clip = try Fixtures.copy(try await Fixtures.clip(), into: folder, as: "trash-me.mov")
+            let store = BookmarkStore(directory: try Fixtures.tempDirectory())
+            let library = LocalLibrary(store: store)
+            library.add([clip])
+            await Fixtures.settle(library)
+            let originalPath = try #require(try store.load().first?.path)
 
-        var trashed: NSURL?
-        try FileManager.default.trashItem(at: clip, resultingItemURL: &trashed)
-        defer { if let trashed { try? FileManager.default.removeItem(at: trashed as URL) } }
+            var trashed: NSURL?
+            try FileManager.default.trashItem(at: clip, resultingItemURL: &trashed)
+            defer { if let trashed { try? FileManager.default.removeItem(at: trashed as URL) } }
 
-        await library.refreshAvailability()
-        #expect(library.items.first?.isAvailable == false)
-        let restored = LocalLibrary(store: store)
-        await Fixtures.settle(restored)
-        #expect(restored.items.first?.isAvailable == false)
-        #expect(try store.load().first?.path == originalPath)
-    }
+            await library.refreshAvailability()
+            #expect(library.items.first?.isAvailable == false)
+            let restored = LocalLibrary(store: store)
+            await Fixtures.settle(restored)
+            #expect(restored.items.first?.isAvailable == false)
+            #expect(try store.load().first?.path == originalPath)
+        }
+    #endif
 
     @Test func cancellingTheScanKeepsWhatArrived() async throws {
         let source = try await Fixtures.clip(width: 160, height: 90)

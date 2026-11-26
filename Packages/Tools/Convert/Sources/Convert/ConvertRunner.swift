@@ -470,10 +470,10 @@ public struct ConvertRunner: JobRunner {
         var stale = false
         let url =
             (try? URL(
-                resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutMounting, .withoutUI],
+                resolvingBookmarkData: bookmark, options: PlatformBookmark.resolution,
                 relativeTo: nil, bookmarkDataIsStale: &stale))
             ?? (try? URL(
-                resolvingBookmarkData: bookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
+                resolvingBookmarkData: bookmark, options: PlatformBookmark.fallbackResolution, relativeTo: nil,
                 bookmarkDataIsStale: &stale))
         guard let url else { throw ConvertRunnerError.outputFolderUnavailable }
         let scoped = url.startAccessingSecurityScopedResource()

@@ -311,12 +311,14 @@ public enum FixtureFactory {
         }
 
         // Finder tags and extended attributes
-        if !options.finderTags.isEmpty {
-            var values = URLResourceValues()
-            values.tagNames = options.finderTags
-            var mutableURL = url
-            try mutableURL.setResourceValues(values)
-        }
+        #if os(macOS)
+            if !options.finderTags.isEmpty {
+                var values = URLResourceValues()
+                values.tagNames = options.finderTags
+                var mutableURL = url
+                try mutableURL.setResourceValues(values)
+            }
+        #endif
         for (name, data) in options.extendedAttributes {
             let result = data.withUnsafeBytes { setxattr(url.path, name, $0.baseAddress, data.count, 0, 0) }
             if result != 0 { throw FixtureError.xattrFailed(name, errno) }

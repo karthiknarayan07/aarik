@@ -90,7 +90,9 @@ import Testing
         #expect(settings.custom?.codec == .hevcKeepHDR)
     }
 
-    @Test(.timeLimit(.minutes(3))) func replaceWorksForH264FromHLG() async throws {
+    @Test(.timeLimit(.minutes(3)), .enabled(if: EncoderEnvironment.isRepresentative)) func replaceWorksForH264FromHLG()
+        async throws
+    {
         var options = ClipOptions()
         options.width = 2560
         options.height = 1440

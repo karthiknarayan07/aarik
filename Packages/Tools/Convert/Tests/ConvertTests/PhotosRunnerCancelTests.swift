@@ -1,3 +1,4 @@
+import MediaTestSupport
 import AppCore
 import Foundation
 import PhotosLibrary
@@ -34,7 +35,7 @@ final class CancelSwitch: Sendable {
 }
 
 /// Cancelling a run in each phase, and changes made in Photos while a run is under way.
-@Suite struct PhotosRunnerCancelTests {
+@Suite(.enabled(if: EncoderEnvironment.isRepresentative)) struct PhotosRunnerCancelTests {
     /// Runs the job and cancels it when `trigger` says so. `trigger` sees each phase label as it begins (with
     /// `progress` nil) and each progress value (with the label of the phase it belongs to).
     private func runCancelling(

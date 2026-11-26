@@ -78,8 +78,10 @@ import Testing
         #expect(abs(t.a) < 0.001 && abs(t.d) < 0.001 && abs(t.b - 1) < 0.001 && abs(t.c + 1) < 0.001)
         #expect(try await asset.loadTracks(withMediaType: .metadata).count == 1)
 
-        let tags = try url.resourceValues(forKeys: [.tagNamesKey]).tagNames
-        #expect(tags == ["Red"])
+        #if os(macOS)
+            let tags = try url.resourceValues(forKeys: [.tagNamesKey]).tagNames
+            #expect(tags == ["Red"])
+        #endif
         let size = getxattr(url.path, "com.example.fixture", nil, 0, 0, 0)
         #expect(size == 1)
         var buf = [UInt8](repeating: 0, count: 1)
