@@ -10,11 +10,10 @@ public struct ToolPlatforms: OptionSet, Hashable, Sendable {
     public static let all: ToolPlatforms = [.macOS, .iOS]
 }
 
-/// Which tool modules an app shell offers. There is no loading and no discovery (ADR 0004): the shell passes the
-/// modules it can build and this keeps the ones for its platform.
+/// Which tools an app shell offers. There is no loading and no discovery (ADR 0004): the shell passes the tools it
+/// can build and this keeps the ones for its platform.
 public enum ToolRegistry {
-    @MainActor
-    public static func modules(for platform: ToolPlatforms, from modules: [any ToolModule]) -> [any ToolModule] {
-        modules.filter { $0.platforms.contains(platform) }
+    public static func tools(for platform: ToolPlatforms, from tools: [any Tool]) -> [any Tool] {
+        tools.filter { $0.platforms.contains(platform) }
     }
 }

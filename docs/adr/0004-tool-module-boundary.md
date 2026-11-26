@@ -1,6 +1,6 @@
 # ADR 0004: A tool module boundary, not a plugin system
 
-Status: **Accepted**
+Status: **Accepted** — the `ToolModule` protocol shape is superseded by [ADR 0006](0006-tool-core-services-and-scenes.md) (`Tool` + `AppServices` + `MacToolScene` / `IOSToolScene`); the boundary rule ("no visible change, not a plugin system") still holds.
 
 ## Context
 

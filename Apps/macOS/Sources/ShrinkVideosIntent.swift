@@ -98,7 +98,7 @@ struct ShrinkVideosIntent: AppIntent {
             files: urls, quality: quality?.choice, format: format?.choice, destination: destination?.choice,
             folder: folder?.fileURL, dateRange: dateRange?.choice, resolution: resolution?.choice,
             source: source?.choice, waitForCompletion: waitForCompletion)
-        let (outcome, notes) = await AppModel.shared.shrinkVideos(
+        let (outcome, notes) = await MacShell.shared.shrinkVideos(
             request, dataInputs: dataInputs, providedCount: given.count)
         let message = outcome.message(adding: notes)
         switch outcome {

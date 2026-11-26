@@ -1,5 +1,6 @@
 import AppCore
 import AppKit
+import ConvertUI
 import QuickRunService
 import SwiftUI
 import UniformTypeIdentifiers
@@ -7,12 +8,12 @@ import UniformTypeIdentifiers
 /// The status item's popover: the current job, the queue, and a place to drop videos. Standard controls and
 /// semantic colors only, so it follows the system's look.
 struct MenuBarPanel: View {
-    let model: AppModel
+    let shell: MacShell
     let close: () -> Void
     @State private var isDropTargeted = false
 
     private var runningJob: (job: Job, progress: Double)? {
-        for job in model.jobs {
+        for job in shell.services.jobs {
             if case .running(let progress) = job.state { return (job, progress) }
         }
         return nil
@@ -21,9 +22,9 @@ struct MenuBarPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
-                Text(AppModel.displayName)
+                Text(AppInfo.displayName)
             } icon: {
-                let icon = StatusIconState(model.activity, isPaused: model.queuePause.isPaused)
+                let icon = StatusIconState(shell.services.activity, isPaused: shell.services.queuePause.isPaused)
                 if let value = icon.variableValue {
                     Image(systemName: icon.symbolName, variableValue: value)
                 } else {
@@ -32,22 +33,25 @@ struct MenuBarPanel: View {
             }
             .font(.headline)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(AppModel.displayName)
+            .accessibilityLabel(AppInfo.displayName)
             .accessibilityValue(
-                StatusIconState(model.activity, isPaused: model.queuePause.isPaused).accessibilityStatus
+                StatusIconState(shell.services.activity, isPaused: shell.services.queuePause.isPaused)
+                    .accessibilityStatus
             )
             .accessibilityAddTraits(.isHeader)
             currentJob
             runStatus
             Divider()
             HStack {
-                Button(model.isQueuePaused ? "Resume Queue" : "Pause Queue") { model.toggleQueuePaused() }
-                    .disabled(model.activity.isIdle && !model.isQueuePaused)
-                    .accessibilityHint("Pauses or resumes converting videos in the queue")
+                Button(shell.services.isQueuePaused ? "Resume Queue" : "Pause Queue") {
+                    shell.services.toggleQueuePaused()
+                }
+                .disabled(shell.services.activity.isIdle && !shell.services.isQueuePaused)
+                .accessibilityHint("Pauses or resumes converting videos in the queue")
                 Spacer()
                 Button("Open Main Window") {
                     close()
-                    model.showMainWindow()
+                    shell.showMainWindow()
                 }
                 .accessibilityHint("Shows the main window")
             }
@@ -56,14 +60,14 @@ struct MenuBarPanel: View {
         .padding(16)
         .frame(width: 300, alignment: .leading)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(AppModel.displayName) menu bar")
-        .onDrop(of: [.fileURL], delegate: PopoverDropDelegate(model: model, isTargeted: $isDropTargeted))
+        .accessibilityLabel("\(AppInfo.displayName) menu bar")
+        .onDrop(of: [.fileURL], delegate: PopoverDropDelegate(shell: shell, isTargeted: $isDropTargeted))
     }
 
     /// The runs started from the menu bar: what they are doing, then how they ended in one tally, with the skipped
     /// files one click away. A drop with nothing to shrink says so for a few seconds.
     @ViewBuilder private var runStatus: some View {
-        let board = model.menuBarRuns
+        let board = shell.menuBarRuns
         if !board.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(board.lines.enumerated()), id: \.offset) { _, line in
@@ -77,7 +81,7 @@ struct MenuBarPanel: View {
                     Button("Show Skipped…") {
                         close()
                         let runs = board.reviewRunIDs
-                        Task { await model.reviewQuickRuns(runs) }
+                        Task { await shell.reviewQuickRuns(runs) }
                     }
                     .accessibilityHint("Opens the main window with the skipped videos selected")
                 }
@@ -98,7 +102,7 @@ struct MenuBarPanel: View {
                 Text(runningDetail(running.job, progress: running.progress))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let paused = model.queuePause.statusText {
+                if let paused = shell.services.queuePause.statusText {
                     Text(paused)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -111,18 +115,18 @@ struct MenuBarPanel: View {
     }
 
     private func runningDetail(_ job: Job, progress: Double) -> String {
-        let waiting = max(model.activity.queue - 1, 0)
+        let waiting = max(shell.services.activity.queue - 1, 0)
         let percent = "\(Int((progress * 100).rounded())) percent"
         let head = job.phase.map { "\($0) \(percent)" } ?? percent
         return waiting > 0 ? "\(head), \(waiting) waiting" : head
     }
 
     private var idleText: String {
-        let waiting = model.activity.queue
+        let waiting = shell.services.activity.queue
         if waiting == 0 { return "Nothing in the queue." }
-        guard let paused = model.queuePause.statusText else { return "\(waiting) waiting." }
+        guard let paused = shell.services.queuePause.statusText else { return "\(waiting) waiting." }
         // The user's pause keeps its wording; an automatic one says why.
-        return model.isQueuePaused ? "Queue paused, \(waiting) waiting." : "\(paused), \(waiting) waiting."
+        return shell.services.isQueuePaused ? "Queue paused, \(waiting) waiting." : "\(paused), \(waiting) waiting."
     }
 
     private var dropZone: some View {
@@ -157,7 +161,7 @@ struct MenuBarPanel: View {
         panel.begin { response in
             guard response == .OK else { return }
             let urls = panel.urls
-            Task { @MainActor in model.runFromMenuBar(urls) }
+            Task { @MainActor in shell.runFromMenuBar(urls) }
         }
     }
 }
@@ -166,7 +170,7 @@ struct MenuBarPanel: View {
 /// an image), judged from the types the drag advertises, so no file is read while the pointer moves. The files
 /// themselves are checked before the run starts.
 private struct PopoverDropDelegate: DropDelegate {
-    let model: AppModel
+    let shell: MacShell
     @Binding var isTargeted: Bool
 
     func validateDrop(info: DropInfo) -> Bool {
@@ -190,7 +194,7 @@ private struct PopoverDropDelegate: DropDelegate {
                 }
                 if let url { urls.append(url) }
             }
-            if !urls.isEmpty { model.runFromMenuBar(urls) }
+            if !urls.isEmpty { shell.runFromMenuBar(urls) }
         }
         return true
     }

@@ -1,8 +1,8 @@
 // swift-tools-version: 6.2
 import PackageDescription
 
-// Everything that is not specific to one tool: the queue and jobs, settings, pressure policy, the tool module
-// protocol, the engine, the libraries and the shared views. Tools depend on this
+// Everything that is not specific to one tool: the queue and jobs, settings, pressure policy, the tool and scene
+// protocols, the shared services every tool works with, the engine, the libraries and the shared views. Tools depend on this
 // package; this package never depends on a tool.
 let package = Package(
     name: "Core",
@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "PhotosLibrary", targets: ["PhotosLibrary"]),
         .library(name: "Assistant", targets: ["Assistant"]),
         .library(name: "AppUI", targets: ["AppUI"]),
+        .library(name: "AppServices", targets: ["AppServices"]),
         .library(name: "MediaTestSupport", targets: ["MediaTestSupport"]),
         .executable(name: "devtool", targets: ["devtool"]),
     ],
@@ -47,6 +48,11 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
+            name: "AppServices",
+            dependencies: ["AppCore", "MediaEngine", "LocalLibrary", "PhotosLibrary", "Assistant"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
             name: "MediaTestSupport",
             dependencies: ["MediaEngine", "AppCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
@@ -69,6 +75,11 @@ let package = Package(
         .testTarget(
             name: "AppUITests",
             dependencies: ["AppUI"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "AppServicesTests",
+            dependencies: ["AppServices", "AppCore", "PhotosLibrary", "Assistant"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

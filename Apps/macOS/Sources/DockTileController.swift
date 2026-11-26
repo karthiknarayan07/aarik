@@ -1,5 +1,6 @@
 import AppKit
 import AppUI
+import ConvertUI
 import Observation
 import SwiftUI
 
@@ -7,12 +8,12 @@ import SwiftUI
 /// with the number of videos waiting. What the icon shows is decided by `DockTileState`; this only draws it.
 @MainActor
 final class DockTileController {
-    private let model: AppModel
+    private let shell: MacShell
     private var shown: DockTileState?
     private let hosting = NSHostingView(rootView: DockProgressView(progress: 0))
 
-    init(model: AppModel) {
-        self.model = model
+    init(shell: MacShell) {
+        self.shell = shell
     }
 
     func start() {
@@ -21,11 +22,11 @@ final class DockTileController {
     }
 
     /// The current state, for the Dock menu.
-    var state: DockTileState { DockTileState(jobs: model.jobs, name: \.displayName) }
+    var state: DockTileState { DockTileState(jobs: shell.services.jobs, name: \.displayName) }
 
     private func observe() {
         withObservationTracking {
-            _ = model.jobs
+            _ = shell.services.jobs
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.update()
