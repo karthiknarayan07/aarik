@@ -86,7 +86,6 @@
                     }
                     .accessibilityHidden(true)
                 }
-                .animation(Motion.animation(reduceMotion: reduceMotion), value: snapshot)
             }
         }
 
