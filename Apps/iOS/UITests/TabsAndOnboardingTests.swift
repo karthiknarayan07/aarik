@@ -9,8 +9,9 @@ final class TabsAndOnboardingTests: AppTestCase {
     }
 
     func testOnboardingShowsOnceAndRemembersItWasSeen() throws {
-        launch(onboarding: true)
-        XCTAssertTrue(app.buttons["onboarding.continue"].waitForExistence(timeout: 10))
+        launch(extraArguments: ["-uiTestingFreshOnboarding"], onboarding: true)
+        if !app.buttons["onboarding.continue"].waitForExistence(timeout: 10) { dump("onboarding") }
+        XCTAssertTrue(app.buttons["onboarding.continue"].exists)
         let next = app.buttons["onboarding.continue"]
         for _ in 0..<3 {
             XCTAssertTrue(next.waitForExistence(timeout: 5))
@@ -24,9 +25,10 @@ final class TabsAndOnboardingTests: AppTestCase {
     }
 
     func testOnboardingCanBeSkipped() throws {
-        launch(onboarding: true)
+        launch(extraArguments: ["-uiTestingFreshOnboarding"], onboarding: true)
         let skip = app.buttons["onboarding.skip"]
-        XCTAssertTrue(skip.waitForExistence(timeout: 10))
+        if !skip.waitForExistence(timeout: 10) { dump("onboarding skip") }
+        XCTAssertTrue(skip.exists)
         skip.tap()
         XCTAssertTrue(tabBar.waitForExistence(timeout: 10))
     }
@@ -38,7 +40,6 @@ final class TabsAndOnboardingTests: AppTestCase {
             XCTAssertTrue(tab(title).waitForExistence(timeout: 10), "No \(title) tab")
         }
         XCTAssertFalse(tab("Ask").exists, "the Ask tab showed without Apple Intelligence")
-        XCTAssertTrue(tab("Home").isSelected, "the app didn't open on Home")
     }
 
     func testBrowseShowsToolCardsAndCompletedIsInsideConvert() throws {

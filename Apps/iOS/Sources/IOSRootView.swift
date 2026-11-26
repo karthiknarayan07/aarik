@@ -63,11 +63,14 @@ struct IOSRootView: View {
     var body: some View {
         Group {
             if hasOnboarded {
-                tabs
+                tabs.accessibilityIdentifier("root")
             } else {
+                // A container, so the identifier names the screen and doesn't replace its buttons' own.
                 IOSOnboardingView(requestPhotosAccess: { await shell.requestPhotosAccess() }) {
                     hasOnboarded = true
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("root")
             }
         }
         .animation(.smooth, value: hasOnboarded)

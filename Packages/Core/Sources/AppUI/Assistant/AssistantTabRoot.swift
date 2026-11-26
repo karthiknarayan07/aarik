@@ -145,6 +145,7 @@
             }
             .padding(.horizontal, 32)
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("assistant.empty")
         }
     }
 
@@ -201,6 +202,7 @@
                             .focused(isFocused)
                             .submitLabel(.send)
                             .onSubmit(send)
+                            .accessibilityIdentifier("assistant.composer")
                             // A multi-line field turns the keyboard's Send key into a newline instead of submitting.
                             .onChange(of: draft) { _, new in
                                 if new.hasSuffix("\n") {
@@ -220,6 +222,7 @@
                         }
                         .disabled(!isGenerating && !canSend)
                         .accessibilityLabel(isGenerating ? "Stop" : "Send")
+                        .accessibilityIdentifier("assistant.send")
                         .padding(5)
                     }
                     .frame(minHeight: buttonSize)

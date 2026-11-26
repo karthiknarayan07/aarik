@@ -116,6 +116,7 @@ struct ChatItemView: View {
                 #endif
                 .contextMenu { Button("Copy", systemImage: "doc.on.doc") { copy(text) } }
                 .accessibilityLabel("You said: \(text)")
+                .accessibilityIdentifier("assistant.message.user")
                 .accessibilityAction(named: "Copy") { copy(text) }
         case .assistant(let text):
             VStack(alignment: .leading, spacing: 6) {
@@ -129,6 +130,7 @@ struct ChatItemView: View {
                         }
                     }
                     .accessibilityLabel("Assistant said: \(text)")
+                    .accessibilityIdentifier("assistant.message.assistant")
                     .accessibilityAddTraits(isStreaming ? .updatesFrequently : [])
                     .accessibilityAction(named: "Copy") { copy(text) }
                 if isLast, !isStreaming, chat.canRegenerate {
@@ -242,14 +244,17 @@ struct ConfirmationCard: View {
                 HStack(spacing: 10) {
                     Button("Cancel", action: cancel)
                         .buttonStyle(.glass)
+                        .accessibilityIdentifier("assistant.cancel")
                     Button(confirmation.card.confirmLabel, action: confirm)
                         .buttonStyle(.glassProminent)
+                        .accessibilityIdentifier("assistant.confirm")
                 }
                 .controlSize(.large)
             } else if let status = ConfirmationText.status(confirmation) {
                 Text(status)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(confirmation.state == .confirmed ? Color.green : Color.secondary)
+                    .accessibilityIdentifier("assistant.confirmationStatus")
             }
         }
         .padding(14)
@@ -259,5 +264,6 @@ struct ConfirmationCard: View {
         .sensoryFeedback(.success, trigger: confirmation.state) { _, new in new == .confirmed }
         .sensoryFeedback(.impact(weight: .light), trigger: confirmation.state) { _, new in new == .cancelled }
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("assistant.confirmation")
     }
 }

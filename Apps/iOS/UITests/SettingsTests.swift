@@ -23,7 +23,7 @@ final class SettingsTests: AppTestCase {
             app.switches.matching(NSPredicate(format: "label == 'Start the Queue Automatically'")).firstMatch
                 .waitForExistence(timeout: 5))
         XCTAssertTrue(speedPicker.exists)
-        XCTAssertFalse(element(labelContaining: "Sparkle").exists)
+        XCTAssertFalse(element(labelContaining: "Check for Updates").exists)
         XCTAssertFalse(element(labelContaining: "Menu Bar").exists)
         XCTAssertFalse(element(labelContaining: "Trash").exists)
         closeSettings()
