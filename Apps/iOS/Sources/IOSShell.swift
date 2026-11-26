@@ -20,7 +20,7 @@ final class IOSShell {
     let scenes: [AnyIOSToolScene]
     /// Where a hand-off should land (Convert's Queue); the root view consumes it once it is showing the tabs, so a
     /// cold launch or the onboarding never loses or interrupts it.
-    var pendingRoute: ToolRoute?
+    var handoff = HandoffGate()
     private let backgroundRun: BackgroundRunCoordinator
     private let liveActivity: LiveActivityController
     /// Writes the widget snapshot and pause flag to the App Group when they change, and applies the control's toggle.
@@ -142,7 +142,7 @@ final class IOSShell {
     func pickUpStaged() {
         Task { [weak self, services, scenes] in
             let queue = { (id: String) in
-                self?.pendingRoute = ToolRoute(toolID: id, page: IOSPage.queue.rawValue)
+                self?.handoff.stage(ToolRoute(toolID: id, page: IOSPage.queue.rawValue))
             }
             // Staged videos are videos: the first tool that accepts a file takes them.
             guard let scene = scenes.first(where: { $0.tool.accepts(.file(URL(filePath: "/staged.mov"))) }) else {

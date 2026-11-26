@@ -157,36 +157,17 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             model.library.cancelScan()
         }
     #elseif os(iOS)
-        @Test func iosSceneExposesConvertToolAndMirrorsSelection() throws {
+        @Test func iosSceneExposesConvertToolAndStartsOnTheHome() throws {
             let directory = try makeDirectory()
             defer { try? FileManager.default.removeItem(at: directory) }
             let model = makeModel(directory: directory)
+            model.selection = .localFiles
             let scene = ConvertIOSScene(model: model)
 
             #expect(scene.tool.id == ConvertTool.toolID)
             #expect(scene.tool.platforms == [.macOS, .iOS])
-
-            scene.selection = .overview
+            // The model starts on the Mac's first page; the iOS scene moves it to the home.
             #expect(model.selection == .overview)
-
-            scene.selection = .photosVideos
-            #expect(model.selection == .photosVideos)
-        }
-
-        @Test func iosSceneReportsInspectorAvailabilityByPage() throws {
-            let directory = try makeDirectory()
-            defer { try? FileManager.default.removeItem(at: directory) }
-            let scene = ConvertIOSScene(model: makeModel(directory: directory))
-
-            #expect(scene.hasInspector(for: .localFiles))
-            #expect(scene.hasInspector(for: .mediaType(.k4)))
-            #expect(scene.hasInspector(for: .photosVideos))
-            #expect(!scene.hasInspector(for: .overview))
-            #expect(!scene.hasInspector(for: .queue))
-            #expect(!scene.hasInspector(for: .completed))
-            #expect(!scene.hasInspector(for: .keptAsIs))
-            #expect(!scene.hasInspector(for: .failed))
-            #expect(!scene.hasInspector(for: nil))
         }
 
         @Test func iosSceneReceiveInputsRoutesFilesAndPhotos() throws {
@@ -194,13 +175,12 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
             defer { try? FileManager.default.removeItem(at: directory) }
             let model = makeModel(directory: directory)
             let scene = ConvertIOSScene(model: model)
-            scene.selection = .overview
 
             scene.receive([.photosAsset(identifier: "asset-1", isVideo: true)])
-            #expect(scene.selection == .photosVideos)
+            #expect(model.selection == .photosVideos)
 
             scene.receive([.file(URL(filePath: "/tmp/nonexistent.mov"))])
-            #expect(scene.selection == .localFiles)
+            #expect(model.selection == .localFiles)
             model.library.cancelScan()
         }
     #endif

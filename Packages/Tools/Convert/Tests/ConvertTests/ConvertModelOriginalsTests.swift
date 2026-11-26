@@ -195,8 +195,7 @@ import Testing
             let scene = ConvertIOSScene(model: model)
             _ = bar.body
             _ = card.body
-            _ = scene.root()
-            _ = scene.detail(for: .photosVideos)
+            _ = scene.destination(page: IOSPage.photos.rawValue)
         }
     #endif
 }

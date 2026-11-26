@@ -48,7 +48,7 @@
                             }
                         }
                         .clipShape(.rect(cornerRadius: 5))
-                        .animation(reduceMotion ? nil : .smooth, value: breakdown)
+                        .animation(Motion.animation(reduceMotion: reduceMotion), value: breakdown)
                     }
                     .frame(height: 14)
                     HStack(spacing: 16) {

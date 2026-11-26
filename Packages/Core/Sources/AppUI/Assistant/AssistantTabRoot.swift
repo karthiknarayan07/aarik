@@ -203,6 +203,13 @@
                             .submitLabel(.send)
                             .onSubmit(send)
                             .accessibilityIdentifier("assistant.composer")
+                            // A multi-line field turns the keyboard's Send key into a newline instead of submitting.
+                            .onChange(of: draft) { _, new in
+                                if new.hasSuffix("\n") {
+                                    draft = String(new.dropLast())
+                                    send()
+                                }
+                            }
                             .padding(.leading, 14)
                             .padding(.vertical, 10)
                         Button(action: isGenerating ? stop : send) {

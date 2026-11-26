@@ -132,7 +132,9 @@
                 Image(systemName: systemImage)
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(tint?.color ?? Color.secondary)
-                    .symbolEffect(.bounce, options: .nonRepeating, value: reduceMotion ? 0 : (bounceValue ?? 0))
+                    .symbolEffect(
+                        .bounce, options: .nonRepeating,
+                        value: Motion.bounceTrigger(bounceValue, reduceMotion: reduceMotion))
             }
         }
     }

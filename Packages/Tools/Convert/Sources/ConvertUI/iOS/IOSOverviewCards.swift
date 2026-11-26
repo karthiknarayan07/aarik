@@ -42,12 +42,12 @@
                         .font(.title.bold())
                         .multilineTextAlignment(.center)
                         .contentTransition(.numericText())
-                        .animation(reduceMotion ? nil : .smooth, value: headline)
+                        .animation(Motion.animation(reduceMotion: reduceMotion), value: headline)
                         .accessibilityAddTraits(.isHeader)
                     Text(detail)
                         .font(.body)
                         .contentTransition(.numericText())
-                        .animation(reduceMotion ? nil : .smooth, value: detail)
+                        .animation(Motion.animation(reduceMotion: reduceMotion), value: detail)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -86,7 +86,6 @@
                     }
                     .accessibilityHidden(true)
                 }
-                .animation(reduceMotion ? nil : .smooth, value: snapshot)
             }
         }
 
@@ -203,7 +202,7 @@
                             .foregroundStyle(.green)
                             .cornerRadius(3)
                     }
-                    .chartYScale(domain: 0...Swift.max(1, snapshot?.throughput.map(\.savedBytes).max() ?? 0))
+                    .chartYScale(domain: 0...ChartCeiling.of(snapshot?.throughput.map(\.savedBytes) ?? []))
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                 }
@@ -223,7 +222,7 @@
                             .foregroundStyle(.cyan)
                     }
                     .chartXScale(
-                        domain: 0...Swift.max(1, couldFree(of: Self.photosName), couldFree(of: Self.filesName))
+                        domain: 0...ChartCeiling.of([couldFree(of: Self.photosName), couldFree(of: Self.filesName)])
                     )
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
@@ -243,7 +242,7 @@
                         "Waiting": Color.orange, "Done": Color.green, "Kept": Color.gray, "Failed": Color.red,
                     ])
                     .chartLegend(.hidden)
-                    .chartYScale(domain: 0...Swift.max(1, counts.map(\.value).max() ?? 0))
+                    .chartYScale(domain: 0...ChartCeiling.of(counts.map(\.value)))
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                 }
@@ -259,7 +258,7 @@
                             .foregroundStyle(.purple)
                             .cornerRadius(3)
                     }
-                    .chartXScale(domain: 0...Swift.max(1, snapshot?.groups.prefix(4).map(\.bytes).max() ?? 0))
+                    .chartXScale(domain: 0...ChartCeiling.of(snapshot?.groups.prefix(4).map(\.bytes) ?? []))
                     .chartXAxis(.hidden)
                     .chartYAxis(.hidden)
                 }
@@ -290,7 +289,7 @@
                             .accessibilityLabel(day.day.formatted(Self.dayFormat))
                             .accessibilityValue(ByteFormat.string(day.savedBytes))
                     }
-                    .chartYScale(domain: 0...Swift.max(1, history.map(\.savedBytes).max() ?? 0))
+                    .chartYScale(domain: 0...ChartCeiling.of(history.map(\.savedBytes)))
                     .chartYAxis {
                         AxisMarks { value in
                             AxisGridLine()
@@ -326,7 +325,7 @@
                             .accessibilityLabel(group.title)
                             .accessibilityValue("Could free \(ByteFormat.string(group.bytes))")
                     }
-                    .chartXScale(domain: 0...Swift.max(1, groups.prefix(6).map(\.bytes).max() ?? 0))
+                    .chartXScale(domain: 0...ChartCeiling.of(groups.prefix(6).map(\.bytes)))
                     .chartXAxis {
                         AxisMarks { value in
                             AxisGridLine()

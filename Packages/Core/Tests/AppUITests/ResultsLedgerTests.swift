@@ -53,7 +53,7 @@ import Testing
         #expect(Self.days([]).isEmpty)
     }
 
-    @Test func badgeTextSaysHowMuchWasSaved() {
+    @MainActor @Test func badgeTextSaysHowMuchWasSaved() {
         #expect(SavingsBadge.text(before: 1000, after: 330) == "\u{2212}67%")
         #expect(SavingsBadge.text(before: 1000, after: 1000) == "No change")
         #expect(SavingsBadge.text(before: 1000, after: 1200) == "No change")
