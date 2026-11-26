@@ -54,6 +54,7 @@ final class IOSShell {
 
     func start() async {
         await convert.start()
+        pickUpStaged()
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
@@ -61,6 +62,14 @@ final class IOSShell {
             // Re-check Apple Intelligence availability and Photos access when returning to the foreground.
             convert.assistant.availability.refresh()
             Task { await convert.photos.start() }
+            pickUpStaged()
+        }
+    }
+
+    /// Picks up videos the share extension or the App Intent staged in the App Group, and hands them to Convert.
+    func pickUpStaged() {
+        Task { [services, scene] in
+            await StagedPickup.shared.pickUp(into: scene, services: services)
         }
     }
 
