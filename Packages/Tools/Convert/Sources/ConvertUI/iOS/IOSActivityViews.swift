@@ -20,9 +20,9 @@
                     } description: {
                         Text("Videos you add wait here until they convert.")
                     } actions: {
-                        Button("Browse Photos") { model.selection = .photosVideos }
+                        NavigationLink("Browse Photos", value: model.route(to: .photos))
                             .buttonStyle(.borderedProminent)
-                        Button("Browse Files") { model.selection = .localFiles }
+                        NavigationLink("Browse Files", value: model.route(to: .files))
                     }
                 } else {
                     List {

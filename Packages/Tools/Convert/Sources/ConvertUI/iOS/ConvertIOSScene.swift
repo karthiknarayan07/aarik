@@ -5,70 +5,38 @@
     import SwiftUI
     import UniformTypeIdentifiers
 
-    /// The video tool as the iOS shell hosts it (ADR 0006): the tool owns its tab bar (Overview, Library, Queue and
-    /// Search) and everything inside it. The shell lists the tools and pushes `root()`.
+    /// The video tool as the iOS shell hosts it (ADR 0006): its home and pages are pushed from the Tools tab, its charts
+    /// are part of the Summary tab and its results part of Search. The tab bar is the shell's.
     @MainActor
     @Observable
     public final class ConvertIOSScene: IOSToolScene {
         private let model: ConvertModel
         public var isSettingsPresented = false
 
-        /// The tabs of the tool's floating tab bar.
-        public enum Tab: String, Hashable, Sendable {
-            case overview, library, queue, search
-        }
-
-        public var tab = Tab.overview
-        /// Which list the Library tab shows (Photos or Files) and which the Queue tab shows (Queue or Completed).
-        var library = IOSPage.photos
-        var activity = IOSPage.queue
-        /// A video the Search tab asked the Library tab to open.
-        var pendingOpen: UUID?
-
         public init(model: ConvertModel) {
             self.model = model
-            // The model starts on Local Files, which is the Mac's first page; iOS starts on Overview.
+            // The model starts on Local Files, which is the Mac's first page; iOS starts on the home.
             model.selection = .overview
         }
 
         public var tool: any Tool { model.tool }
 
-        /// The page the tab bar shows, or nil on Search.
-        var currentPage: IOSPage? {
-            switch tab {
-            case .overview: .overview
-            case .library: library
-            case .queue: activity
-            case .search: nil
-            }
-        }
-
-        /// Follows a change the model made (an Overview card opening a page, an intent).
-        func follow(_ selection: VideoPage?) {
-            guard let page = IOSPage(selection), page != currentPage else { return }
-            switch page {
-            case .overview:
-                tab = .overview
-            case .photos, .files:
-                library = page
-                tab = .library
-            case .queue, .completed:
-                activity = page
-                tab = .queue
-            }
-        }
-
-        /// Tells the model which page the tabs show, so its selection and queueing follow what's on screen.
-        func publish(to model: ConvertModel) {
-            guard let page = currentPage, IOSPage(model.selection) != page else { return }
-            model.selection = page.videoPage
-        }
-
-        @ViewBuilder public func root() -> some View {
+        @ViewBuilder public func destination(page: String?) -> some View {
             let model = model
             ForegroundObserver(model: model) {
-                IOSConvertTabs(scene: self, model: model)
+                IOSConvertDestination(scene: self, model: model, page: page)
             }
+        }
+
+        @ViewBuilder public func summary() -> some View {
+            let model = model
+            ForegroundObserver(model: model) {
+                IOSOverviewView(model: model)
+            }
+        }
+
+        @ViewBuilder public func search(query: String) -> some View {
+            IOSSearchResults(model: model, query: query)
         }
 
         public var sheets: VideoIOSSheets {

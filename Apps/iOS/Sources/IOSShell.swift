@@ -28,7 +28,9 @@ final class IOSShell {
         defaults: UserDefaults = .standard,
         photoStore: any PhotoStore = PhotoKitStore()
     ) {
-        let services = AppServices(directory: directory, defaults: defaults, photoStore: photoStore)
+        let services = AppServices(
+            directory: directory, defaults: defaults, photoStore: photoStore,
+            assistantClient: AppServices.assistantClient(arguments: ProcessInfo.processInfo.arguments))
         let convert = ConvertModel(services: services)
         self.services = services
         self.convert = convert

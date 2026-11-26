@@ -61,51 +61,60 @@ class AppTestCase: XCTestCase {
 
     // MARK: Navigation
 
-    /// Where each page lives in the tool's tab bar: the tab, and the segment inside it (if any).
-    private static let pages: [String: (tab: String, segment: String?)] = [
-        "Overview": ("Overview", nil), "Photos": ("Library", "Photos"), "Videos": ("Library", "Photos"),
-        "Files": ("Library", "Files"), "Local Files": ("Library", "Files"), "Queue": ("Queue", "Queue"),
-        "Completed": ("Queue", "Completed"),
+    /// The page ids behind the identifiers `page.<id>` of Convert's home; the old section titles still work.
+    private static let pageIDs = [
+        "Photos": "photos", "Videos": "photos", "Files": "files", "Local Files": "files", "Queue": "queue",
+        "Completed": "completed",
     ]
 
     var tabBar: XCUIElement { app.tabBars.firstMatch }
 
-    /// Gets into the tool's tab bar: the app launches on the Tools list, so this opens the tool from it.
-    func revealTabs() {
-        let anyTool = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tool.'")).firstMatch
-        for _ in 0..<3 {
-            if tabBar.exists, tabBar.isHittable { return }
-            if anyTool.waitForExistence(timeout: 3), anyTool.isHittable {
-                anyTool.tap()
-                _ = tabBar.waitForExistence(timeout: 10)
-            }
-        }
-    }
-
-    /// Taps a tab of the tool's tab bar by its title ("Overview", "Library", "Queue", "Search").
-    func selectTab(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
-        revealTabs()
+    /// Taps a tab of the app's tab bar by its title ("Home", "Browse", "Ask", "Search"). `again` taps a tab that is
+    /// already showing too, which pops its stack back to the first screen.
+    func selectTab(_ title: String, again: Bool = false, file: StaticString = #filePath, line: UInt = #line) {
         let tab = tabBar.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
         XCTAssertTrue(tab.waitForExistence(timeout: 15), "No \(title) tab", file: file, line: line)
-        if !tab.isSelected { tab.tap() }
+        if again || !tab.isSelected { tab.tap() }
     }
 
-    /// Opens one of Convert's pages ("Overview", "Photos", "Files", "Queue", "Completed").
+    /// Opens Convert's home (its list of pages) from the Browse tab, going back from a page if one is open.
+    func openConvertHome(file: StaticString = #filePath, line: UInt = #line) {
+        let row = app.buttons["page.photos"].firstMatch
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tool.'")).firstMatch
+        for _ in 0..<5 {
+            if row.exists, row.isHittable { return }
+            selectTab("Browse", again: true, file: file, line: line)
+            if card.waitForExistence(timeout: 2), card.isHittable {
+                card.tap()
+                _ = row.waitForExistence(timeout: 10)
+                continue
+            }
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists, back.isHittable { back.tap() }
+        }
+        XCTAssertTrue(row.exists, "Convert's home didn't open", file: file, line: line)
+    }
+
+    /// Opens one of Convert's pages ("Photos", "Files", "Queue", "Completed"), or Home for "Overview".
     func open(_ page: String, file: StaticString = #filePath, line: UInt = #line) {
-        guard let place = Self.pages[page] else {
+        if page == "Overview" || page == "Home" {
+            selectTab("Home", file: file, line: line)
+            return
+        }
+        guard let id = Self.pageIDs[page] else {
             XCTFail("No page called \(page)", file: file, line: line)
             return
         }
-        selectTab(place.tab, file: file, line: line)
-        guard let segment = place.segment else { return }
-        let button = app.segmentedControls.buttons[segment].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 15), "No \(segment) segment", file: file, line: line)
-        if !button.isSelected { button.tap() }
+        openConvertHome(file: file, line: line)
+        let item = app.buttons["page.\(id)"].firstMatch
+        if !item.waitForExistence(timeout: 15) { dump("missing page \(page)") }
+        XCTAssertTrue(item.exists, "No page \(page)", file: file, line: line)
+        item.tap()
     }
 
-    /// Opens Settings from the Overview's toolbar.
+    /// Opens Settings from Convert's home toolbar.
     func openSettings(file: StaticString = #filePath, line: UInt = #line) {
-        open("Overview", file: file, line: line)
+        openConvertHome(file: file, line: line)
         let settings = app.buttons["settings"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "No Settings button", file: file, line: line)
         settings.tap()

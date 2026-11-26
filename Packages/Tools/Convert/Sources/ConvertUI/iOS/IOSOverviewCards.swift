@@ -46,6 +46,8 @@
                         .accessibilityAddTraits(.isHeader)
                     Text(detail)
                         .font(.body)
+                        .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : .smooth, value: detail)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -91,19 +93,20 @@
         private var headline: String {
             guard let snapshot else { return "Looking at Your Videos" }
             let month = snapshot.savedThisMonth()
+            if snapshot.couldFree > 0 { return "Great Day to Free Space" }
             if month > 0 { return "You've Freed \(ByteFormat.string(month)) This Month" }
             if snapshot.savedBytes > 0 { return "You've Saved \(ByteFormat.string(snapshot.savedBytes))" }
-            if snapshot.couldFree > 0 { return "About \(ByteFormat.string(snapshot.couldFree)) Could Be Freed" }
             return "Nothing to Shrink Yet"
         }
 
         private var detail: String {
             guard let snapshot else { return "Reading sizes. Nothing leaves \(DeviceCopy.thisDevice)." }
-            if snapshot.savedBytes > 0, snapshot.couldFree > 0 {
-                return "About \(ByteFormat.string(snapshot.couldFree)) more could be freed from what's left."
+            let month = snapshot.savedThisMonth()
+            if snapshot.couldFree > 0 {
+                let ready = "\(ByteFormat.string(snapshot.couldFree)) ready to save"
+                return month > 0 ? "\(ready), and \(ByteFormat.string(month)) freed this month." : "\(ready)."
             }
             if snapshot.savedBytes > 0 { return "Your videos are as small as they can get at this preset." }
-            if snapshot.couldFree > 0 { return "Add videos to the queue to keep smaller copies that look the same." }
             return "Videos you record or add will show up here."
         }
     }
