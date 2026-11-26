@@ -102,12 +102,14 @@ import Testing
         let directory = clip.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let trash = directory.appending(path: "Trash", directoryHint: .isDirectory)
-        let runner = DownscaleRunner(trash: { url in
-            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
-            let destination = trash.appending(path: url.lastPathComponent)
-            try FileManager.default.moveItem(at: url, to: destination)
-            return destination
-        })
+        let runner = DownscaleRunner(
+            trash: { url in
+                try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+                let destination = trash.appending(path: url.lastPathComponent)
+                try FileManager.default.moveItem(at: url, to: destination)
+                return destination
+            },
+            diskSpace: RunnerFixture.roomy)
         // The synthetic HLG clip compresses to about 1.1 Mbps, so the H.264 output needs a lower rate to save over 10%.
         let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 300_000, codec: .h264Compatible)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)

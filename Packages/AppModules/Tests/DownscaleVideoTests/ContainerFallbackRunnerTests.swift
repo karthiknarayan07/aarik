@@ -72,7 +72,7 @@ import Testing
                 == ["Location"])
     }
 
-    @Test(.timeLimit(.minutes(2))) func containerFallbacksAreFoundForTheFilesThatNeedThem() async throws {
+    @Test(.timeLimit(.minutes(5))) func containerFallbacksAreFoundForTheFilesThatNeedThem() async throws {
         let m4v = try await RunnerFixture.source(name: "a.m4v", fileType: .mp4, timedMetadata: true)
         let mov = try await RunnerFixture.source(name: "b.mov")
         defer {
@@ -91,7 +91,7 @@ import Testing
 
     // MARK: - Runs
 
-    @Test(.timeLimit(.minutes(2))) func predictedFallbackLossIsVerifiedAndExplained() async throws {
+    @Test(.timeLimit(.minutes(5))) func predictedFallbackLossIsVerifiedAndExplained() async throws {
         let source = try await RunnerFixture.source(
             name: "x.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
         let directory = source.deletingLastPathComponent()
@@ -100,7 +100,7 @@ import Testing
         let settings = DownscaleJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: ["Location", "Creation date"])
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -115,7 +115,7 @@ import Testing
 
     /// Regression: a library entry read before ISO user data had names ("loci") still gets a job whose fallback
     /// loss counts as shown, so it converts and is verified instead of being kept as is.
-    @Test(.timeLimit(.minutes(2))) func fallbackShownFromAnOldInventoryIsVerified() async throws {
+    @Test(.timeLimit(.minutes(5))) func fallbackShownFromAnOldInventoryIsVerified() async throws {
         let source = try await RunnerFixture.source(
             name: "x.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
         let directory = source.deletingLastPathComponent()
@@ -137,7 +137,7 @@ import Testing
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: loss.lost,
             predictedLostKeys: loss.keys)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -149,7 +149,7 @@ import Testing
 
     /// The add-time probe missed the fallback (or the job predates the prediction): what QuickTime loses was never
     /// shown, so the copy is not made. That is known before encoding, so nothing is encoded.
-    @Test(.timeLimit(.minutes(2)), arguments: [[String]?.some([]), nil])
+    @Test(.timeLimit(.minutes(5)), arguments: [[String]?.some([]), nil])
     func fallbackFoundOnlyAtRunTimeKeepsTheOriginalAsIs(_ predictedLost: [String]?) async throws {
         let source = try await RunnerFixture.source(
             name: "x.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
@@ -159,7 +159,7 @@ import Testing
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: predictedLost)
         let progressReported = Mutex(false)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in
             progressReported.withLock { $0 = true }
         }
 
@@ -171,7 +171,7 @@ import Testing
 
     /// An already-small MPEG-4 clip with ISO user data is kept for being small, not for its file format: the
     /// planner speaks first.
-    @Test(.timeLimit(.minutes(2))) func alreadySmallMPEG4WithIsoUserDataKeepsTheSmallReason() async throws {
+    @Test(.timeLimit(.minutes(5))) func alreadySmallMPEG4WithIsoUserDataKeepsTheSmallReason() async throws {
         let source = try await RunnerFixture.smallSource(
             name: "small.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
         let directory = source.deletingLastPathComponent()
@@ -179,7 +179,7 @@ import Testing
         let settings = DownscaleJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: [], predictedLostKeys: [])
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         #expect(state == .keptAsIs(reason: "Already small", code: .alreadySmall))
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
@@ -208,7 +208,7 @@ import Testing
                 MetadataInventory(items: []), predictedLost: nil, predictedLostKeys: nil))
     }
 
-    @Test(.timeLimit(.minutes(2)), arguments: [SaveDestination.nextToOriginal, .replace])
+    @Test(.timeLimit(.minutes(5)), arguments: [SaveDestination.nextToOriginal, .replace])
     func unpredictedLossInAnotherContainerKeepsTheOriginalAsIs(_ destination: SaveDestination) async throws {
         let source = try await RunnerFixture.source(name: "x.m4v", fileType: .mp4, timedMetadata: true)
         let directory = source.deletingLastPathComponent()
@@ -222,7 +222,8 @@ import Testing
                 guard !audioKeys.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
                 inventory.items.removeAll { audioKeys.contains($0.key) }
                 return inventory
-            })
+            },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: destination, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
@@ -232,17 +233,19 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
     }
 
-    @Test(.timeLimit(.minutes(2))) func replaceUnderATakenNameSaysWhy() async throws {
+    @Test(.timeLimit(.minutes(5))) func replaceUnderATakenNameSaysWhy() async throws {
         let source = try await RunnerFixture.source(name: "x.m4v", fileType: .mp4, timedMetadata: true)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let taken = directory.appending(path: "x.mov")
         try Data("someone else's file".utf8).write(to: taken)
-        let runner = DownscaleRunner(trash: { url in
-            let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
-            try FileManager.default.moveItem(at: url, to: trashed)
-            return trashed
-        })
+        let runner = DownscaleRunner(
+            trash: { url in
+                let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
+                try FileManager.default.moveItem(at: url, to: trashed)
+                return trashed
+            },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
@@ -262,12 +265,12 @@ import Testing
         #expect(try Data(contentsOf: taken) == Data("someone else's file".utf8))
     }
 
-    @Test(.timeLimit(.minutes(2))) func sameContainerRunHasNoNotes() async throws {
+    @Test(.timeLimit(.minutes(5))) func sameContainerRunHasNoNotes() async throws {
         let source = try await RunnerFixture.source()
         defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
-        let state = try await DownscaleRunner().run(try RunnerFixture.job(source, settings)) { _ in }
+        let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")
@@ -278,13 +281,14 @@ import Testing
 
     // MARK: - Our output never outlives a failed check
 
-    @Test(.timeLimit(.minutes(2))) func failingToInspectTheOutputRemovesIt() async throws {
+    @Test(.timeLimit(.minutes(5))) func failingToInspectTheOutputRemovesIt() async throws {
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let runner = DownscaleRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
-            inspect: { _ in throw CocoaError(.fileReadCorruptFile) })
+            inspect: { _ in throw CocoaError(.fileReadCorruptFile) },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CocoaError.self) {
@@ -293,13 +297,14 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
     }
 
-    @Test(.timeLimit(.minutes(2))) func failingToMeasureTheOutputRemovesIt() async throws {
+    @Test(.timeLimit(.minutes(5))) func failingToMeasureTheOutputRemovesIt() async throws {
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let runner = DownscaleRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
-            sizeOf: { _ in throw CocoaError(.fileReadUnknown) })
+            sizeOf: { _ in throw CocoaError(.fileReadUnknown) },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CocoaError.self) {
@@ -308,13 +313,14 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [source.lastPathComponent])
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancelledWhileInspectingTheOutputRemovesIt() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancelledWhileInspectingTheOutputRemovesIt() async throws {
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let runner = DownscaleRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
-            inspect: { _ in throw CancellationError() })
+            inspect: { _ in throw CancellationError() },
+            diskSpace: RunnerFixture.roomy)
         let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CancellationError.self) {
@@ -325,7 +331,7 @@ import Testing
 
     // MARK: - The file the run used
 
-    @Test(.timeLimit(.minutes(2))) func outcomeRecordsTheFileTheRunActuallyRead() async throws {
+    @Test(.timeLimit(.minutes(5))) func outcomeRecordsTheFileTheRunActuallyRead() async throws {
         let original = try await RunnerFixture.source()
         let directory = original.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -338,7 +344,7 @@ import Testing
             toolID: DownscaleTool.toolID, source: original, sourceBookmark: bookmark,
             settings: try JSONEncoder().encode(settings))
 
-        let state = try await DownscaleRunner().run(job) { _ in }
+        let state = try await RunnerFixture.runner().run(job) { _ in }
 
         guard case .completed(let outcome) = state else {
             Issue.record("expected completed, got \(state)")

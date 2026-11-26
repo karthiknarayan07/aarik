@@ -45,7 +45,11 @@ import Testing
         (DownscaleError.unsupportedSource("x"), .unsupportedVideo),
         (DownscaleError.encoderFailed("x"), .conversionFailed),
         (PhotosRunnerError.notAPhotosJob, .unsupportedVideo),
-        (PhotosRunnerError.notEnoughSpace(needed: 80_000_000), .notEnoughSpace),
+        (
+            NotEnoughSpaceError(volumeName: "Macintosh HD", neededBytes: 80_000_000, availableBytes: 1_000),
+            .notEnoughSpace
+        ),
+        (DownscaleError.stalled, .conversionFailed),
         (PhotoFetchError.notInLibrary, .originalUnavailable),
         (PhotoFetchError.downloadFailed(underlying: "x"), .iCloudDownloadFailed),
         (PhotoFetchError.cancelled, .cancelled),

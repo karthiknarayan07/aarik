@@ -129,30 +129,45 @@ import Testing
         #expect(bare.code == .photosSaveFailed)
     }
 
-    /// The system words its errors in the user's language, so the kind is read from the domain and the code. These
-    /// carry text no English match would find, and none of it, nor the file name in it, reaches the sentence.
-    @Test func systemErrorsAreToldByDomainAndCodeNotByTheirWording() {
-        let cases: [(String, Int, OutcomeCode)] = [
-            (NSCocoaErrorDomain, CocoaError.fileNoSuchFile.rawValue, .originalUnavailable),
-            (NSCocoaErrorDomain, CocoaError.fileReadNoSuchFile.rawValue, .originalUnavailable),
-            (NSPOSIXErrorDomain, Int(ENOENT), .originalUnavailable),
-            (NSCocoaErrorDomain, CocoaError.fileWriteOutOfSpace.rawValue, .notEnoughSpace),
-            (NSPOSIXErrorDomain, Int(ENOSPC), .notEnoughSpace),
-            (NSCocoaErrorDomain, CocoaError.fileWriteNoPermission.rawValue, .outputFolderUnavailable),
-            (NSCocoaErrorDomain, CocoaError.fileWriteVolumeReadOnly.rawValue, .outputFolderUnavailable),
-            (NSPOSIXErrorDomain, Int(EROFS), .outputFolderUnavailable),
-            (NSCocoaErrorDomain, CocoaError.fileReadNoPermission.rawValue, .conversionFailed),
-            (NSPOSIXErrorDomain, Int(EACCES), .conversionFailed),
-        ]
-        for (domain, code, expected) in cases {
-            let error = NSError(
-                domain: domain, code: code,
-                userInfo: [NSLocalizedDescriptionKey: "Die Datei „Urlaub.mov“ konnte nicht geöffnet werden."])
+    private static let systemCases: [(String, Int, OutcomeCode)] = [
+        (NSCocoaErrorDomain, CocoaError.fileNoSuchFile.rawValue, .originalUnavailable),
+        (NSCocoaErrorDomain, CocoaError.fileReadNoSuchFile.rawValue, .originalUnavailable),
+        (NSPOSIXErrorDomain, Int(ENOENT), .originalUnavailable),
+        (NSCocoaErrorDomain, CocoaError.fileWriteOutOfSpace.rawValue, .notEnoughSpace),
+        (NSPOSIXErrorDomain, Int(ENOSPC), .notEnoughSpace),
+        (NSCocoaErrorDomain, CocoaError.fileWriteNoPermission.rawValue, .outputFolderUnavailable),
+        (NSCocoaErrorDomain, CocoaError.fileWriteVolumeReadOnly.rawValue, .outputFolderUnavailable),
+        (NSPOSIXErrorDomain, Int(EROFS), .outputFolderUnavailable),
+        (NSCocoaErrorDomain, CocoaError.fileReadNoPermission.rawValue, .conversionFailed),
+        (NSPOSIXErrorDomain, Int(EACCES), .conversionFailed),
+    ]
+
+    /// The system words its errors in the user's language, so the kind is read from the domain and the code, and
+    /// the system's own sentence is kept (it says which file).
+    @Test func systemErrorsAreToldByDomainAndCodeAndKeepTheirOwnSentence() {
+        for (domain, code, expected) in Self.systemCases {
+            let own = "Die Datei „Urlaub.mov“ konnte nicht geöffnet werden."
+            let error = NSError(domain: domain, code: code, userInfo: [NSLocalizedDescriptionKey: own])
             let failure = JobQueue.failure(for: error)
             #expect(failure.code == expected, "\(domain) \(code)")
-            #expect(!failure.reason.contains("Urlaub"), "\(domain) \(code)")
-            #expect(!failure.reason.isEmpty)
+            #expect(failure.reason == own, "\(domain) \(code)")
         }
+    }
+
+    /// The generic form names a domain and a number in whatever language the system speaks; none of that is shown.
+    @Test func theGenericSystemFormIsReplacedByAPlainSentenceInAnyLanguage() {
+        for (domain, code, expected) in Self.systemCases {
+            let generic = "Der Vorgang konnte nicht abgeschlossen werden. (Cocoa-Fehler \(code).)"
+            let error = NSError(domain: domain, code: code, userInfo: [NSLocalizedDescriptionKey: generic])
+            let failure = JobQueue.failure(for: error)
+            #expect(failure.code == expected, "\(domain) \(code)")
+            #expect(failure.reason != generic, "\(domain) \(code)")
+            #expect(!failure.reason.contains("\(code)"), "\(domain) \(code)")
+        }
+        let unknown = NSError(
+            domain: NSCocoaErrorDomain, code: 99_999,
+            userInfo: [NSLocalizedDescriptionKey: "Opération impossible. (Cocoa error 99999.)"])
+        #expect(JobQueue.failure(for: unknown).reason == JobQueue.genericFailureReason)
     }
 
     @Test func anyOtherErrorIsTheGenericSentenceWhateverLanguageTheSystemSpeaks() {

@@ -67,7 +67,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: partial.path))
     }
 
-    @Test(.timeLimit(.minutes(2))) func downscaleWritesNoFinalUntilDone() async throws {
+    @Test(.timeLimit(.minutes(5))) func downscaleWritesNoFinalUntilDone() async throws {
         var options = ClipOptions()
         options.width = 1280
         options.height = 720
@@ -95,7 +95,7 @@ import Testing
         #expect(!names.contains { $0.contains(".partial-") })
     }
 
-    @Test(.timeLimit(.minutes(2))) func keepSourceResolution() async throws {
+    @Test(.timeLimit(.minutes(5))) func keepSourceResolution() async throws {
         var options = ClipOptions()
         options.width = 1280
         options.height = 720

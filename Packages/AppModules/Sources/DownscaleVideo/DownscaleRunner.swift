@@ -37,6 +37,8 @@ public struct DownscaleRunner: JobRunner {
     private let inspect: Inspector
     let sizeOf: Sizer
     private let originalsBackup: BackupProvider
+    /// The free-space rule, checked before anything is written (see `STABILITY.md`).
+    let diskSpace: DiskSpaceCheck
 
     /// `originalsBackup` is asked at the moment of each Replace, so a setting changed while the queue runs applies
     /// to the next Replace without rebuilding the runner or the queue.
@@ -46,20 +48,22 @@ public struct DownscaleRunner: JobRunner {
 
     /// Seams for tests: `trash` reports the Trash location of the fixture a test created, `inspect` reads the
     /// output's metadata (a test can make the output look unfaithful), `sizeOf` measures the output and the backup
-    /// copy.
+    /// copy, `diskSpace` answers how much room each volume has.
     init(
         trash: @escaping Trasher,
         inspect: @escaping Inspector = { try await MediaInspector().inventory(of: $0) },
         sizeOf: @escaping Sizer = { try DownscaleRunner.fileSize($0) },
-        originalsBackup: @escaping BackupProvider = { nil }
+        originalsBackup: @escaping BackupProvider = { nil },
+        diskSpace: DiskSpaceCheck = DiskSpaceCheck()
     ) {
+        self.diskSpace = diskSpace
         self.sizeOf = sizeOf
         self.trash = trash
         self.inspect = inspect
         self.originalsBackup = originalsBackup
     }
 
-    private static func trashItem(_ url: URL) throws -> URL {
+    static func trashItem(_ url: URL) throws -> URL {
         var result: NSURL?
         try FileManager.default.trashItem(at: url, resultingItemURL: &result)
         return (result as URL?) ?? url
@@ -151,12 +155,14 @@ public struct DownscaleRunner: JobRunner {
         let requested = settings.custom ?? settings.preset.spec(for: inventory, byteSize: byteSize)
         let spec: DownscaleSpec
         let predicted: MetadataReport
+        let estimatedBytes: Int64
         let decision = DownscalePlanner.decide(
             inventory: inventory, byteSize: byteSize, spec: requested,
             fallsBackToQuickTime: container.fallsBackToQuickTime)
         switch decision {
         case .keptAsIs(let reason, let code): return .keptAsIs(reason, code)
-        case .convert(let planned, _, let report): (spec, predicted) = (planned, report)
+        case .convert(let planned, let estimate, let report):
+            (spec, predicted, estimatedBytes) = (planned, report, estimate)
         }
         if container.fallsBackToQuickTime,
             !Self.fallbackLossWasShown(
@@ -173,6 +179,14 @@ public struct DownscaleRunner: JobRunner {
 
         let folder = try outputFolder()
         defer { folder.stop() }
+        // Nothing has been written yet: a volume too full for the output fails the job here, and Retry works.
+        // A Replace with an originals backup also copies the original to the backup volume: checked now, not after
+        // the encode.
+        var needs = [SpaceNeed(url: folder.url, bytes: estimatedBytes)]
+        if settings.saveTo == .replace, let backup = originalsBackup() {
+            needs.append(SpaceNeed(url: backup.folder, bytes: byteSize))
+        }
+        try diskSpace.verify(needs)
         let label = Self.label(for: spec, settings: settings)
 
         let output: URL
@@ -197,13 +211,13 @@ public struct DownscaleRunner: JobRunner {
                 try? FileManager.default.removeItem(at: output)
                 return .keptAsIs(DownscalePlanner.savesLittleReason, .savesLittle)
             }
-            outputInventory = try await inspect(output)
+            outputInventory = try await Signposts.interval(.verify) { try await inspect(output) }
             try Self.stopIfCancelled(removing: output)
         } catch {
             try? FileManager.default.removeItem(at: output)
             throw error
         }
-        let report = MetadataDiff.report(source: inventory, output: outputInventory)
+        let report = Signposts.interval(.verify) { MetadataDiff.report(source: inventory, output: outputInventory) }
 
         // In another container, anything lost beyond the prediction is a loss nobody was told about: never keep
         // such a copy, wherever it was to be saved.

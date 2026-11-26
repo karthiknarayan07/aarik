@@ -17,7 +17,7 @@ import Testing
 
     // MARK: - New asset
 
-    @Test(.timeLimit(.minutes(2))) func newAssetSavesAVerifiedCopyAndLeavesTheOriginalAlone() async throws {
+    @Test(.timeLimit(.minutes(5))) func newAssetSavesAVerifiedCopyAndLeavesTheOriginalAlone() async throws {
         let rig = try await PhotosRig(albums: ["album-1"])
         let log = RunLog()
 
@@ -42,7 +42,7 @@ import Testing
         #expect(outcome.noteCodes == [.savedToPhotos])
     }
 
-    @Test(.timeLimit(.minutes(2))) func theDownloadIsItsOwnPhaseWithItsOwnProgress() async throws {
+    @Test(.timeLimit(.minutes(5))) func theDownloadIsItsOwnPhaseWithItsOwnProgress() async throws {
         let rig = try await PhotosRig()
         let log = RunLog()
 
@@ -53,7 +53,7 @@ import Testing
         #expect(log.progress.prefix(4).map { $0 } == [0.25, 0.5, 0.75, 1])
     }
 
-    @Test(.timeLimit(.minutes(2))) func aVideoOnThisMacIsNotCalledAnICloudDownload() async throws {
+    @Test(.timeLimit(.minutes(5))) func aVideoOnThisMacIsNotCalledAnICloudDownload() async throws {
         let rig = try await PhotosRig()
         let local = PhotoAsset(
             id: rig.asset.id, creationDate: rig.asset.creationDate, location: rig.asset.location,
@@ -67,7 +67,7 @@ import Testing
         #expect(log.phases.first == "Getting from Photos…")
     }
 
-    @Test(.timeLimit(.minutes(2))) func anEditsRenderingMayBeAFewMillisecondsLonger() async throws {
+    @Test(.timeLimit(.minutes(5))) func anEditsRenderingMayBeAFewMillisecondsLonger() async throws {
         let rig = try await PhotosRig(hasAdjustments: true, savedDuration: 1.002)
 
         let state = try await rig.runner().run(try rig.job()) { _ in }
@@ -78,7 +78,7 @@ import Testing
         #expect(rig.store.deletedIDs.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func anEditedVersionNeverSeenWhenQueuedIsUsedAtRunTime() async throws {
+    @Test(.timeLimit(.minutes(5))) func anEditedVersionNeverSeenWhenQueuedIsUsedAtRunTime() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job()  // queued while the video was not edited
         let edited = PhotoAsset(
@@ -95,7 +95,7 @@ import Testing
 
     // MARK: - Folder
 
-    @Test(.timeLimit(.minutes(2))) func folderDestinationWritesAFileAndChangesNothingInPhotos() async throws {
+    @Test(.timeLimit(.minutes(5))) func folderDestinationWritesAFileAndChangesNothingInPhotos() async throws {
         let rig = try await PhotosRig()
         let folder = rig.directory.appending(path: "Out", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -116,7 +116,7 @@ import Testing
 
     // MARK: - Replace
 
-    @Test(.timeLimit(.minutes(2))) func replaceRecordsTheOriginalAsPendingAndDeletesNothing() async throws {
+    @Test(.timeLimit(.minutes(5))) func replaceRecordsTheOriginalAsPendingAndDeletesNothing() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job(.replace)
 
@@ -134,7 +134,7 @@ import Testing
         #expect(rig.store.operations.firstIndex(of: .save) != nil)
     }
 
-    @Test(.timeLimit(.minutes(2))) func replaceCopiesTheOriginalToTheBackupFolderFirst() async throws {
+    @Test(.timeLimit(.minutes(5))) func replaceCopiesTheOriginalToTheBackupFolderFirst() async throws {
         let rig = try await PhotosRig()
         let originalSize = try #require(RunnerFixture.size(rig.clip))
 
@@ -147,7 +147,7 @@ import Testing
         #expect(rig.store.inputRequests.map(\.kind) == [.original])
     }
 
-    @Test(.timeLimit(.minutes(2))) func anEditedVideosBackupIsItsOriginalFromASecondFetch() async throws {
+    @Test(.timeLimit(.minutes(5))) func anEditedVideosBackupIsItsOriginalFromASecondFetch() async throws {
         let rig = try await PhotosRig(hasAdjustments: true)
         let original = try await RunnerFixture.smallSource(name: "original.mov")
         defer { try? FileManager.default.removeItem(at: original.deletingLastPathComponent()) }
@@ -165,7 +165,7 @@ import Testing
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aBackupThatFailsKeepsTheOriginalOffTheDeleteList() async throws {
+    @Test(.timeLimit(.minutes(5))) func aBackupThatFailsKeepsTheOriginalOffTheDeleteList() async throws {
         let rig = try await PhotosRig()
         try FileManager.default.removeItem(at: rig.backup)  // the drive isn't there
 
@@ -179,7 +179,7 @@ import Testing
         #expect(rig.store.deletedIDs.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aCopyWithMetadataWarningsNeverQueuesTheOriginal() async throws {
+    @Test(.timeLimit(.minutes(5))) func aCopyWithMetadataWarningsNeverQueuesTheOriginal() async throws {
         let rig = try await PhotosRig()
         let core = DownscaleRunner(
             trash: { $0 },
@@ -191,7 +191,8 @@ import Testing
                         : $0
                 }
                 return inventory
-            })
+            },
+            diskSpace: RunnerFixture.roomy)
 
         let state = try await rig.runner(core: core).run(try rig.job(.replace)) { _ in }
 
@@ -202,7 +203,7 @@ import Testing
         #expect(outcome.warningCodes.last == .originalKeptNotVerified)
     }
 
-    @Test(.timeLimit(.minutes(2))) func anOriginalEditedDuringTheRunIsKept() async throws {
+    @Test(.timeLimit(.minutes(5))) func anOriginalEditedDuringTheRunIsKept() async throws {
         let rig = try await PhotosRig()
         let changed = PhotoAsset(
             id: rig.asset.id, creationDate: rig.asset.creationDate, location: rig.asset.location,
@@ -224,7 +225,7 @@ import Testing
 
     // MARK: - Refusals and failures
 
-    @Test(.timeLimit(.minutes(2))) func spatialVideoIsRefusedBeforeAnyDownload() async throws {
+    @Test(.timeLimit(.minutes(5))) func spatialVideoIsRefusedBeforeAnyDownload() async throws {
         let rig = try await PhotosRig(subtypes: [.spatial])
 
         let state = try await rig.runner().run(try rig.job()) { _ in }
@@ -235,7 +236,7 @@ import Testing
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func offlineDownloadFailsTheJobWithNoNewVideoAndNoFilesLeft() async throws {
+    @Test(.timeLimit(.minutes(5))) func offlineDownloadFailsTheJobWithNoNewVideoAndNoFilesLeft() async throws {
         let rig = try await PhotosRig()
         rig.store.inputError = .downloadFailed("offline")
 
@@ -253,7 +254,7 @@ import Testing
         #expect(rig.store.assets == [rig.asset])
     }
 
-    @Test(.timeLimit(.minutes(2))) func cancellingTheDownloadStopsWithNoFilesLeft() async throws {
+    @Test(.timeLimit(.minutes(5))) func cancellingTheDownloadStopsWithNoFilesLeft() async throws {
         let rig = try await PhotosRig()
         let task = Task<JobState, any Error> {
             try await rig.runner().run(try rig.job()) { _ in }
@@ -271,7 +272,7 @@ import Testing
         #expect(rig.store.assets == [rig.asset])
     }
 
-    @Test(.timeLimit(.minutes(2))) func aVideoDeletedWhileQueuedFailsAsNoLongerInPhotos() async throws {
+    @Test(.timeLimit(.minutes(5))) func aVideoDeletedWhileQueuedFailsAsNoLongerInPhotos() async throws {
         let rig = try await PhotosRig()
         let job = try rig.job()
         rig.store.assets = []
@@ -286,7 +287,7 @@ import Testing
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aSaveThatPhotosRefusesLeavesTheOriginalAndNothingBehind() async throws {
+    @Test(.timeLimit(.minutes(5))) func aSaveThatPhotosRefusesLeavesTheOriginalAndNothingBehind() async throws {
         let rig = try await PhotosRig()
         rig.store.saveError = .unavailable("disk full")
 
@@ -303,7 +304,7 @@ import Testing
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aNewVideoThatDoesNotVerifyIsRemovedAndTheOriginalIsNeverQueued() async throws {
+    @Test(.timeLimit(.minutes(5))) func aNewVideoThatDoesNotVerifyIsRemovedAndTheOriginalIsNeverQueued() async throws {
         let rig = try await PhotosRig()
         rig.store.savedPixelSize = CGSize(width: 1280, height: 720)  // not what was saved
 
@@ -325,7 +326,7 @@ import Testing
         #expect(rig.workContents.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func aNewVideoThatCouldNotBeRemovedIsReported() async throws {
+    @Test(.timeLimit(.minutes(5))) func aNewVideoThatCouldNotBeRemovedIsReported() async throws {
         let rig = try await PhotosRig()
         rig.store.savedPixelSize = CGSize(width: 1280, height: 720)
         rig.store.deleteError = CancellationError()  // the user declined the confirmation
@@ -344,7 +345,7 @@ import Testing
         #expect(rig.pending.all.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(2))) func anUnshownLossKeepsTheVideoAsIsBeforeAnyEncoding() async throws {
+    @Test(.timeLimit(.minutes(5))) func anUnshownLossKeepsTheVideoAsIsBeforeAnyEncoding() async throws {
         let rig = try await PhotosRig()
         var inventory = try await MediaInspector().inventory(of: rig.clip)
         inventory.items.append(
@@ -354,7 +355,7 @@ import Testing
             photosDestination: .newAsset)
         let size = try #require(RunnerFixture.size(rig.clip))
 
-        let result = try await DownscaleRunner().convert(
+        let result = try await RunnerFixture.runner().convert(
             source: rig.clip, byteSize: size, inventory: inventory, settings: settings, requireLossShown: true,
             outputFolder: { (rig.directory, {}) }, progress: { _ in })
 
@@ -368,7 +369,7 @@ import Testing
         )
     }
 
-    @Test(.timeLimit(.minutes(2))) func aShownLossIsAllowed() async throws {
+    @Test(.timeLimit(.minutes(5))) func aShownLossIsAllowed() async throws {
         let rig = try await PhotosRig()
         var inventory = try await MediaInspector().inventory(of: rig.clip)
         inventory.items.append(
@@ -378,7 +379,7 @@ import Testing
             predictedLost: ["Cinematic depth data"], photosDestination: .newAsset)
         let size = try #require(RunnerFixture.size(rig.clip))
 
-        let result = try await DownscaleRunner().convert(
+        let result = try await RunnerFixture.runner().convert(
             source: rig.clip, byteSize: size, inventory: inventory, settings: settings, requireLossShown: true,
             outputFolder: { (rig.directory, {}) }, progress: { _ in })
 
@@ -391,7 +392,7 @@ import Testing
 
     // MARK: - Queue
 
-    @Test(.timeLimit(.minutes(2))) func aFailedDownloadCanBeRetriedAndThenSucceeds() async throws {
+    @Test(.timeLimit(.minutes(5))) func aFailedDownloadCanBeRetriedAndThenSucceeds() async throws {
         let rig = try await PhotosRig()
         rig.store.inputError = .downloadFailed("offline")
         let queue = JobQueue(

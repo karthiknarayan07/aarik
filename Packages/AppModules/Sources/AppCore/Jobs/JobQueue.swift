@@ -353,17 +353,34 @@ public actor JobQueue {
 
     static let genericFailureReason = "The video couldn't be converted."
 
-    /// The sentence and the code for a failed run, decided by what the error is and never by its text, which the
-    /// system translates (and which can name a file). An error of the app's own that carries a code and a sentence
-    /// is used as it is. A system error is told by its domain and code: a missing file, a full disk, no permission.
-    /// Any other error is the generic sentence.
+    /// The sentence and the code for a failed run. The code is decided by what the error is (its type, or its domain
+    /// and code for a system error), never by its words, which the system translates. An error of the app's own
+    /// carries its code and its sentence. For a file error from Foundation the sentence is the system's own, in the
+    /// user's language, unless that is the generic "operation couldn't be completed (error N)" form, which names a
+    /// domain and a number; then it is one of ours. Anything else is the generic sentence.
     static func failure(for error: any Error) -> (reason: String, code: OutcomeCode) {
         if let coded = error as? any OutcomeCoded {
             let sentence = (error as? any LocalizedError)?.errorDescription ?? genericFailureReason
             return (sentence, coded.outcomeCode)
         }
         let nsError = error as NSError
-        switch (nsError.domain, nsError.code) {
+        let known = knownSystemFailure(domain: nsError.domain, code: nsError.code)
+        if [NSCocoaErrorDomain, NSPOSIXErrorDomain, NSURLErrorDomain].contains(nsError.domain) {
+            let own = nsError.localizedDescription
+            let readable = !own.isEmpty && !mentionsNumber(nsError.code, in: own)
+            return (readable ? own : known?.sentence ?? genericFailureReason, known?.code ?? .conversionFailed)
+        }
+        // A Swift error of ours or a library's that words itself keeps its sentence; a system error of another
+        // domain (AVFoundation, Photos, Core Media) is not shown in its own words, which are often the generic form.
+        if !isSystemDomain(nsError.domain), let sentence = (error as? any LocalizedError)?.errorDescription {
+            return (sentence, .conversionFailed)
+        }
+        return (known?.sentence ?? genericFailureReason, known?.code ?? .conversionFailed)
+    }
+
+    /// The kind of a few common system errors, by domain and code.
+    private static func knownSystemFailure(domain: String, code: Int) -> (sentence: String, code: OutcomeCode)? {
+        switch (domain, code) {
         case (NSCocoaErrorDomain, CocoaError.fileNoSuchFile.rawValue),
             (NSCocoaErrorDomain, CocoaError.fileReadNoSuchFile.rawValue),
             (NSPOSIXErrorDomain, Int(ENOENT)):
@@ -378,13 +395,14 @@ public actor JobQueue {
             (NSPOSIXErrorDomain, Int(EPERM)):
             return ("The app doesn't have permission to read or write a file this job needs.", .conversionFailed)
         default:
-            // A Swift error of ours or a library's that words itself keeps its sentence. A system error does not:
-            // its words are the system's, in the user's language, and may name a file.
-            if !isSystemDomain(nsError.domain), let sentence = (error as? any LocalizedError)?.errorDescription {
-                return (sentence, .conversionFailed)
-            }
-            return (genericFailureReason, .conversionFailed)
+            return nil
         }
+    }
+
+    /// Whether `text` holds `code` as a number of its own, as the generic "(Cocoa error 4.)" form does. A false
+    /// match only means the app's own sentence is shown instead.
+    private static func mentionsNumber(_ code: Int, in text: String) -> Bool {
+        text.range(of: "(?<![0-9])\(code)(?![0-9])", options: .regularExpression) != nil
     }
 
     /// Error domains the system owns (Foundation, AVFoundation, Photos, Core Media, Core Animation and the

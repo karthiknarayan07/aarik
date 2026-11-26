@@ -17,6 +17,11 @@ First public release.
   sentence, so Why? explains a result from the code and never from the wording. Results saved by an earlier version
   still open and read as "another detail". Errors from macOS are told by their kind, so the sentences are plain on a Mac
   set to another language.
+- **Stall protection:** a conversion whose encoder stops responding for a minute now fails with "The encoder stopped
+  responding" instead of staying at the same percentage for ever. The partial file is removed and Retry works.
+- **Free-space check:** before a conversion writes anything, the app checks that the disk has room for the converted
+  video (and, for a Photos video, its download) plus 1 GB to spare. If not, the video fails with "Not enough free space
+  on <disk> (needs about X, has Y)", nothing is written, and Retry works once there is room.
 - **Quick runs:** shrink videos without opening the window, from a Dock drop or Open With, a menu bar item (drop videos
   on the icon or its popover, or choose them), the Shrink Videos action and Finder's Services menu. A quick run never
   replaces an original, skips videos that would lose metadata and ends with one notification. The menu bar popover

@@ -186,6 +186,7 @@ private func waitUntil(
     }
     #expect(reason == error.localizedDescription)
     #expect(reason.contains("sdr-4k.mov"))
+    #expect(await queue.jobs.first?.state == .failed(reason: reason, code: .conversionFailed))
     #expect(!reason.contains("Domain"))
     #expect(!reason.contains("AVAssetPropertyKeys"))
 }

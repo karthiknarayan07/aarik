@@ -1,7 +1,7 @@
 # Stability
 
 How the app keeps long batches and user files safe. Every rule here is enforced in code and most are covered by tests (the
-Time Machine exclusion and the system inputs themselves are not; "planned" items belong to Plan 6 Phase B and do
+Time Machine exclusion and the system inputs themselves are not); "planned" items belong to Plan 6 Phase B and do
 not exist yet. Change a rule only together with its test.
 
 ## File safety (never break these)
@@ -46,6 +46,14 @@ not exist yet. Change a rule only together with its test.
 
 - Jobs run in a `Task`; encoding checks cancellation and stops, removing its partial. Cancelling a job removes it
   from the queue; the original is untouched.
+- **A stalled encoder fails instead of hanging** (`MediaEngine/Downscale/StallWatchdog.swift`, `DownscaleJob`). The two
+  wait loops (feeding the writer, draining the tail) fail with `DownscaleError.stalled`, "The encoder stopped
+  responding", when nothing has been read or accepted for 60 s; `finishWriting` gets 60 s, then the writer is
+  cancelled. `copyNextSampleBuffer` and `completeFrames` block and cannot be interrupted or given a timeout, so a
+  watchdog outside the job (`StallWatchdog.race`, reading the job's heartbeat) fails the call after 90 s without
+  progress: it cancels the reader and writer, removes the partial and releases the `WorkSlots` slot, and the stuck task
+  is abandoned until its call returns (it then commits nothing). Retry works. Tests force each stall with tiny limits
+  (`StallWatchdogTests`). This must stay in place before queue concurrency (B2b) so one stuck job cannot hold a slot.
 - `JobQueue` runs one job at a time and persists after every state change. A job found `running` at launch
   (crash, quit) is put back to `queued`.
 - `applicationShouldTerminate` first asks "Stop converting and quit?" (a standard `NSAlert`, default button
@@ -78,6 +86,28 @@ not exist yet. Change a rule only together with its test.
 
 - Heavy work is bounded: `WorkSlots` (half the cores, at least 2) limits concurrent downscales; blocking reads run
   on a dedicated executor, never the shared pool.
+- **Disk space preflight** (`AppCore/Safety/DiskSpace.swift`, B1). Before a job writes anything, every volume it
+  will write to must have `volumeAvailableCapacityForImportantUsage` of at least what goes there plus a 1 GB margin
+  (`DiskSpaceCheck.margin`). Needs on one volume add up.
+  - A file job: the planner's estimated output on the output folder's volume, plus, for a Replace with an originals
+    backup, the original on the backup volume (`DownscaleRunner.convert`, after the plan and before the encoder
+    starts).
+  - A Photos job, before the download and before the job's folder is created: the video as Photos has it, plus the
+    planner's estimate for the converted copy, on the Work volume (the converted copy goes to a chosen folder's
+    volume instead when the destination is a folder; saving to Photos also copies it into the library, so the
+    converted size counts on the volume of `~/Pictures` too, and again with the real size right before the save);
+    with a Replace and an originals backup, the original on the
+    backup volume, and, for an edited video, a second copy of the original on the Work volume
+    (`PhotosDownscaleRunner.checkFreeSpaceBeforeDownload`). Skipped when Photos doesn't report the video's size. Once
+    the video is read, the exact estimate is checked again as for a file.
+  - The originals backup copy checks its folder's volume right before copying (`DownscaleRunner.backUp`); a failure
+    keeps the original and says so, like any backup failure.
+  - On failure the job fails with `NotEnoughSpaceError`: "Not enough free space on <volume> (needs about X, has Y)"
+    (the volume's localized name, `ByteCountFormatter` sizes). Nothing was written, so Retry works. A volume that
+    can't be read is not checked (the write would then fail as before, with its partial removed).
+  - The volume query is the `DiskSpaceProviding` protocol; tests use `FakeDiskSpace`
+    (`DiskSpacePreflightTests`, `DiskSpaceTests`).
+- Sleep prevention during a batch and thermal throttling: **planned** (Plan 6 B2).
 - Disk space preflight: **planned** (Plan 6 B1). Until then a full disk surfaces as a failed job, with the partial
   removed.
 
