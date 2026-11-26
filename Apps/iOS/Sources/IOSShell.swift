@@ -15,8 +15,9 @@ import UIKit
 final class IOSShell {
     let services: AppServices
     let convert: ConvertModel
-    let scene: ConvertIOSScene
     let tools: [any Tool]
+    /// One scene per tool offered on iOS; the shell knows only `Tool` and `IOSToolScene`.
+    let scenes: [AnyIOSToolScene]
     private let backgroundRun: BackgroundRunCoordinator
     private let liveActivity: LiveActivityController
     /// Writes the widget snapshot and pause flag to the App Group when they change, and applies the control's toggle.
@@ -27,12 +28,16 @@ final class IOSShell {
         defaults: UserDefaults = .standard,
         photoStore: any PhotoStore = PhotoKitStore()
     ) {
-        let services = AppServices(directory: directory, defaults: defaults, photoStore: photoStore)
+        let services = AppServices(
+            directory: directory, defaults: defaults, photoStore: photoStore,
+            assistantClient: AppServices.assistantClient(arguments: ProcessInfo.processInfo.arguments))
         let convert = ConvertModel(services: services)
         self.services = services
         self.convert = convert
-        self.scene = ConvertIOSScene(model: convert)
-        self.tools = ToolRegistry.tools(for: .iOS, from: [convert.tool])
+        let tools = ToolRegistry.tools(for: .iOS, from: [convert.tool])
+        let offered = Set(tools.map(\.id))
+        self.tools = tools
+        self.scenes = [AnyIOSToolScene(ConvertIOSScene(model: convert))].filter { offered.contains($0.id) }
         self.backgroundRun = BackgroundRunCoordinator(services: services)
         self.liveActivity = LiveActivityController(services: services)
 
@@ -110,6 +115,11 @@ final class IOSShell {
         }
     }
 
+    /// Asks for Photos access (the onboarding's Photos screen); the system sheet shows only the first time.
+    func requestPhotosAccess() async {
+        await convert.photos.requestAccess()
+    }
+
     func handleScenePhase(_ phase: ScenePhase) {
         if phase == .active {
             // Re-check Apple Intelligence availability and Photos access when returning to the foreground.
@@ -121,14 +131,18 @@ final class IOSShell {
 
     /// Picks up videos the share extension or the App Intent staged in the App Group, and hands them to Convert.
     func pickUpStaged() {
-        Task { [services, scene] in
+        Task { [services, scenes] in
+            // Staged videos are videos: the first tool that accepts a file takes them.
+            guard let scene = scenes.first(where: { $0.tool.accepts(.file(URL(filePath: "/staged.mov"))) }) else {
+                return
+            }
             #if DEBUG
                 if let store = IOSShell.testHandoffStore() {
-                    await StagedPickup.shared.pickUp(into: scene, services: services, store: store)
+                    await StagedPickup.shared.pickUp(into: { scene.receive($0) }, services: services, store: store)
                     return
                 }
             #endif
-            await StagedPickup.shared.pickUp(into: scene, services: services)
+            await StagedPickup.shared.pickUp(into: { scene.receive($0) }, services: services)
         }
     }
 

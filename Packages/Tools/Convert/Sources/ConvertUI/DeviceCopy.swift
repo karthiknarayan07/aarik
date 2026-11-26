@@ -18,6 +18,18 @@ enum DeviceCopy {
         #endif
     }
 
+    /// "iPhone", "iPad" or "Mac", for sentences that say "your ...".
+    @MainActor
+    static var deviceNoun: String {
+        #if os(macOS)
+            "Mac"
+        #elseif os(iOS)
+            UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+        #else
+            "device"
+        #endif
+    }
+
     @MainActor
     static var filesAppLocation: String {
         #if os(iOS)

@@ -77,10 +77,10 @@ public final class StagedPickup {
     }
 
     /// Scans the staging directory off the main actor for newly staged files not already in `services.jobs` or
-    /// previously delivered in this session, watches them in `services`, and delivers them to `scene.receive(_:)`.
+    /// previously delivered in this session, watches them in `services`, and hands them to `deliver`, the tool scene's `receive(_:)`.
     @discardableResult
-    public func pickUp<Scene: IOSToolScene>(
-        into scene: Scene,
+    public func pickUp(
+        into deliver: ([MediaInput]) -> Void,
         services: AppServices,
         store: StagedInputs = stagingStore()
     ) async -> [URL] {
@@ -98,7 +98,7 @@ public final class StagedPickup {
             deliveredCanonicalPaths.insert(url.standardizedFileURL.resolvingSymlinksInPath().path)
         }
         services.watchStaged(pending)
-        scene.receive(pending.map(MediaInput.file))
+        deliver(pending.map(MediaInput.file))
         return pending
     }
 

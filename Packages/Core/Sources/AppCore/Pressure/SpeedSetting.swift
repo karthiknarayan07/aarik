@@ -22,14 +22,19 @@ public enum SpeedSetting: String, CaseIterable, Codable, Sendable, Identifiable 
         }
     }
 
-    /// One sentence under the option (sentence case).
-    public var summary: String {
+    /// One sentence under the option (sentence case), for the Mac.
+    public var summary: String { summary(on: "Mac", hasFan: true) }
+
+    /// The same sentence for another device: `device` is its noun ("iPhone"), and `hasFan` says whether louder fans
+    /// can be mentioned.
+    public func summary(on device: String, hasFan: Bool) -> String {
         switch self {
         case .quiet: "One video at a time at low priority: easiest on heat, fan noise and other apps."
         case .balanced:
-            "Converts several videos at once, using about half of your Mac's cores, and leaves room for other apps."
+            "Converts several videos at once, using about half of your \(device)'s cores, and leaves room for other apps."
         case .fastest:
-            "Converts as many videos at once as your Mac's performance cores allow. Your Mac may get warm and its fans louder."
+            "Converts as many videos at once as your \(device)'s performance cores allow. Your \(device) may get warm"
+                + (hasFan ? " and its fans louder." : " and slow down to cool off.")
         }
     }
 

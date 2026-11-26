@@ -5,60 +5,38 @@
     import SwiftUI
     import UniformTypeIdentifiers
 
-    /// The video tool as the iOS shell hosts it: adaptive `NavigationSplitView` across iPhone, iPad and Duo,
-    /// adaptive inspector, toolbar, sheets and input hand-off (ADR 0006).
+    /// The video tool as the iOS shell hosts it (ADR 0006): its home and pages are pushed from the Tools tab, its charts
+    /// are part of the Summary tab and its results part of Search. The tab bar is the shell's.
     @MainActor
     @Observable
     public final class ConvertIOSScene: IOSToolScene {
         private let model: ConvertModel
-        public var columnVisibility = NavigationSplitViewVisibility.automatic
         public var isSettingsPresented = false
-        /// On compact widths (iPhone, folded Duo) the inspector opens on demand as a sheet rather than popping up empty.
-        public var isCompactInspectorPresented = false
 
         public init(model: ConvertModel) {
             self.model = model
+            // The model starts on Local Files, which is the Mac's first page; iOS starts on the home.
+            model.selection = .overview
         }
 
         public var tool: any Tool { model.tool }
 
-        public var selection: VideoPage? {
-            get { model.selection }
-            set { model.selection = newValue }
-        }
-
-        public func hasInspector(for destination: VideoPage?) -> Bool {
-            destination?.showsLibrary == true || destination == .photosVideos
-        }
-
-        @ViewBuilder public func root() -> some View {
+        @ViewBuilder public func destination(page: String?) -> some View {
             let model = model
             ForegroundObserver(model: model) {
-                IOSRootView(scene: self, model: model)
+                IOSConvertDestination(scene: self, model: model, page: page)
             }
         }
 
-        @ViewBuilder public func detail(for destination: VideoPage?) -> some View {
-            IOSVideoDetail(model: model, destination: destination)
-        }
-
-        @ToolbarContentBuilder public func toolbar(for destination: VideoPage?) -> some ToolbarContent {
+        @ViewBuilder public func summary() -> some View {
             let model = model
-            if hasInspector(for: destination) {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        model.requestAddSelectionToQueue()
-                    } label: {
-                        Label(model.toolbarAddToQueueTitle, systemImage: "plus")
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(!model.canAddSelectionToQueue)
-                    .accessibilityLabel(model.toolbarAddToQueueTitle)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    IOSInspectorToggle(scene: self, model: model)
-                }
+            ForegroundObserver(model: model) {
+                IOSOverviewView(model: model)
             }
+        }
+
+        @ViewBuilder public func search(query: String) -> some View {
+            IOSSearchResults(model: model, query: query)
         }
 
         public var sheets: VideoIOSSheets {
@@ -81,112 +59,7 @@
         }
     }
 
-    private struct IOSRootView: View {
-        @Bindable var scene: ConvertIOSScene
-        @Bindable var model: ConvertModel
-        @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-        private var isCompact: Bool { horizontalSizeClass == .compact }
-
-        private var inspectorShown: Binding<Bool> {
-            Binding {
-                guard scene.hasInspector(for: model.selection) else { return false }
-                return isCompact ? scene.isCompactInspectorPresented : model.isInspectorPresented
-            } set: { isPresented in
-                guard scene.hasInspector(for: model.selection) else { return }
-                if isCompact {
-                    scene.isCompactInspectorPresented = isPresented
-                } else {
-                    model.isInspectorPresented = isPresented
-                }
-            }
-        }
-
-        var body: some View {
-            NavigationSplitView(columnVisibility: $scene.columnVisibility) {
-                IOSSidebarView(model: model, isSettingsPresented: $scene.isSettingsPresented)
-            } detail: {
-                scene.detail(for: model.selection)
-                    .inspector(isPresented: inspectorShown) {
-                        IOSLibraryInspector(
-                            model: model,
-                            isCompact: isCompact,
-                            dismiss: {
-                                if isCompact {
-                                    scene.isCompactInspectorPresented = false
-                                } else {
-                                    model.isInspectorPresented = false
-                                }
-                            }
-                        )
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
-                    }
-                    .toolbar { scene.toolbar(for: model.selection) }
-            }
-            .modifier(scene.sheets)
-        }
-    }
-
-    private struct IOSVideoDetail: View {
-        @Bindable var model: ConvertModel
-        let destination: VideoPage?
-
-        var body: some View {
-            Group {
-                switch destination {
-                case .localFiles, .mediaType: IOSLocalFilesView(model: model)
-                case .photosVideos: IOSPhotosView(model: model)
-                case .queue: IOSQueueView(model: model)
-                case .completed: IOSCompletedView(model: model)
-                case .keptAsIs: IOSKeptAsIsView(model: model)
-                case .failed: IOSFailedView(model: model)
-                case .overview: IOSOverviewView(model: model)
-                case .some(let page):
-                    page.emptyState
-                        .navigationTitle(page.title)
-                case nil:
-                    EmptyState(
-                        "Nothing Selected", systemImage: "sidebar.left", message: "Choose a section in the sidebar."
-                    )
-                    .navigationTitle(AppInfo.displayName)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaBar(edge: .bottom) {
-                IOSPendingDeletionBar(model: model)
-            }
-        }
-    }
-
-    private struct IOSInspectorToggle: View {
-        @Bindable var scene: ConvertIOSScene
-        @Bindable var model: ConvertModel
-        @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-        private var isCompact: Bool { horizontalSizeClass == .compact }
-
-        private var isPresented: Bool {
-            isCompact ? scene.isCompactInspectorPresented : model.isInspectorPresented
-        }
-
-        var body: some View {
-            Button {
-                if isCompact {
-                    scene.isCompactInspectorPresented.toggle()
-                } else {
-                    model.isInspectorPresented.toggle()
-                }
-            } label: {
-                Label(
-                    isCompact ? "Options…" : "Inspector",
-                    systemImage: isCompact ? "slider.horizontal.3" : "sidebar.trailing")
-            }
-            .accessibilityLabel(isPresented ? "Hide Inspector" : "Show Inspector")
-        }
-    }
-
-    /// The iOS scene's importers, sheets and alerts, kept around the whole root so posture or size-class changes
-    /// never dismiss them.
+    /// The iOS scene's importers, sheets and alerts, kept around the whole root so a tab change never dismisses them.
     public struct VideoIOSSheets: ViewModifier {
         @Bindable var scene: ConvertIOSScene
         @Bindable var model: ConvertModel
@@ -241,6 +114,7 @@
                 }
                 .sheet(isPresented: $scene.isSettingsPresented) {
                     IOSSettingsView(model: model)
+                        .presentationDetents([.medium, .large])
                 }
         }
     }

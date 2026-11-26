@@ -93,6 +93,17 @@ public final class AppServices {
     /// The staging folder's name inside the support directory.
     public nonisolated static let stagingFolderName = "Staging"
 
+    /// The assistant's model: the system's, or in debug builds a model that is never available when a UI test
+    /// launches with `-uiTestingAssistant unavailable`.
+    public nonisolated static func assistantClient(arguments: [String]) -> any LanguageModelClient {
+        #if DEBUG
+            if LaunchArguments.value(of: "-uiTestingAssistant", in: arguments) == "unavailable" {
+                return UnavailableLanguageModelClient()
+            }
+        #endif
+        return .real
+    }
+
     public init(
         directory: URL, defaults: UserDefaults = .standard, photoStore: any PhotoStore = PhotoKitStore(),
         assistantClient: any LanguageModelClient = .real

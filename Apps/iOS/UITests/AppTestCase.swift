@@ -41,13 +41,15 @@ class AppTestCase: XCTestCase {
     /// `UICTContentSizeCategory…` name.
     func launch(
         autoStart: Bool = true, contentSize: String? = nil, pinSpeed: Bool = true, extraArguments: [String] = [],
-        terminateFirst: Bool = false
+        terminateFirst: Bool = false, onboarding: Bool = false
     ) {
         if terminateFirst { app.terminate() }
         var arguments = [
             "-uiTesting", supportDirectory, "-uiTestingHandoff", handoffDirectory,
             "-queue.autoStart", autoStart ? "<true/>" : "<false/>",
         ]
+        // The first-launch introduction would cover every test's first screen; only its own test shows it.
+        if !onboarding { arguments += ["-onboarding.completed", "<true/>"] }
         if pinSpeed { arguments += ["-performance.speed", "balanced"] }
         if let contentSize { arguments += ["-UIPreferredContentSizeCategoryName", contentSize] }
         app.launchArguments = arguments + extraArguments
@@ -59,31 +61,61 @@ class AppTestCase: XCTestCase {
 
     // MARK: Navigation
 
-    /// Brings the sidebar into view: in the compact stack it is the root, so the detail's Back button leads to it; in a
-    /// regular width with the sidebar collapsed (iPad portrait) the toolbar's Show Sidebar button reveals it.
-    func revealSidebar() {
-        let back = app.buttons["BackButton"].firstMatch
-        if back.exists, back.isHittable {
-            back.tap()
-            return
-        }
-        let show = app.buttons["Show Sidebar"].firstMatch
-        if show.exists, show.isHittable { show.tap() }
+    /// The page ids behind the identifiers `page.<id>` of Convert's home; the old section titles still work.
+    private static let pageIDs = [
+        "Photos": "photos", "Videos": "photos", "Files": "files", "Local Files": "files", "Queue": "queue",
+        "Completed": "completed",
+    ]
+
+    var tabBar: XCUIElement { app.tabBars.firstMatch }
+
+    /// Taps a tab of the app's tab bar by its title ("Home", "Browse", "Ask", "Search"). `again` taps a tab that is
+    /// already showing too, which pops its stack back to the first screen.
+    func selectTab(_ title: String, again: Bool = false, file: StaticString = #filePath, line: UInt = #line) {
+        let tab = tabBar.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 15), "No \(title) tab", file: file, line: line)
+        if again || !tab.isSelected { tab.tap() }
     }
 
-    /// Selects a sidebar page by its title ("Videos", "Local Files", "Queue", "Completed"...).
+    /// Opens Convert's home (its list of pages) from the Browse tab, going back from a page if one is open.
+    func openConvertHome(file: StaticString = #filePath, line: UInt = #line) {
+        let row = app.buttons["page.photos"].firstMatch
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tool.'")).firstMatch
+        for _ in 0..<5 {
+            if row.exists, row.isHittable { return }
+            selectTab("Browse", again: true, file: file, line: line)
+            if card.waitForExistence(timeout: 2), card.isHittable {
+                card.tap()
+                _ = row.waitForExistence(timeout: 10)
+                continue
+            }
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists, back.isHittable { back.tap() }
+        }
+        XCTAssertTrue(row.exists, "Convert's home didn't open", file: file, line: line)
+    }
+
+    /// Opens one of Convert's pages ("Photos", "Files", "Queue", "Completed"), or Home for "Overview".
     func open(_ page: String, file: StaticString = #filePath, line: UInt = #line) {
-        let item = app.buttons[page].firstMatch
-        if !item.waitForExistence(timeout: 2) || !item.isHittable { revealSidebar() }
-        if !item.waitForExistence(timeout: 15) { dump("missing sidebar item \(page)") }
-        XCTAssertTrue(item.exists, "No sidebar item \(page)", file: file, line: line)
+        if page == "Overview" || page == "Home" {
+            selectTab("Home", file: file, line: line)
+            return
+        }
+        guard let id = Self.pageIDs[page] else {
+            XCTFail("No page called \(page)", file: file, line: line)
+            return
+        }
+        openConvertHome(file: file, line: line)
+        let item = app.buttons["page.\(id)"].firstMatch
+        if !item.waitForExistence(timeout: 15) { dump("missing page \(page)") }
+        XCTAssertTrue(item.exists, "No page \(page)", file: file, line: line)
         item.tap()
     }
 
-    /// Opens Settings from the sidebar's toolbar.
+    /// Opens Settings from Convert's home toolbar.
     func openSettings(file: StaticString = #filePath, line: UInt = #line) {
-        let settings = app.buttons["Settings…"].firstMatch
-        if !settings.waitForExistence(timeout: 2) || !settings.isHittable { revealSidebar() }
+        openConvertHome(file: file, line: line)
+        let settings = app.buttons["settings"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "No Settings button", file: file, line: line)
         settings.tap()
         XCTAssertTrue(
@@ -103,21 +135,21 @@ class AppTestCase: XCTestCase {
 
     // MARK: Flows
 
-    /// Opens Photos videos, selects the named fixture and adds it to the queue.
+    /// Opens Photos, taps the named fixture (which opens its page, with a zoom) and adds it to the queue there.
     func queuePhotosFixture(
         _ name: String = AppTestCase.photosFixture, file: StaticString = #filePath, line: UInt = #line
     ) {
-        open("Videos", file: file, line: line)
+        open("Photos", file: file, line: line)
         let tile = tile(named: name)
         XCTAssertTrue(tile.waitForExistence(timeout: 30), "\(name) isn't in the Photos grid", file: file, line: line)
         scrollToHittable(tile)
         tile.tap()
-        let add = app.buttons["Add to Queue"].firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 10), file: file, line: line)
+        let add = app.buttons["detail.addToQueue"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 10), "\(name) didn't open its page", file: file, line: line)
         if !add.isEnabled {
-            dump("Add to Queue disabled after selecting")
+            dump("Add to Queue disabled on the video's page")
         }
-        XCTAssertTrue(add.isEnabled, "Add to Queue stayed disabled after selecting a video", file: file, line: line)
+        XCTAssertTrue(add.isEnabled, "Add to Queue stayed disabled on the video's page", file: file, line: line)
         add.tap()
         confirmLossIfAsked()
     }

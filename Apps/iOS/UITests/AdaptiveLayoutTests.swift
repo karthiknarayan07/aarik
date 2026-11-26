@@ -19,7 +19,9 @@ final class AdaptiveLayoutTests: AppTestCase {
 
     func testSelectionSurvivesRotation() throws {
         launch(autoStart: false)
-        open("Videos")
+        open("Photos")
+        // Tapping opens a video's page; Select turns on multi-selection, which rotation must keep.
+        app.buttons["selectToggle"].firstMatch.tap()
         let tile = tile(named: AppTestCase.photosFixture)
         XCTAssertTrue(tile.waitForExistence(timeout: 30))
         tile.tap()
@@ -28,7 +30,7 @@ final class AdaptiveLayoutTests: AppTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(self.tile(named: AppTestCase.photosFixture).waitForExistence(timeout: 10))
         XCTAssertTrue(self.tile(named: AppTestCase.photosFixture).isSelected, "rotation dropped the selection")
-        XCTAssertTrue(app.buttons["Add to Queue"].firstMatch.isEnabled, "rotation disabled Add to Queue")
+        XCTAssertTrue(app.buttons["convertSelection"].firstMatch.isEnabled, "rotation disabled the Convert bar")
 
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(self.tile(named: AppTestCase.photosFixture).waitForExistence(timeout: 10))
