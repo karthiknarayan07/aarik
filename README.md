@@ -38,22 +38,60 @@ Because the signature changes with each release, macOS may ask you to grant Phot
 
 ## Quick runs
 
-Videos can be sent to the app without opening its window. A quick run converts in the background with your saved
-defaults (Settings: preset and Save to), never asks a question and never replaces an original: if Replace is the
-saved choice, the copy is saved next to the original and the notification says so. Any video that would lose metadata,
-and any the app would keep as is, is skipped. One notification says how many were converted, how much space was saved
-and how many were skipped; "Review skipped files" opens them in Local Files.
+A quick run shrinks videos in the background, without opening the window. It uses your saved defaults (Settings: Default
+Preset and Save converted videos) and never asks a question. There are several ways to start one.
 
-**Dock drop and Open With** (right-click a video ▸ Open With, or drop videos on the app's Dock icon) follow one rule:
+**Dock drop and Open With.** Drop videos on the app's Dock icon, or right-click a video and choose Open With. One rule
+decides what happens:
 
-- If the app's window is open, the files are only added to Local Files. Nothing is queued.
-- If no window is visible (it was closed, or the app wasn't running), the files go through a quick run.
+- If the app's window is open, the videos are only added to Local Files. Nothing is converted.
+- If no window is visible (you closed it, or the app wasn't running), the videos are converted as a quick run.
 
-Closing the window keeps Aarik running in the Dock so a quick run can finish; ⌘Q quits. A Dock click brings the
-window back. With auto-start off in Settings, quick-run videos wait until you resume the queue.
+Closing the window keeps the app running in the Dock so a quick run can finish; ⌘Q quits. A click on the Dock icon brings
+the window back. The app is listed in Open With as an alternate and never becomes the default player.
 
-The app is listed under Open With as an alternate; it never becomes the default player. Quick runs use the same queue
-as the window, so they never convert two videos at once.
+**The menu bar item.** The app puts an icon in the menu bar (turn it off in Settings ▸ General ▸ Show in Menu Bar). It
+shows progress while videos convert. Drop videos on the icon, or click it and drop them on the popover, or click
+Choose Videos… in the popover. The popover shows the current job, Pause Queue and Open Main Window, and
+when a run ends it says how many videos were shrunk or skipped, with Show Skipped… to look at the skipped ones, and how
+many dropped items weren't videos. When
+you open the popover with the mouse, macOS keeps the app in the background, so the popover can't take the Esc or Tab
+keys; open it with VoiceOver or from the keyboard (or click its buttons) if you need them.
+
+**The Shrink Videos action in Shortcuts.** Open Shortcuts, search for Shrink Videos and add it to a shortcut. Give it
+videos, or let it pick them by date range, resolution and source (Local Files or Photos), and choose the quality, format
+and destination. It can wait and hand the finished videos to the next action.
+
+To put it in Finder's right-click menu: in Shortcuts, make a shortcut that starts with the Shrink Videos action, open its
+details and turn on Use as Quick Action, then choose Finder. After that, right-click videos in Finder and look under
+Quick Actions. Settings ▸ General ▸ Finder has the same steps and a button that opens Shortcuts.
+
+**Siri and Spotlight.** Say "Shrink videos with Aarik" or type it in Spotlight. Spotlight also lists the action and its
+ready-made variants, such as shrinking last month's videos or your 4K videos.
+
+**Services.** Select videos in Finder, then use the right-click menu ▸ Services ▸ Shrink Videos. macOS keeps new
+Services turned off, so it does nothing until you turn it on: System Settings ▸ Keyboard ▸ Keyboard Shortcuts ▸ Services ▸
+Files and Folders ▸ Shrink Videos. Settings ▸ General ▸ Services has a button that opens the Keyboard pane. The Finder
+Quick Action above is the more dependable way to get this into Finder.
+
+**What a quick run never does.**
+
+- It never replaces an original. If Replace is your saved choice, the copy is saved next to the original instead and the
+  notification says so. Replacing always needs a confirmation in the window.
+- It skips any video that would lose metadata, and any video the app would keep as is (already small, or less than
+  10 % smaller). Skipped videos are counted and listed: "Review skipped files" in the notification, or Show Skipped… in
+  the menu bar popover, opens them in Local Files.
+- It never converts two videos at once: quick runs share the queue with the window. With Start the queue automatically
+  off in Settings, quick-run videos wait until you press Resume.
+- It posts one notification per run when it ends. Runs from the Dock, Open With, Services and Shortcuts post none while
+  the app's window is in front; runs from the menu bar post none while the menu bar panel is open. If you don't get
+  any, allow notifications for the app in System Settings ▸ Notifications (Settings ▸ General ▸ Notifications has a button).
+
+**Because the app is unsigned.** Until a signed release exists, macOS can be stricter with these entry points. Shortcuts,
+Spotlight and Siri may need the app to be in the Applications folder and opened once before they list the action, and
+may take a while to show it. A new Service may need `pbs -flush` in Terminal before it appears. macOS may refuse
+notifications for an unsigned build, in which case a quick run still works and finishes silently. Each update changes
+the app's signature, so macOS may ask you to allow things again.
 
 ## Updates
 

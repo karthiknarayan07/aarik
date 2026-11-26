@@ -68,6 +68,7 @@ struct FakeInspector: QuickRunInspecting {
 actor FakeQueue: QuickRunQueue {
     private(set) var items: [Job] = []
     private(set) var resumeCount = 0
+    private var paused = false
     private var continuations: [AsyncStream<[Job]>.Continuation] = []
 
     var jobs: [Job] { items }
@@ -80,7 +81,20 @@ actor FakeQueue: QuickRunQueue {
         return added
     }
 
-    func resume() { resumeCount += 1 }
+    func resume() {
+        resumeCount += 1
+        paused = false
+    }
+
+    func isPaused() -> Bool { paused }
+
+    func setPaused(_ value: Bool) { paused = value }
+
+    /// Ends every update stream, as a queue that shut down does.
+    func stop() {
+        for continuation in continuations { continuation.finish() }
+        continuations = []
+    }
 
     func updates() -> AsyncStream<[Job]> {
         let (stream, continuation) = AsyncStream.makeStream(of: [Job].self, bufferingPolicy: .bufferingNewest(1))

@@ -80,8 +80,8 @@ final class AppModel {
     var lossReview: LossReview?
     /// A message for the user: something couldn't be added, was already queued, or the saved queue was unreadable.
     var alert: AppAlert?
-    /// The current or most recent quick run started from the menu bar, shown in its popover.
-    var quickRunStatus: QuickRunStatus?
+    /// The quick runs started from the menu bar (several can overlap), shown in its popover.
+    var menuBarRuns = MenuBarRunBoard()
     /// Whether the menu bar popover is open; a run started there reports itself, so its banner is skipped then.
     @ObservationIgnored var isStatusPopoverVisible = false
 
@@ -123,6 +123,18 @@ final class AppModel {
     /// The quick runs of the last week, so their jobs get their own notification (see `receive`).
     @ObservationIgnored let quickRunStore: QuickRunStore
     @ObservationIgnored lazy var quickRun = makeQuickRun()
+    /// The Shortcuts, Siri and Spotlight action: files or a selection of the libraries, as one quick run.
+    @ObservationIgnored lazy var shrinkVideosAction = makeShrinkVideosAction()
+    /// Set once `start()` has finished; entry points that arrive earlier (an intent that launched the app) wait.
+    @ObservationIgnored var hasFinishedStarting = false
+    @ObservationIgnored var startWaiters: [CheckedContinuation<Void, Never>] = []
+    /// The app's own copies of videos that reached the action as data only. Not the Photos Work folder: that one is
+    /// swept at every launch, this one keeps what a queued job still reads.
+    @ObservationIgnored let stagedInputs: StagedInputs
+    /// Copies whose jobs are queued; each is removed once none of its jobs is pending.
+    @ObservationIgnored var stagedWatch: Set<URL> = []
+    /// Told when an intent run arrives, so a launch it started stays windowless (set by `AppDelegate`).
+    @ObservationIgnored var intentRunHandler: (@MainActor () -> Void)?
     /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
@@ -139,6 +151,7 @@ final class AppModel {
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         self.quickRunStore = QuickRunStore(fileURL: directory.appending(path: "quick-runs.json"))
+        self.stagedInputs = StagedInputs(directory: directory.appending(path: "Staging", directoryHint: .isDirectory))
         let library = LocalLibrary(directory: directory)
         self.library = library
         self.browser = LibraryBrowser(collection: library)

@@ -40,29 +40,98 @@ import Testing
     }
 
     @Test func aPointerClickDoesNotActivateButKeyboardAndAssistiveOpensDo() {
-        #expect(!PopoverActivation.shouldActivate(openedBy: .leftMouseUp))
-        #expect(!PopoverActivation.shouldActivate(openedBy: .leftMouseDown))
-        #expect(!PopoverActivation.shouldActivate(openedBy: .rightMouseDown))
-        #expect(PopoverActivation.shouldActivate(openedBy: .keyDown))
-        #expect(PopoverActivation.shouldActivate(openedBy: nil))
+        #expect(!PopoverActivation.shouldActivate(openedBy: .leftMouseUp, voiceOverEnabled: false))
+        #expect(!PopoverActivation.shouldActivate(openedBy: .leftMouseDown, voiceOverEnabled: false))
+        #expect(!PopoverActivation.shouldActivate(openedBy: .rightMouseDown, voiceOverEnabled: false))
+        #expect(PopoverActivation.shouldActivate(openedBy: .keyDown, voiceOverEnabled: false))
+        #expect(PopoverActivation.shouldActivate(openedBy: nil, voiceOverEnabled: false))
     }
 
-    @Test func statusTextFollowsTheRun() {
-        #expect(QuickRunStatus(phase: .checking(files: 3)).text == "Checking 3 videos…")
-        #expect(QuickRunStatus(phase: .running(videos: 3)).text == "Shrinking 3 videos…")
-        #expect(QuickRunStatus(phase: .running(videos: 1)).text == "Shrinking 1 video…")
-        let mixed = QuickRunTally(converted: 2, skipped: 1, failed: 0)
-        let done = QuickRunStatus(phase: .finished(mixed))
-        #expect(done.text == "Done: 2 shrunk, 1 skipped")
-        #expect(done.skippedCount == 1)
-        #expect(!done.isActive)
-        #expect(QuickRunStatus(phase: .running(videos: 2)).isActive)
+    @Test func voiceOverAlwaysActivatesThePopoverEvenForAMouseLikePress() {
+        #expect(PopoverActivation.shouldActivate(openedBy: .leftMouseUp, voiceOverEnabled: true))
+        #expect(PopoverActivation.shouldActivate(openedBy: .leftMouseDown, voiceOverEnabled: true))
+        #expect(PopoverActivation.shouldActivate(openedBy: nil, voiceOverEnabled: true))
+    }
+
+    @Test func aFileWithNoUsableNameFallsBackToItsContentTypeOnHover() {
+        let unnamed = URL(filePath: "/nowhere/IMG_0001")
+        #expect(MovieDropFilter.mightContainMovie([unnamed], contentType: { _ in .quickTimeMovie }))
+        #expect(!MovieDropFilter.mightContainMovie([unnamed], contentType: { _ in .jpeg }))
+        #expect(!MovieDropFilter.mightContainMovie([unnamed], contentType: { _ in nil }))
+        // A known extension is decided by the name; the disk isn't asked.
+        var asked = 0
+        let known = URL(filePath: "/nowhere/a.jpg")
         #expect(
-            QuickRunStatus(phase: .finished(QuickRunTally(converted: 0, skipped: 0, failed: 0))).text
-                == "Done: nothing to shrink")
+            !MovieDropFilter.mightContainMovie(
+                [known],
+                contentType: { _ in
+                    asked += 1
+                    return .movie
+                }))
+        #expect(asked == 0)
+        // A folder is never looked up.
+        let folder = URL(filePath: "/nowhere/folder/", directoryHint: .isDirectory)
         #expect(
-            QuickRunStatus(phase: .finished(QuickRunTally(converted: 1, skipped: 0, failed: 2))).text
-                == "Done: 1 shrunk, 2 failed")
+            !MovieDropFilter.mightContainMovie(
+                [folder],
+                contentType: { _ in
+                    asked += 1
+                    return .movie
+                }))
+        #expect(asked == 0)
+    }
+
+    @Test func contentTypeLookupsAreCappedPerDrag() {
+        let unnamed = (0..<50).map { URL(filePath: "/nowhere/file\($0)") }
+        var asked = 0
+        #expect(
+            !MovieDropFilter.mightContainMovie(
+                unnamed, maxLookups: 5,
+                contentType: { _ in
+                    asked += 1
+                    return nil
+                }))
+        #expect(asked == 5)
+    }
+
+    @Test func partitionSeparatesMoviesFromWhatOnlyLooksLikeOne() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "split-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let movie = folder.appending(path: "a.mov")
+        try Data(count: 16).write(to: movie)
+        let missing = folder.appending(path: "gone.mov")
+        let text = folder.appending(path: "notes")
+        try Data("hello".utf8).write(to: text)
+        let directory = folder.appending(path: "clips.mov")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Names alone let the folder and the missing file through; the disk says otherwise.
+        #expect(MovieDropFilter.mightContainMovie([missing]))
+        let split = MovieDropFilter.partition([missing, movie, text, URL(filePath: directory.path)])
+        #expect(split.movies == [movie])
+        #expect(split.others.count == 3)
+        #expect(!MovieDropFilter.mightContainMovie([text]))
+    }
+
+    @Test func theDropPanelRefusesItemsThatNameANonMovieType() {
+        let movie = ["public.file-url", "com.apple.quicktime-movie"]
+        #expect(MovieDropFilter.providersMightHoldMovie([movie]))
+        #expect(MovieDropFilter.providersMightHoldMovie([["public.jpeg", "public.file-url"], movie]))
+        #expect(!MovieDropFilter.providersMightHoldMovie([["public.jpeg", "public.file-url"]]))
+        #expect(!MovieDropFilter.providersMightHoldMovie([["public.folder", "public.file-url"]]))
+        // A file address and nothing else says nothing against it.
+        #expect(MovieDropFilter.providersMightHoldMovie([["public.file-url"]]))
+        #expect(!MovieDropFilter.providersMightHoldMovie([]))
+    }
+
+    @Test func systemSettingsLinksPointAtTheRightPanes() {
+        #expect(SystemSettingsPane.keyboard?.absoluteString.hasPrefix("x-apple.systempreferences:") == true)
+        #expect(
+            SystemSettingsPane.notifications(bundleIdentifier: "com.example.app")?.absoluteString
+                == "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.example.app")
+        #expect(
+            SystemSettingsPane.notifications(bundleIdentifier: nil)?.absoluteString
+                == "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
     }
 
     @Test func aMenuBarRunIsAnnouncedUnlessThePopoverIsOpen() {
