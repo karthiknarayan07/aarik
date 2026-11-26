@@ -50,7 +50,7 @@ struct WhyInline: View {
 }
 
 /// The explanation, written when first shown and remembered for the job.
-private struct WhyText: View {
+struct WhyText: View {
     let assistant: AssistantServices
     let job: Job
     let outcome: JobOutcome?

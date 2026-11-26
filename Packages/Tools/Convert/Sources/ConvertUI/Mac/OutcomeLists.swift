@@ -3,29 +3,44 @@
     import AppCore
     import AppUI
     import Assistant
+    import Charts
     import LocalLibrary
     import SwiftUI
 
-    /// Finished conversions with what they saved and the report badge. Select rows for the context menu (Show in
-    /// Finder, Remove from List); double-click or Return shows the file in Finder.
+    /// Finished conversions as a ledger: a summary with the week's savings, then one section per day with a
+    /// savings badge on each row. Select rows for the context menu (Show in Finder, Remove from List);
+    /// double-click or Return shows the file in Finder.
     struct CompletedView: View {
         let model: ConvertModel
         @State private var selection = Set<UUID>()
 
         var body: some View {
             let rows = model.completedJobs
+            let days = ResultsLedger.days(rows, date: \.job.createdAt, saved: \.outcome.savedBytes)
             Group {
                 if rows.isEmpty {
                     VideoPage.completed.emptyState
                 } else {
-                    List(selection: $selection) {
-                        ForEach(rows, id: \.job.id) { row in
-                            CompletedRow(
-                                job: row.job, outcome: row.outcome, thumbnails: model.thumbnailSource.cache,
-                                assistant: model.assistant)
+                    VStack(spacing: 0) {
+                        LedgerSummary(days: days, savedBytes: model.activity.savedBytes, count: rows.count)
+                        Divider()
+                        List(selection: $selection) {
+                            ForEach(days, id: \.day) { day in
+                                Section {
+                                    ForEach(day.rows, id: \.job.id) { row in
+                                        CompletedRow(
+                                            job: row.job, outcome: row.outcome,
+                                            thumbnails: model.thumbnailSource.cache, assistant: model.assistant)
+                                    }
+                                } header: {
+                                    LedgerDayHeader(
+                                        title: day.title,
+                                        detail: day.savedBytes > 0 ? "Saved \(ByteFormat.string(day.savedBytes))" : nil)
+                                }
+                            }
                         }
+                        .jobListActions(model: model, kind: .completed, selection: selection)
                     }
-                    .jobListActions(model: model, kind: .completed, selection: selection)
                 }
             }
             .navigationTitle("Completed")
@@ -35,64 +50,169 @@
         }
     }
 
+    /// A day's title with what it saved, as a section header.
+    struct LedgerDayHeader: View {
+        let title: String
+        let detail: String?
+
+        var body: some View {
+            HStack {
+                Text(title).font(.headline)
+                Spacer()
+                if let detail { Text(detail).font(.callout).foregroundStyle(.secondary).monospacedDigit() }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    /// The ledger's headline: the total saved, how many videos, and a bar for each of the last seven days.
+    struct LedgerSummary: View {
+        let days: [LedgerDay<(job: Job, outcome: JobOutcome)>]
+        let savedBytes: Int64
+        let count: Int
+
+        private struct Bar: Identifiable {
+            let day: Date
+            let bytes: Int64
+            var id: Date { day }
+        }
+
+        private var bars: [Bar] {
+            ResultsLedger.lastDays(days).map { Bar(day: $0.day, bytes: $0.savedBytes) }
+        }
+
+        var body: some View {
+            HStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Saved in total")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(ByteFormat.string(savedBytes))
+                        .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.green)
+                        .contentTransition(.numericText())
+                    Text("from \(ActivityText.videos(count))")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 12)
+                Chart(bars) { bar in
+                    BarMark(x: .value("Day", bar.day, unit: .day), y: .value("Saved", bar.bytes))
+                        .foregroundStyle(Color.green.gradient)
+                        .cornerRadius(3)
+                }
+                // Labels sit under the plot, so they never cover a bar.
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day)) { _ in
+                        AxisValueLabel(format: .dateTime.weekday(.abbreviated), anchor: .top)
+                    }
+                }
+                .chartYAxis(.hidden)
+                .chartPlotStyle { $0.padding(.bottom, 4) }
+                .frame(width: 260, height: 76)
+                .accessibilityLabel("Saved in the last seven days")
+                .accessibilityValue(
+                    bars.map { "\($0.day.formatted(.dateTime.weekday(.wide))) \(ByteFormat.string($0.bytes))" }
+                        .joined(separator: ", "))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+    }
+
     struct CompletedRow: View {
         let job: Job
         let outcome: JobOutcome
         let thumbnails: ThumbnailCache
         let assistant: AssistantServices
+        @State private var isWhyShown = false
 
         var body: some View {
-            HStack(spacing: 12) {
-                JobThumbnail(url: outcome.output, thumbnails: thumbnails)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(outcome.output.isFileURL ? outcome.output.lastPathComponent : job.displayName)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        Text(ActivityText.sizeChange(outcome))
-                        Text("·")
-                        Text(ActivityText.saved(outcome))
-                        if outcome.replacedOriginal {
-                            Text("·")
-                            Text("Original in the Trash")
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    JobThumbnail(
+                        url: outcome.output, thumbnails: thumbnails, size: CGSize(width: 64, height: 44))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(outcome.output.isFileURL ? outcome.output.lastPathComponent : job.displayName)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        HStack(spacing: 6) {
+                            Text(ActivityText.sizeChange(outcome))
+                                .monospacedDigit()
+                            if outcome.replacedOriginal {
+                                Text("·")
+                                Text("Original in the Trash")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        ForEach(outcome.notes, id: \.self) { note in
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .truncationMode(.middle)
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    ForEach(outcome.notes, id: \.self) { note in
-                        Text(note)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                    }
+                    Spacer()
+                    SavingsBadge(before: outcome.bytesBefore, after: outcome.bytesAfter)
+                    InlineWhyToggle(assistant: assistant, isShown: $isWhyShown)
+                    ReportBadge(outcome: outcome)
                 }
-                Spacer()
-                if !outcome.isVerified { WhyButton(assistant: assistant, job: job, outcome: outcome) }
-                ReportBadge(outcome: outcome) {
-                    if !outcome.isVerified { WhyInline(assistant: assistant, job: job, outcome: outcome) }
+                if isWhyShown {
+                    WhyText(assistant: assistant, job: job, outcome: outcome)
+                        .padding(.leading, 76)
+                        .transition(.opacity)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
+            .animation(.smooth, value: isWhyShown)
         }
     }
 
-    /// Videos left untouched, with the reason.
+    /// "Why?" on a row: opens the explanation under the row instead of in a popover. Not there at all while Apple
+    /// Intelligence is unavailable.
+    struct InlineWhyToggle: View {
+        let assistant: AssistantServices
+        @Binding var isShown: Bool
+
+        var body: some View {
+            if assistant.isAvailable {
+                Button("Why?", systemImage: "sparkles") { isShown.toggle() }
+                    .buttonStyle(.borderless)
+                    .help("Explain this result in plain words, on \(DeviceCopy.thisDevice)")
+                    .accessibilityLabel("Why? Explain this result")
+                    .accessibilityValue(isShown ? "Shown" : "Hidden")
+            }
+        }
+    }
+
+    /// Videos left untouched, with the reason, grouped by day.
     struct KeptAsIsView: View {
         let model: ConvertModel
         @State private var selection = Set<UUID>()
 
         var body: some View {
             let rows = model.keptAsIsJobs
+            let days = ResultsLedger.days(rows, date: \.job.createdAt, saved: { _ in 0 })
             Group {
                 if rows.isEmpty {
                     VideoPage.keptAsIs.emptyState
                 } else {
                     List(selection: $selection) {
-                        ForEach(rows, id: \.job.id) { row in
-                            ReasonRow(
-                                job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
-                                assistant: model.assistant)
+                        ForEach(days, id: \.day) { day in
+                            Section {
+                                ForEach(day.rows, id: \.job.id) { row in
+                                    ReasonRow(
+                                        job: row.job, reason: row.reason, thumbnails: model.thumbnailSource.cache,
+                                        assistant: model.assistant, badge: "Kept as Is")
+                                }
+                            } header: {
+                                LedgerDayHeader(title: day.title, detail: ActivityText.videos(day.rows.count))
+                            }
                         }
                     }
                     .jobListActions(model: model, kind: .keptAsIs, selection: selection)
@@ -143,35 +263,59 @@
         }
     }
 
-    private struct ReasonRow<Actions: View>: View {
+    struct ReasonRow<Actions: View>: View {
         let job: Job
         let reason: String
         let thumbnails: ThumbnailCache
         let assistant: AssistantServices
+        /// A capsule at the trailing edge naming the outcome, when the list wants one.
+        var badge: String?
         @ViewBuilder var actions: Actions
+        @State private var isWhyShown = false
 
         var body: some View {
-            HStack(spacing: 12) {
-                JobThumbnail(url: job.source, thumbnails: thumbnails)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(job.displayName)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(reason)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    JobThumbnail(url: job.source, thumbnails: thumbnails, size: CGSize(width: 64, height: 44))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(job.displayName)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if let badge {
+                        Text(badge)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: .capsule)
+                    }
+                    InlineWhyToggle(assistant: assistant, isShown: $isWhyShown)
+                    actions
                 }
-                Spacer()
-                WhyButton(assistant: assistant, job: job, outcome: nil)
-                actions
+                if isWhyShown {
+                    WhyText(assistant: assistant, job: job, outcome: nil)
+                        .padding(.leading, 76)
+                        .transition(.opacity)
+                }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
+            .animation(.smooth, value: isWhyShown)
         }
     }
 
     extension ReasonRow where Actions == EmptyView {
-        init(job: Job, reason: String, thumbnails: ThumbnailCache, assistant: AssistantServices) {
-            self.init(job: job, reason: reason, thumbnails: thumbnails, assistant: assistant) { EmptyView() }
+        init(
+            job: Job, reason: String, thumbnails: ThumbnailCache, assistant: AssistantServices,
+            badge: String? = nil
+        ) {
+            self.init(
+                job: job, reason: reason, thumbnails: thumbnails, assistant: assistant, badge: badge
+            ) { EmptyView() }
         }
     }
 #endif

@@ -112,11 +112,20 @@
                 Self.job("Kitchen", .queued),
             ]
             let finished = [
-                ("Concert", 3_100_000_000, 1_100_000_000), ("Road Trip", 1_400_000_000, 560_000_000),
-                ("Garden", 800_000_000, 300_000_000),
-            ].map { name, before, after in
-                (Self.job(name, .queued), Self.outcome(name, before: Int64(before), after: Int64(after)))
+                ("Concert", 3_100_000_000, 1_100_000_000, 0.0), ("Road Trip", 1_400_000_000, 560_000_000, 0.0),
+                ("Garden", 800_000_000, 300_000_000, 1.0), ("Birthday", 2_200_000_000, 700_000_000, 2.0),
+                ("Hike", 1_900_000_000, 800_000_000, 4.0),
+            ].map { name, before, after, ago in
+                (
+                    job: Self.job(name, .queued, daysAgo: ago),
+                    outcome: Self.outcome(name, before: Int64(before), after: Int64(after))
+                )
             }
+            let kept = [("Screen Recording", 0.0), ("Clip", 1.0)].map { name, ago in
+                (job: Self.job(name, .queued, daysAgo: ago), reason: "Already small enough; converting wouldn't help.")
+            }
+            let completedDays = ResultsLedger.days(finished, date: \.job.createdAt, saved: \.outcome.savedBytes)
+            let keptDays = ResultsLedger.days(kept, date: \.job.createdAt, saved: { _ in 0 })
 
             var timeline = ProgressTimeline()
             var begun = queued[0]
@@ -170,7 +179,7 @@
                                 job: job, pauseText: nil, thumbnails: cache,
                                 sizes: QueueSizes(
                                     before: 2_400_000_000 - Int64(index) * 700_000_000, after: 900_000_000),
-                                remaining: index == 0 ? 340 : nil
+                                remaining: timeline.remaining(for: job.id)
                             ) {}
                             .padding(.horizontal, 16).padding(.vertical, 4)
                             Divider()
@@ -178,13 +187,43 @@
                     },
                     name: "queue", size: CGSize(width: 760, height: 330), dark: dark, folder: folder)
                 try Self.write(
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(finished, id: \.0.id) { job, outcome in
-                            CompletedRow(job: job, outcome: outcome, thumbnails: cache, assistant: model.assistant)
-                            Divider()
+                    VStack(alignment: .leading, spacing: 0) {
+                        LedgerSummary(
+                            days: completedDays, savedBytes: finished.reduce(0) { $0 + $1.outcome.savedBytes },
+                            count: finished.count)
+                        Divider()
+                        ForEach(completedDays, id: \.day) { day in
+                            LedgerDayHeader(
+                                title: day.title, detail: "Saved \(ByteFormat.string(day.savedBytes))"
+                            )
+                            .padding(.horizontal, 16).padding(.top, 10)
+                            ForEach(day.rows, id: \.job.id) { row in
+                                CompletedRow(
+                                    job: row.job, outcome: row.outcome, thumbnails: cache,
+                                    assistant: model.assistant
+                                )
+                                .padding(.horizontal, 16)
+                                Divider()
+                            }
                         }
-                    }.padding(16),
-                    name: "completed", size: CGSize(width: 760, height: 260), dark: dark, folder: folder)
+                    },
+                    name: "completed", size: CGSize(width: 760, height: 620), dark: dark, folder: folder)
+                try Self.write(
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(keptDays, id: \.day) { day in
+                            LedgerDayHeader(title: day.title, detail: ActivityText.videos(day.rows.count))
+                                .padding(.horizontal, 16).padding(.top, 10)
+                            ForEach(day.rows, id: \.job.id) { row in
+                                ReasonRow(
+                                    job: row.job, reason: row.reason, thumbnails: cache, assistant: model.assistant,
+                                    badge: "Kept as Is"
+                                )
+                                .padding(.horizontal, 16)
+                                Divider()
+                            }
+                        }
+                    },
+                    name: "kept-as-is", size: CGSize(width: 760, height: 260), dark: dark, folder: folder)
             }
         }
     }
