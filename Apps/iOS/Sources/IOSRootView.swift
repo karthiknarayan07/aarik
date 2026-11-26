@@ -47,7 +47,10 @@ struct IOSRootView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(
-            IOSJobAccessoryModifier(model: shell.convert) {
+            IOSJobAccessoryModifier(
+                model: shell.convert,
+                isHidden: tab == .browse && toolsPath.last?.page == IOSPage.queue.rawValue
+            ) {
                 open(ToolRoute(toolID: shell.convert.tool.id, page: IOSPage.queue.rawValue))
             }
         )

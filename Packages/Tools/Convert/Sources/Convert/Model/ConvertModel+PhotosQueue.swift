@@ -26,6 +26,17 @@ public struct PhotosSaveLocation: Equatable {
 
     public init() {}
 
+    public init(destination: PhotosDestination?) {
+        switch destination {
+        case .newAsset, nil: self.choice = .newAsset
+        case .replace: self.choice = .replace
+        case .folder(let bookmark):
+            self.choice = .folder
+            self.folderBookmark = bookmark
+            self.folder = AppSettings.resolve(bookmark)
+        }
+    }
+
     /// What a job records; nil while Folder is chosen but no folder has been picked.
     public var destination: PhotosDestination? {
         switch choice {

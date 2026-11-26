@@ -1,4 +1,5 @@
 import AppCore
+import AppServices
 import AppUI
 import CoreGraphics
 import Convert
@@ -19,12 +20,16 @@ extension Job {
         return try? JSONDecoder().decode(ConvertJobSettings.self, from: settings)
     }
 
-    /// "Balanced", "Custom", or "Compress · Balanced"; nil for a job of another tool.
+    /// "Balanced", "1080p · HEVC", or "Compress · Balanced"; nil for a job of another tool.
     var presetLabel: String? {
         downscaleSettings.map { settings in
             switch settings.kind {
-            case .shrink: settings.custom == nil ? settings.preset.displayName : "Custom"
-            case .compress(let preset): "Compress · \(preset.displayName)"
+            case .shrink:
+                guard let custom = settings.custom else { return settings.preset.displayName }
+                let resolution = custom.targetShortSide.map { "\($0)p" } ?? "Original"
+                let format = custom.codec == .hevcKeepHDR ? "HEVC" : "H.264"
+                return "\(resolution) · \(format)"
+            case .compress(let preset): return "Compress · \(preset.displayName)"
             }
         }
     }
@@ -64,10 +69,11 @@ struct PredictedLossBadge: View {
     }
 }
 
-/// A small poster frame for a job's file, or a generic icon when there is none.
+/// A small poster frame for a job's file or Photos video, or a generic icon when unavailable.
 struct JobThumbnail: View {
     let url: URL
     let thumbnails: ThumbnailCache
+    var thumbnailSource: ThumbnailSource? = nil
     var size = CGSize(width: 48, height: 32)
     @State private var image: CGImage?
 
@@ -83,10 +89,15 @@ struct JobThumbnail: View {
         .background(.quaternary)
         .clipShape(.rect(cornerRadius: 4))
         .accessibilityHidden(true)
-        // A Photos address isn't a file: it gets the generic icon.
         .task(id: url) {
-            guard url.isFileURL else { return image = nil }
-            image = await thumbnails.thumbnail(for: url, maxPixel: Int(size.width * 2))
+            let maxPixel = Int(max(size.width, size.height) * 3)
+            if let thumbnailSource {
+                image = await thumbnailSource.image(forJobURL: url, maxPixel: maxPixel)
+            } else if url.isFileURL {
+                image = await thumbnails.thumbnail(for: url, maxPixel: maxPixel)
+            } else {
+                image = nil
+            }
         }
     }
 }

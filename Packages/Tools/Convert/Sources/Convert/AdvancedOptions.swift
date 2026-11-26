@@ -89,6 +89,42 @@ public struct AdvancedOptions: Sendable, Equatable {
 
     public init() {}
 
+    /// Builds editable `AdvancedOptions` from a stored job's custom spec, or maps its preset if none was set.
+    public init(from custom: DownscaleSpec?, preset: Preset = .balanced) {
+        self.init()
+        self.isEnabled = true
+        if let custom {
+            self.resolution =
+                switch custom.targetShortSide {
+                case 720: .p720
+                case 1440: .p1440
+                case nil: .keep
+                default: .p1080
+                }
+            self.codec = custom.codec
+            self.frameRate =
+                switch custom.maxFrameRate {
+                case 30?: .fps30
+                case 60?: .fps60
+                default: .keep
+                }
+            self.bitRateMbps = max(
+                Self.minimumMbps, (Double(custom.averageBitRate) / 1_000_000 * 10).rounded() / 10)
+        } else {
+            switch preset {
+            case .high:
+                self.resolution = .keep
+                self.bitRateMbps = 18.0
+            case .balanced:
+                self.resolution = .p1080
+                self.bitRateMbps = 10.0
+            case .smaller:
+                self.resolution = .p720
+                self.bitRateMbps = 4.0
+            }
+        }
+    }
+
     public init(for platform: ToolPlatforms) {
         self.init()
         if platform.contains(.iOS) && !platform.contains(.macOS) { isEnabled = true }
@@ -218,6 +254,19 @@ public struct SaveLocation: Sendable, Equatable {
 
     public init(platform: ToolPlatforms) {
         self.init(choice: Self.defaultChoice(for: platform))
+    }
+
+    public init(destination: SaveDestination, platform: ToolPlatforms = .current) {
+        switch destination {
+        case .nextToOriginal: self.init(choice: .nextToOriginal)
+        case .replace:
+            self.init(choice: Self.allowsReplace(for: platform) ? .replace : Self.defaultChoice(for: platform))
+        case .documents: self.init(choice: .documents)
+        case .folder(let bookmark):
+            self.init(choice: .folder)
+            self.folderBookmark = bookmark
+            self.folder = AppSettings.resolve(bookmark)
+        }
     }
 
     /// What a job records; nil while Folder is chosen but no folder has been picked.

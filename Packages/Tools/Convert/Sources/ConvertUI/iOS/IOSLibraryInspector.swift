@@ -126,7 +126,7 @@
                     }
 
                     if model.isPhotosPage {
-                        IOSPhotosSaveSection(model: model)
+                        IOSPhotosSaveSection(location: $model.photosSaveLocation)
                     } else {
                         Section("Save to") {
                             SaveDestinationPicker(location: $model.saveLocation)
@@ -138,7 +138,7 @@
     }
 
     /// Friendly Before -> After card for a single selected video.
-    private struct IOSSingleEstimateCard: View {
+    struct IOSSingleEstimateCard: View {
         let decision: PlanDecision
         let originalBytes: Int64
 
@@ -423,18 +423,18 @@
         }
     }
 
-    private struct IOSPhotosSaveSection: View {
-        @Bindable var model: ConvertModel
+    struct IOSPhotosSaveSection: View {
+        @Binding var location: PhotosSaveLocation
         @State private var isChoosingFolder = false
 
         private var choice: Binding<PhotosSaveLocation.Choice> {
             Binding {
-                model.photosSaveLocation.choice
+                location.choice
             } set: { newValue in
-                if newValue == .folder, model.photosSaveLocation.folderBookmark == nil {
+                if newValue == .folder, location.folderBookmark == nil {
                     isChoosingFolder = true
                 } else {
-                    model.photosSaveLocation.choice = newValue
+                    location.choice = newValue
                 }
             }
         }
@@ -444,7 +444,7 @@
                 Picker("Save to", selection: choice) {
                     ForEach(PhotosSaveLocation.Choice.allCases) { Text($0.title).tag($0) }
                 }
-                if model.photosSaveLocation.choice == .folder, let folder = model.photosSaveLocation.folder {
+                if location.choice == .folder, let folder = location.folder {
                     HStack {
                         Label(folder.lastPathComponent, systemImage: "folder")
                             .lineLimit(1)
@@ -457,18 +457,18 @@
             } header: {
                 Text("Save to")
             } footer: {
-                Text(model.photosSaveLocation.choice.footerNote)
+                Text(location.choice.footerNote)
             }
             .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
                 guard case .success(let url) = result else { return }
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                try? model.photosSaveLocation.setFolder(url)
+                try? location.setFolder(url)
             }
         }
     }
 
-    private struct IOSItemSummaryHeader: View {
+    struct IOSItemSummaryHeader: View {
         let item: VideoItem
         let thumbnails: ThumbnailSource
         @State private var image: CGImage?

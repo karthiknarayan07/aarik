@@ -2,19 +2,24 @@ import AppCore
 import Convert
 import SwiftUI
 
-/// The accessory over the tab bar, shown only while something is queued (the on and off switch is iOS 26.1).
+/// The accessory over the tab bar, shown only while something is queued and not already on the Queue page.
 struct IOSJobAccessoryModifier: ViewModifier {
     let model: ConvertModel
+    var isHidden = false
     let open: @MainActor () -> Void
+
+    private var isShown: Bool { !isHidden && model.activity.queue > 0 }
 
     func body(content: Content) -> some View {
         if #available(iOS 26.1, *) {
-            content.tabViewBottomAccessory(isEnabled: model.activity.queue > 0) {
+            content.tabViewBottomAccessory(isEnabled: isShown) {
                 IOSJobAccessory(model: model, open: open)
             }
         } else {
             content.tabViewBottomAccessory {
-                IOSJobAccessory(model: model, open: open)
+                if isShown {
+                    IOSJobAccessory(model: model, open: open)
+                }
             }
         }
     }

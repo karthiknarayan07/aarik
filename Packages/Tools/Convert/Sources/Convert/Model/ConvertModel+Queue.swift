@@ -1,6 +1,7 @@
 import AppCore
 import Foundation
 import LocalLibrary
+import PhotosLibrary
 
 extension ConvertModel {
     /// The shared queue changed: mirror the originals waiting in Photos, and update the library items a Replace
@@ -106,4 +107,99 @@ extension ConvertModel {
     public func cancelAll() { services.cancelAll() }
     public func retry(_ job: Job) { services.retry(job) }
     public func retryAllFailed() { services.retryAllFailed() }
+
+    /// Finds the loaded Photos or Files item matching `job`, if available in memory.
+    public func libraryItem(for job: Job) -> LibraryItem? {
+        if let identifier = PhotoAssetURL.identifier(from: job.source) {
+            return photos.items.first { $0.photosIdentifier == identifier }
+        }
+        let target = job.source.standardizedFileURL
+        return library.items.first { $0.fileURL?.standardizedFileURL == target }
+    }
+
+    /// Updates a waiting (`queued`) job's settings (resolution, bit rate, frame rate, format, save destination) and
+    /// optionally swaps the selected video to `replacement`.
+    public func updateQueuedJob(
+        _ job: Job, existing: ConvertJobSettings, options: AdvancedOptions,
+        photosSaveLocation: PhotosSaveLocation, fileSaveLocation: SaveLocation, replacement: LibraryItem? = nil
+    ) {
+        let resolvedItem = replacement ?? libraryItem(for: job)
+        let isPhotos =
+            if let replacement { replacement.photosIdentifier != nil } else { job.toolID == ConvertTool.photosToolID }
+        let custom = options.spec
+        var updated = existing
+        updated.kind = .shrink
+        updated.custom = custom
+
+        if isPhotos {
+            guard let destination = photosSaveLocation.destination else { return }
+            updated.photosDestination = destination
+            updated.saveTo = .nextToOriginal
+            if let resolvedItem {
+                updated.photosFileName = resolvedItem.name
+                let source = resolvedItem.savingsSource
+                if case .convert(_, let estimate, _) = SavingsCalculator.decision(
+                    byteSize: source.byteSize, inventory: source.inventory, preset: updated.preset, custom: custom)
+                {
+                    updated.estimatedSavedBytes = max(0, resolvedItem.byteSize - estimate)
+                } else {
+                    updated.estimatedSavedBytes = nil
+                }
+                updated.predictedLost = PhotosLossCheck.lostNames(
+                    isCinematic: resolvedItem.badges.contains(.cinematic),
+                    isHDR: resolvedItem.badges.contains(.hdr) || resolvedItem.badges.contains(.dolbyVision),
+                    custom: custom)
+                updated.predictedLostKeys = nil
+            }
+        } else {
+            guard let destination = fileSaveLocation.destination else { return }
+            updated.saveTo = destination
+            updated.photosDestination = nil
+            updated.photosFileName = nil
+            if let resolvedItem {
+                let source = resolvedItem.savingsSource
+                if case .convert(_, let estimate, _) = SavingsCalculator.decision(
+                    byteSize: source.byteSize, inventory: source.inventory, preset: updated.preset, custom: custom)
+                {
+                    updated.estimatedSavedBytes = max(0, resolvedItem.byteSize - estimate)
+                } else {
+                    updated.estimatedSavedBytes = nil
+                }
+                let lost = LossCheck.losses(
+                    for: [(id: resolvedItem.id, source: source, preset: updated.preset)], custom: custom
+                ).first
+                updated.predictedLost = lost?.lost ?? []
+                updated.predictedLostKeys = lost?.keys ?? []
+            }
+        }
+
+        var newToolID = job.toolID
+        var newSource = job.source
+        var newBookmark = job.sourceBookmark
+        if let replacement {
+            if let identifier = replacement.photosIdentifier {
+                newToolID = ConvertTool.photosToolID
+                newSource = PhotoAssetURL.url(for: identifier)
+                newBookmark = Data()
+            } else if let url = replacement.fileURL,
+                let created = JobFactory.makeJobs(for: [url], settings: updated).jobs.first
+            {
+                newToolID = ConvertTool.toolID
+                newSource = created.source
+                newBookmark = created.sourceBookmark
+            } else {
+                return
+            }
+        }
+
+        guard let encoded = try? JSONEncoder().encode(updated) else { return }
+        services.send { [newToolID, newSource, newBookmark] queue in
+            await queue.updateQueued(id: job.id) { item in
+                item.toolID = newToolID
+                item.source = newSource
+                item.sourceBookmark = newBookmark
+                item.settings = encoded
+            }
+        }
+    }
 }

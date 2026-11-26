@@ -24,6 +24,9 @@ First public release.
   a live Before → After size card, plain-English **Resolution** choices (`720p`, `1080p Recommended`, `1440p`,
   `Keep Original`), a **Picture Detail** bit rate slider with tier badges, per-resolution Mbps guides and a "How to
   choose" tip, plus collapsible frame rate and format options.
+- **iPhone Queue improvements:** the bottom Queue accessory hides when you open the Queue page, Queue and Completed
+  rows display real Photos/Files video thumbnails and clear format labels, and tapping a waiting Queue item lets you
+  edit its resolution, bit rate, format, save destination, or swap the selected video.
 - **iPhone runs start when you say so:** Add to Queue only queues; Convert Now queues and starts; the Queue has a
   Start button with what the waiting videos would save. Videos handed over by the share sheet or Shortcuts wait in the
   Queue too. A relaunch continues a run you had started, and never starts a queue you hadn't.

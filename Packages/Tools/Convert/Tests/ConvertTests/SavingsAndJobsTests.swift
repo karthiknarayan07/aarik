@@ -248,4 +248,56 @@ import Testing
         let decoded = try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
         #expect(decoded.custom == model.advanced.spec)
     }
+
+    @MainActor
+    @Test func updateQueuedJobChangesSettingsAndSwapsMedia() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "edit-queued-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = UserDefaults(suiteName: "EditQueuedJob-\(UUID().uuidString)")!
+        let first = PhotoAsset(
+            id: "one/L0/001", creationDate: Date(timeIntervalSince1970: 1_700_000_000), location: nil,
+            pixelSize: CGSize(width: 3840, height: 2160), duration: 60, originalFileName: "first.mov",
+            originalByteSize: bytes(mbps: 100), modificationDate: nil)
+        let second = PhotoAsset(
+            id: "two/L0/001", creationDate: Date(timeIntervalSince1970: 1_700_000_100), location: nil,
+            pixelSize: CGSize(width: 3840, height: 2160), duration: 60, originalFileName: "second.mov",
+            originalByteSize: bytes(mbps: 80), modificationDate: nil)
+        let services = AppServices(
+            directory: directory, defaults: defaults, photoStore: FakePhotoStore(assets: [first, second]),
+            autoStartDefault: false)
+        let model = ConvertModel(services: services)
+        await model.start()
+        await model.photos.start()
+        await model.photos.waitUntilIdle()
+        model.selection = .photosVideos
+        let firstItem = try #require(model.photos.items.first { $0.photosIdentifier == "one/L0/001" })
+        let secondItem = try #require(model.photos.items.first { $0.photosIdentifier == "two/L0/001" })
+        model.photosBrowser.selection = [firstItem.id]
+        model.addPhotosSelectionToQueue()
+        await model.services.waitForQueueCommands()
+        for _ in 0..<20 { await Task.yield() }
+
+        let job = try #require(model.jobs.first)
+        let existing = try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
+        var editedOptions = AdvancedOptions(from: existing.custom, preset: existing.preset)
+        editedOptions.resolution = .p720
+        editedOptions.codec = .h264Compatible
+        editedOptions.bitRateMbps = 7.0
+
+        model.updateQueuedJob(
+            job, existing: existing, options: editedOptions,
+            photosSaveLocation: PhotosSaveLocation(destination: .replace),
+            fileSaveLocation: model.saveLocation, replacement: secondItem)
+        await model.services.waitForQueueCommands()
+        for _ in 0..<20 { await Task.yield() }
+
+        let updatedJob = try #require(model.jobs.first { $0.id == job.id })
+        let updatedSettings = try JSONDecoder().decode(ConvertJobSettings.self, from: updatedJob.settings)
+        #expect(updatedSettings.photosFileName == "second.mov")
+        #expect(updatedSettings.photosDestination == .replace)
+        #expect(updatedSettings.custom == editedOptions.spec)
+        #expect(updatedJob.displayName == "second.mov")
+        #expect(updatedJob.presetLabel == "720p · H.264")
+    }
 }

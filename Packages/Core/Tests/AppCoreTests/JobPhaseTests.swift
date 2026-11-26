@@ -146,6 +146,38 @@ private struct PlainRunner: JobRunner {
     #expect(await queue.jobs[0].state == .queued)
 }
 
+@Test func updateQueuedEditsWaitingJobAndRefusesSourceCollision() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let queue = JobQueue(store: store, runners: ["fake": PlainRunner()], startPaused: true)
+    let first = makeJob(name: "one")
+    let second = makeJob(name: "two")
+    await queue.enqueue([first, second])
+
+    let updatedSettings = Data("updated".utf8)
+    let ok = await queue.updateQueued(id: first.id) {
+        $0.settings = updatedSettings
+    }
+    #expect(ok)
+    #expect(await queue.jobs.first { $0.id == first.id }?.settings == updatedSettings)
+    #expect(store.load().first { $0.id == first.id }?.settings == updatedSettings)
+
+    // Swapping to another pending job's source is refused so the queue stays duplicate-free.
+    let collides = await queue.updateQueued(id: first.id) {
+        $0.source = second.source
+    }
+    #expect(!collides)
+    #expect(await queue.jobs.first { $0.id == first.id }?.source == first.source)
+
+    // Swapping to an unused video succeeds.
+    let newURL = URL(filePath: "/tmp/three.mov")
+    let swapped = await queue.updateQueued(id: first.id) {
+        $0.source = newURL
+    }
+    #expect(swapped)
+    #expect(await queue.jobs.first { $0.id == first.id }?.source == newURL)
+}
+
 @Test func enqueueTreatsTheSameNonFileSourceAsTheSameVideo() async throws {
     let (store, dir) = try makeStore()
     defer { try? FileManager.default.removeItem(at: dir) }

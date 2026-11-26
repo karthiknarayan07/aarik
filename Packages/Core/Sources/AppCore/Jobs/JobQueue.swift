@@ -219,6 +219,26 @@ public actor JobQueue {
         changed()
     }
 
+    /// Updates a waiting (queued) job in place (its settings, or swapping its source video) and saves the queue.
+    /// Running and finished jobs are left alone, and a swap that collides with another pending job is refused.
+    @discardableResult
+    public func updateQueued(id: UUID, transform: (inout Job) -> Void) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == id }),
+            items[index].state == .queued
+        else { return false }
+        var updated = items[index]
+        transform(&updated)
+        updated.state = .queued
+        let key = SourceKey(updated)
+        let collides = items.enumerated().contains { offset, other in
+            offset != index && other.state.isPending && SourceKey(other) == key
+        }
+        guard !collides else { return false }
+        items[index] = updated
+        changed()
+        return true
+    }
+
     /// Yields the current jobs immediately, then again after every change.
     public func updates() -> AsyncStream<[Job]> {
         let key = UUID()

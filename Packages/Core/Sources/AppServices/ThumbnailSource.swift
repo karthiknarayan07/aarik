@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import LocalLibrary
 import PhotosLibrary
 
@@ -24,6 +25,19 @@ public struct ThumbnailSource: Sendable {
             return await cache.thumbnail(forKey: identifier, modified: item.modifiedDate, maxPixel: maxPixel) {
                 await photos.thumbnail(for: identifier, size: size)
             }
+        }
+    }
+
+    /// Poster for a queued or finished job URL (either a file URL or an `x-photos-asset:` address).
+    public func image(forJobURL url: URL, maxPixel: Int) async -> CGImage? {
+        if url.isFileURL {
+            return await cache.thumbnail(for: url, maxPixel: maxPixel)
+        }
+        guard let identifier = PhotoAssetURL.identifier(from: url) else { return nil }
+        let size = CGSize(width: maxPixel, height: maxPixel)
+        let photos = photos
+        return await cache.thumbnail(forKey: identifier, modified: nil, maxPixel: maxPixel) {
+            await photos.thumbnail(for: identifier, size: size)
         }
     }
 
