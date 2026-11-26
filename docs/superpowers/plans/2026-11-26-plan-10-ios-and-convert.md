@@ -221,3 +221,14 @@ This task runs after Tasks 3 and 5.
   - share sheet, widget and Control
   - Replace to Recently Deleted on test assets only
 - [ ] The v0.1.0 tag requires both apps green in CI and the checklist done.
+
+### Task 14: Mac redesign round 2 (owner choices, 2026-11-26). Starts after the iOS focus
+
+- **Queue:** Compressor and App Store-updates style. Each row has a thumbnail, a live progress ring, an ETA and the before → after size. The header shows total time left and the speed setting.
+- **Completed / Kept as Is:** a Screen Time-style results ledger. It is grouped by day, with a savings badge on each row, Why? inline, and a before/after compare.
+- **Library grid and inspector:** Photos-style. Each tile has a savings badge. The inspector is like the Info panel: a large poster, metadata chips (Dolby Vision, 4K60, location) and a predicted-savings gauge.
+- **"Space you could save":** a System Settings › Storage-style segmented bar (4K HDR / 4K SDR / 1080p / Already Small) with a legend.
+- **Before/after compare:** a split slider in Quick Look, letting you drag a divider across the original and converted frames.
+- **Menu bar popover:** Control Center-style modules: a ring for the current job, the queue count, Pause, and a "Drop Videos Here" tile.
+- **Motion:** subtle. Rings fill smoothly, numbers use `contentTransition(.numericText)`, and the symbol bounces when a job completes. Respect Reduce Motion.
+- Never copy another app's layout. Follow native-first and the design-direction memory.
