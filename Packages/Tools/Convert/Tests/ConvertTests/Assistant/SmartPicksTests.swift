@@ -8,6 +8,7 @@ import Observation
 import Synchronization
 import Testing
 
+@testable import Convert
 @testable import Assistant
 
 /// A synthetic set of groups, as the analyzer would rank them: the biggest saving first.

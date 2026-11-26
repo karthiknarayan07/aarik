@@ -53,7 +53,7 @@ engine time and memory are caught by the performance tests below.
 2. Measure a **Release** build only. Debug is `-Onone` and tells you nothing about speed:
    `xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -derivedDataPath .build/xcode-p6 build`.
 3. Profile with Instruments (Time Profiler, Allocations, Hangs, Points of Interest) or time the engine without the
-   UI: `cd Packages/AppModules && swift run -c release devtool downscale <in> <out>` (`devtool fixture <path>`
+   UI: `cd Packages/Core && swift run -c release devtool downscale <in> <out>` (`devtool fixture <path>`
    makes a test clip; `devtool inspect <file>` prints metadata).
 4. Change one thing, measure again with the same input, and record both numbers in the commit message.
 5. Keep the fix only if the number improved and the tests still pass. Never trade file safety (STABILITY.md) for
@@ -81,7 +81,7 @@ The names are stable; `PipelineStage` is the list and a test pins it. Adding a s
 
 ## Performance tests
 
-- `Packages/AppModules/Tests/PerformanceTests` (XCTest, because `measure` and the metrics are XCTest's):
+- `Packages/Core/Tests/PerformanceTests` (XCTest, because `measure` and the metrics are XCTest's):
   - `DownscalePerformanceTests` downscales a **generated** 3840x2160 HLG clip (two seconds, with audio; never personal
     media) five times under `measure(metrics: [XCTClockMetric(), XCTMemoryMetric()])`, and compares the fastest time
     and the median rise in physical memory with the stored baseline. More than 20 % worse fails; memory also gets

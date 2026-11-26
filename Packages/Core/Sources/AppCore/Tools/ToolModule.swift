@@ -121,6 +121,8 @@ public protocol ToolModule: AnyObject {
     var id: String { get }
     var title: String { get }
     var systemImage: String { get }
+    /// The platforms the tool is offered on; a shell shows only the modules that include its own.
+    var platforms: ToolPlatforms { get }
 
     /// The page showing, kept by the module so the shell can restore it.
     var selection: Destination? { get set }
@@ -165,6 +167,7 @@ extension ToolModule where RowMenu == EmptyView {
 }
 
 extension ToolModule {
+    public var platforms: ToolPlatforms { .all }
     public func hasContextMenu(for destination: Destination) -> Bool { false }
     public func acceptsFileDrop(on destination: Destination) -> Bool { false }
     public func dropFiles(_ urls: [URL], on destination: Destination) -> Bool { false }

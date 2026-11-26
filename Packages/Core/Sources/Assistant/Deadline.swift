@@ -3,8 +3,8 @@ import Synchronization
 
 /// Runs a model request with a time limit. The request is cancelled when the limit passes, but the caller gets
 /// `AssistantError.timedOut` at once even if the request ignores cancellation.
-enum Deadline {
-    static func run<T: Sendable>(
+public enum Deadline {
+    public static func run<T: Sendable>(
         _ limit: Duration, _ operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
         let race = Race<T>()

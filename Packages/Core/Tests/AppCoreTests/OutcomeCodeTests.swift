@@ -173,7 +173,7 @@ import Testing
     @Test func anyOtherErrorIsTheGenericSentenceWhateverLanguageTheSystemSpeaks() {
         // What a Swift error without a description bridges to, in German: no English prefix to match.
         let german = NSError(
-            domain: "AppModules.Plain", code: 1,
+            domain: "Core.Plain", code: 1,
             userInfo: [
                 NSLocalizedDescriptionKey: "Der Vorgang konnte nicht abgeschlossen werden. (Plain-Fehler 1.)"
             ])

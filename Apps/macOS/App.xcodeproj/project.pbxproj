@@ -14,7 +14,6 @@
 		A10000000000000000000105 /* Convert in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000205 /* Convert */; };
 		A10000000000000000000107 /* PhotosLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000207 /* PhotosLibrary */; };
 		A10000000000000000000108 /* Assistant in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000208 /* Assistant */; };
-		A1000000000000000000010A /* AppState in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000020A /* AppState */; };
 		A1000000000000000000010B /* ConvertUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000020B /* ConvertUI */; };
 		A10000000000000000000109 /* QuickRunService in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000209 /* QuickRunService */; };
 		A10000000000000000000106 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000206 /* Sparkle */; };
@@ -53,7 +52,6 @@
 				A10000000000000000000107 /* PhotosLibrary in Frameworks */,
 				A10000000000000000000108 /* Assistant in Frameworks */,
 				A10000000000000000000109 /* QuickRunService in Frameworks */,
-				A1000000000000000000010A /* AppState in Frameworks */,
 				A1000000000000000000010B /* ConvertUI in Frameworks */,
 				A10000000000000000000106 /* Sparkle in Frameworks */,
 			);
@@ -120,7 +118,6 @@
 				A10000000000000000000207 /* PhotosLibrary */,
 				A10000000000000000000208 /* Assistant */,
 				A10000000000000000000209 /* QuickRunService */,
-				A1000000000000000000020A /* AppState */,
 				A1000000000000000000020B /* ConvertUI */,
 				A10000000000000000000206 /* Sparkle */,
 			);
@@ -299,11 +296,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10000000000000000000B03 /* XCLocalSwiftPackageReference "../../Packages/Tools/Convert" */;
 			productName = QuickRunService;
-		};
-		A1000000000000000000020A /* AppState */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A10000000000000000000B01 /* XCLocalSwiftPackageReference "../../Packages/Core" */;
-			productName = AppState;
 		};
 		A1000000000000000000020B /* ConvertUI */ = {
 			isa = XCSwiftPackageProductDependency;

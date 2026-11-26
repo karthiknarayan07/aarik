@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Convert
 @testable import Assistant
 
 @Suite struct TemporalCueTests {

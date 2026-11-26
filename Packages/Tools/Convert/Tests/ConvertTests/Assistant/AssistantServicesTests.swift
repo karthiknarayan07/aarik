@@ -1,5 +1,6 @@
 import Testing
 
+@testable import Convert
 @testable import Assistant
 
 @MainActor

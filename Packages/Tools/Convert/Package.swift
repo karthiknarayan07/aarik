@@ -54,14 +54,13 @@ let package = Package(
         .testTarget(
             name: "ConvertTests",
             dependencies: [
-                "Convert",
+                "Convert", "ConvertUI",
                 .product(name: "AppCore", package: "Core"),
                 .product(name: "MediaEngine", package: "Core"),
                 .product(name: "LocalLibrary", package: "Core"),
                 .product(name: "PhotosLibrary", package: "Core"),
                 .product(name: "Assistant", package: "Core"),
                 .product(name: "AppUI", package: "Core"),
-                .product(name: "AppState", package: "Core"),
                 .product(name: "MediaTestSupport", package: "Core"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]

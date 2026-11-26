@@ -2,6 +2,7 @@ import Foundation
 import FoundationModels
 import Synchronization
 
+@testable import Convert
 @testable import Assistant
 
 /// A scripted model: unit tests never need the real one.

@@ -76,7 +76,7 @@ Spike switches, set with `defaults write io.github.karthiknarayan07.app <key> â€
 
 **Wired:**
 
-- `App/Sources/ShrinkVideosIntent.swift`: `ShrinkVideosIntent` lives in the app target. It sets
+- `Apps/macOS/Sources/ShrinkVideosIntent.swift`: `ShrinkVideosIntent` lives in the app target. It sets
   `static let supportedModes: IntentModes = .background` and has the parameter
   `@Parameter(title: "Videos", supportedContentTypes: [.movie]) var files: [IntentFile]`.
 - `perform()` is `@MainActor`. It uses each file's `fileURL` (with `startAccessingSecurityScopedResource`), or
@@ -132,13 +132,13 @@ Outcome: pending manual check
 
 **Wired:**
 
-- `App/Info.plist` has an `NSServices` entry:
+- `Apps/macOS/Info.plist` has an `NSServices` entry:
   - `NSMenuItem.default` = "Shrink Videos"
   - `NSMessage` = `shrinkVideos`
   - `NSPortName` = `$(PRODUCT_NAME)`, which expands to `aarik`
   - `NSSendFileTypes` = `[public.movie]`
   - `NSRequiredContext` = `{}`
-- `App/Sources/ServiceProvider.swift` implements
+- `Apps/macOS/Sources/ServiceProvider.swift` implements
   `@objc func shrinkVideos(_:userData:error:)`. It reads `NSURL`s with `.urlReadingFileURLsOnly` and calls
   `quickRun(origin: "service")`.
 - `applicationDidFinishLaunching` sets `NSApp.servicesProvider` and calls `NSUpdateDynamicServices()`.
@@ -173,12 +173,12 @@ Outcome: pending manual check
 
 **Wired:**
 
-- `App/Sources/MainApp.swift`: `MenuBarExtra(isInserted:)` with `.menuBarExtraStyle(.window)`.
+- `Apps/macOS/Sources/MainApp.swift`: `MenuBarExtra(isInserted:)` with `.menuBarExtraStyle(.window)`.
   - It is inserted unless `spike.ownStatusItem` is YES.
   - The label is `film.stack` plus the pending count.
   - The panel (`MenuBarPanel`) shows the app name, "N in queue", the running file with a progress bar,
     Pause/Resume, "Open main window", and a SwiftUI `.dropDestination(for: URL.self)`.
-- `App/Sources/MenuBarSpike.swift`:
+- `Apps/macOS/Sources/MenuBarSpike.swift`:
   - `StatusItemDropController` finds the `MenuBarExtra`'s button. SwiftUI exposes no `NSStatusItem`, so it scans
     `NSApp.windows` for `NSStatusBarWindow` instances and walks their content view to an `NSStatusBarButton`. It
     retries every 0.5 s, up to 20 times.
@@ -231,7 +231,7 @@ Outcome: pending manual check
 
 **Wired:**
 
-- `App/Info.plist` has `CFBundleDocumentTypes`: one entry "Video", role Viewer, `LSHandlerRank` Alternate, UTIs
+- `Apps/macOS/Info.plist` has `CFBundleDocumentTypes`: one entry "Video", role Viewer, `LSHandlerRank` Alternate, UTIs
   `com.apple.quicktime-movie`, `public.mpeg-4` and `com.apple.m4v-video`.
 - `AppDelegate.application(_:open:)` logs every call.
   - Before `applicationDidFinishLaunching` it buffers the URLs; that method delivers them.
@@ -264,7 +264,7 @@ Outcome: pending manual check
 
 **Wired:**
 
-- `App/Sources/QuickRunNotifications.swift`:
+- `Apps/macOS/Sources/QuickRunNotifications.swift`:
   - `install()` runs in `applicationWillFinishLaunching`. It sets the `UNUserNotificationCenter` delegate and
     registers category `QUICK_RUN_DONE` with action `REVIEW_SKIPPED`, "Review skipped files" (`.foreground`).
   - Authorization is requested on the first quick run, and the result is logged.

@@ -1,5 +1,5 @@
+import Assistant
 import AppUI
-import Convert
 import Foundation
 import FoundationModels
 import LocalLibrary

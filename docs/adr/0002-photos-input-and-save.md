@@ -6,7 +6,7 @@ and its cleanup is done)
 ## Context
 
 Plan 3 builds the Photos features (list, fetch, shrink, save back, delete the original) on PhotoKit. Before building,
-a DEBUG-only spike (`-photosSpike` launch argument, `App/Sources/Debug/PhotosSpike*.swift`, removed in Plan 3 Task 8, see "Final state")
+a DEBUG-only spike (`-photosSpike` launch argument, `Apps/macOS/Sources/Debug/PhotosSpike*.swift`, removed in Plan 3 Task 8, see "Final state")
 ran every risky step once against the real library and logged each fact. This ADR records the numbers, the APIs
 chosen, and what they change in the plan. Personal clip names, locations and dates are not recorded here, only
 counts and technical facts.
@@ -186,7 +186,7 @@ These contradict or sharpen Tasks 4 to 8 of Plan 3.
   The cancel path (dialog declined) was not exercised in the spike and still needs a manual check in Task 7.
 - **Task 7a/7b:** unaffected. For 7b the sample shows the real library's mix (8 high frame rate, 31 cinematic, 0
   spatial, 1 time-lapse), so the "Unknown fps" bucket matters until the index read exists.
-- **Task 8 (cleanup):** remove `App/Sources/Debug/` (four files), the `AppDelegate` `#if DEBUG` hook, and decide
+- **Task 8 (cleanup):** remove `Apps/macOS/Sources/Debug/` (four files), the `AppDelegate` `#if DEBUG` hook, and decide
   whether to keep the devtool `fixture --seconds --size --camera-metadata` options (harmless, useful for manual
   Photos checks). `INFOPLIST_KEY_NSPhotoLibraryUsageDescription` was added to `Config/App.xcconfig` for the spike and
   stays.
@@ -197,7 +197,7 @@ These contradict or sharpen Tasks 4 to 8 of Plan 3.
 
 Plan 3 followed the amendments above. At its end:
 
-- The spike is gone: `App/Sources/Debug/` and the `AppDelegate` DEBUG hook were removed, so nothing in the app reads
+- The spike is gone: `Apps/macOS/Sources/Debug/` and the `AppDelegate` DEBUG hook were removed, so nothing in the app reads
   or writes the real Photos library except the paths in `PhotosLibrary` (`PhotoKitStore`, `PhotoSaver`,
   `OriginalsDeleter`). Package tests use `FakePhotoStore`. The `devtool fixture` options stay for manual checks.
 - `INFOPLIST_KEY_NSPhotoLibraryUsageDescription` stays in `Config/App.xcconfig`.

@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import Testing
 
+@testable import Convert
 @testable import Assistant
 @testable import LocalLibrary
 

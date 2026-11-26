@@ -62,7 +62,7 @@ checked here, on the Mac the baselines were recorded on, with nothing else runni
 1. Engine benchmark, Release build, against the stored baseline (fails on more than 20 % worse time or memory):
 
    ```sh
-   cd Packages/AppModules
+   cd Packages/Core
    RUN_PERF_TESTS=1 swift test -c release -Xswiftc -enable-testing --filter PerformanceTests
    ```
 

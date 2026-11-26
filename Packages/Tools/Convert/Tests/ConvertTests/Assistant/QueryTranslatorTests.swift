@@ -2,6 +2,7 @@ import Foundation
 import LocalLibrary
 import Testing
 
+@testable import Convert
 @testable import Assistant
 
 @Suite struct QueryTranslatorTests {

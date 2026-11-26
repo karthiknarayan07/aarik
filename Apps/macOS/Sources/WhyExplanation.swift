@@ -1,3 +1,4 @@
+import Convert
 import AppCore
 import Assistant
 import SwiftUI

@@ -14,12 +14,12 @@ inspector toggle were all written against `SidebarDestination` and `AppModel`.
   a system image, and gives the shell its sidebar, `detail(for:)`, `toolbar(for:)`, `inspector(for:)` and optional
   menu commands. Its sidebar is data (`ToolSidebarSection`, `ToolSidebarItem`) that the shell draws, so the rows,
   their order, counts and VoiceOver text are testable without a UI.
-- `VideoShrinkerModule` (`App/Sources`) wraps today's pages. The pure part, the pages and the sidebar sections for a
-  given state, is `VideoPage` and `VideoSidebar` in `DownscaleVideo`, and has unit tests.
+- `ConvertModule` (`Apps/macOS/Sources`) wraps today's pages. The pure part, the pages and the sidebar sections for a
+  given state, is `VideoPage` and `VideoSidebar` in `Convert`, and has unit tests.
 - `RootView` and `SidebarView` are generic over the module and take no tool types: the shell knows only
   `ToolModule`. What used to sit in the window for the video tool (the Replace confirmation, the loss review, the
   messages, the file importer, dropped files, the bar for originals waiting in Photos, sidebar context menus and drops,
-  the menu commands) is supplied by `VideoShrinkerModule` through `dialogs`, `detail`, `contextMenu(for:)`,
+  the menu commands) is supplied by `ConvertModule` through `dialogs`, `detail`, `contextMenu(for:)`,
   `dropFiles(_:on:)` and `commands`. `MainWindowController` is the only place that makes the module and hands it in.
   The sidebar's visibility stays the window's.
 - The protocol uses SwiftUI and Foundation only, no AppKit, so the same shell can host a module in an iOS app. The

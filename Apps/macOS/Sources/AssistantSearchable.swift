@@ -1,3 +1,4 @@
+import Convert
 import Assistant
 import AppCore
 import Foundation

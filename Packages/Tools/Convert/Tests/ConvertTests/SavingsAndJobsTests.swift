@@ -4,6 +4,7 @@ import MediaEngine
 import Testing
 
 @testable import Convert
+@testable import ConvertUI
 
 @Suite struct SavingsAndJobsTests {
     private func inventory(size: String, durationMs: Int = 60_000, extra: [MetadataItem] = []) -> MetadataInventory {

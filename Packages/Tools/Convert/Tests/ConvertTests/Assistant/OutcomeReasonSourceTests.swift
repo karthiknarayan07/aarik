@@ -6,6 +6,7 @@ import PhotosLibrary
 import Testing
 
 @testable import AppCore
+@testable import Convert
 @testable import Assistant
 @testable import Convert
 

@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 
+@testable import Convert
 @testable import Assistant
 
 /// A clock a test moves by hand: `sleep` suspends until `advance(by:)` has moved time to its deadline, so

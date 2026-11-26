@@ -2,7 +2,7 @@
 import PackageDescription
 
 // Everything that is not specific to one tool: the queue and jobs, settings, pressure policy, the tool module
-// protocol, the engine, the libraries, the shared views and the tool-agnostic app state. Tools depend on this
+// protocol, the engine, the libraries and the shared views. Tools depend on this
 // package; this package never depends on a tool.
 let package = Package(
     name: "Core",
@@ -14,7 +14,6 @@ let package = Package(
         .library(name: "PhotosLibrary", targets: ["PhotosLibrary"]),
         .library(name: "Assistant", targets: ["Assistant"]),
         .library(name: "AppUI", targets: ["AppUI"]),
-        .library(name: "AppState", targets: ["AppState"]),
         .library(name: "MediaTestSupport", targets: ["MediaTestSupport"]),
         .executable(name: "devtool", targets: ["devtool"]),
     ],
@@ -45,11 +44,6 @@ let package = Package(
         ),
         .target(
             name: "Assistant",
-            swiftSettings: [.swiftLanguageMode(.v6)]
-        ),
-        .target(
-            name: "AppState",
-            dependencies: ["AppCore", "MediaEngine", "AppUI", "LocalLibrary", "PhotosLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -85,11 +79,6 @@ let package = Package(
         .testTarget(
             name: "PhotosLibraryTests",
             dependencies: ["PhotosLibrary", "LocalLibrary", "AppCore"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
-        ),
-        .testTarget(
-            name: "AppStateTests",
-            dependencies: ["AppState", "AppCore", "LocalLibrary", "PhotosLibrary", "MediaEngine"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // XCTest, not Swift Testing: `measure(metrics:)` and the clock and memory metrics are XCTest's.

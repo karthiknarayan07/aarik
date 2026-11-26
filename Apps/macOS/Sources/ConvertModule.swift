@@ -16,6 +16,7 @@ final class ConvertModule: ToolModule {
     var id: String { ConvertTool.descriptor.id }
     var title: String { ConvertTool.descriptor.name }
     var systemImage: String { ConvertTool.descriptor.symbol }
+    var platforms: ToolPlatforms { [.macOS, .iOS] }
 
     var selection: VideoPage? {
         get { model.selection }

@@ -1,3 +1,4 @@
+import Assistant
 import Foundation
 
 /// The assistant's pieces for the app to hold: availability, and the plain-words search for each library grid.
