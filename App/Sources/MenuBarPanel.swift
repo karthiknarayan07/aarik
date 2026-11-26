@@ -23,7 +23,7 @@ struct MenuBarPanel: View {
             Label {
                 Text(AppModel.displayName)
             } icon: {
-                let icon = StatusIconState(model.activity, isPaused: model.isQueuePaused)
+                let icon = StatusIconState(model.activity, isPaused: model.queuePause.isPaused)
                 if let value = icon.variableValue {
                     Image(systemName: icon.symbolName, variableValue: value)
                 } else {
@@ -31,6 +31,12 @@ struct MenuBarPanel: View {
                 }
             }
             .font(.headline)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(AppModel.displayName)
+            .accessibilityValue(
+                StatusIconState(model.activity, isPaused: model.queuePause.isPaused).accessibilityStatus
+            )
+            .accessibilityAddTraits(.isHeader)
             currentJob
             runStatus
             Divider()
@@ -43,37 +49,41 @@ struct MenuBarPanel: View {
                     close()
                     model.showMainWindow()
                 }
+                .accessibilityHint("Shows the main window")
             }
             dropZone
         }
         .padding(16)
         .frame(width: 300, alignment: .leading)
-        .dropDestination(for: URL.self) { urls, _ in
-            // Names only here; the files are checked off the main thread before the run starts.
-            guard MovieDropFilter.mightContainMovie(urls) else { return false }
-            model.runFromMenuBar(urls)
-            return true
-        } isTargeted: {
-            isDropTargeted = $0
-        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(AppModel.displayName) menu bar")
+        .onDrop(of: [.fileURL], delegate: PopoverDropDelegate(model: model, isTargeted: $isDropTargeted))
     }
 
-    /// The run started from the menu bar: what it is doing, then how it ended, with its skipped files one click away.
+    /// The runs started from the menu bar: what they are doing, then how they ended in one tally, with the skipped
+    /// files one click away. A drop with nothing to shrink says so for a few seconds.
     @ViewBuilder private var runStatus: some View {
-        if let status = model.quickRunStatus {
+        let board = model.menuBarRuns
+        if !board.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    if case .checking = status.phase { ProgressView().controlSize(.small) }
-                    Text(status.text)
+                ForEach(Array(board.lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
                 }
-                if status.skippedCount > 0, let runID = status.runID {
+                if let notice = board.notice {
+                    Text(notice.text)
+                        .foregroundStyle(.secondary)
+                }
+                if !board.reviewRunIDs.isEmpty {
                     Button("Show Skipped…") {
                         close()
-                        Task { await model.reviewQuickRun(runID) }
+                        let runs = board.reviewRunIDs
+                        Task { await model.reviewQuickRuns(runs) }
                     }
                     .accessibilityHint("Opens the main window with the skipped videos selected")
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Quick run status")
         }
     }
 
@@ -88,6 +98,11 @@ struct MenuBarPanel: View {
                 Text(runningDetail(running.job, progress: running.progress))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let paused = model.queuePause.statusText {
+                    Text(paused)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         } else {
             Text(idleText)
@@ -105,7 +120,9 @@ struct MenuBarPanel: View {
     private var idleText: String {
         let waiting = model.activity.queue
         if waiting == 0 { return "Nothing in the queue." }
-        return model.isQueuePaused ? "Queue paused, \(waiting) waiting." : "\(waiting) waiting."
+        guard let paused = model.queuePause.statusText else { return "\(waiting) waiting." }
+        // The user's pause keeps its wording; an automatic one says why.
+        return model.isQueuePaused ? "Queue paused, \(waiting) waiting." : "\(paused), \(waiting) waiting."
     }
 
     private var dropZone: some View {
@@ -118,11 +135,13 @@ struct MenuBarPanel: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button("Choose Videos…", action: chooseVideos)
+                    .accessibilityHint("Opens a window to choose videos to convert, instead of dropping them here")
             }
             .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Drop videos here to convert them")
+        .accessibilityHint("Drag video files onto this area, or use Choose Videos")
     }
 
     /// The keyboard and VoiceOver way to do what the drop does.
@@ -140,5 +159,39 @@ struct MenuBarPanel: View {
             let urls = panel.urls
             Task { @MainActor in model.runFromMenuBar(urls) }
         }
+    }
+}
+
+/// The popover's drop target. Like the status icon it refuses a drag that names a type other than a movie (a folder,
+/// an image), judged from the types the drag advertises, so no file is read while the pointer moves. The files
+/// themselves are checked before the run starts.
+private struct PopoverDropDelegate: DropDelegate {
+    let model: AppModel
+    @Binding var isTargeted: Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        MovieDropFilter.providersMightHoldMovie(
+            info.itemProviders(for: [.fileURL]).map(\.registeredTypeIdentifiers))
+    }
+
+    func dropEntered(info: DropInfo) { isTargeted = true }
+
+    func dropExited(info: DropInfo) { isTargeted = false }
+
+    func performDrop(info: DropInfo) -> Bool {
+        isTargeted = false
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+        Task { @MainActor in
+            var urls: [URL] = []
+            for provider in providers {
+                let url: URL? = await withCheckedContinuation { continuation in
+                    _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
+                }
+                if let url { urls.append(url) }
+            }
+            if !urls.isEmpty { model.runFromMenuBar(urls) }
+        }
+        return true
     }
 }

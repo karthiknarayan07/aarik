@@ -88,7 +88,7 @@ public struct DownscaleRunner: JobRunner {
             // checked, and only once the original is safely in the Trash. Otherwise nothing moves and the job
             // still completes with the output beside the original.
             if !warnings.isEmpty {
-                warnings.append(Self.keptBecause("the copy couldn't be verified"))
+                warnings.append(Self.keptBecause(Self.unverifiedCopyReason))
             } else {
                 let result = replace(source, identity: identity, with: output)
                 finalURL = result.url
@@ -165,7 +165,7 @@ public struct DownscaleRunner: JobRunner {
         // A video whose details couldn't be listed when it was added (a Photos video isn't read until it runs) may
         // only lose what the user was shown then.
         if requireLossShown, let unshown = Self.unshownLoss(predicted, inventory: inventory, settings: settings) {
-            return .keptAsIs("Converting would lose \(unshown), which wasn't known when it was added")
+            return .keptAsIs(Self.lossNotShownReason(unshown))
         }
 
         let folder = try outputFolder()
@@ -186,7 +186,7 @@ public struct DownscaleRunner: JobRunner {
                 source: source, nameAfter: nameAfter ?? source, spec: spec, label: label, directory: folder.url,
                 pathExtension: container.pathExtension, progress: progress)
         } catch DownscaleError.sourceAlreadySmall {
-            return .keptAsIs("Already small")
+            return .keptAsIs(DownscalePlanner.alreadySmallReason)
         }
 
         // From here the output exists and is ours: any way out that doesn't keep it removes it.
@@ -200,7 +200,7 @@ public struct DownscaleRunner: JobRunner {
             outputSize = try sizeOf(output)
             if outputSize >= byteSize * 9 / 10 {
                 try? FileManager.default.removeItem(at: output)
-                return .keptAsIs("Would save less than 10%")
+                return .keptAsIs(DownscalePlanner.savesLittleReason)
             }
             outputInventory = try await Signposts.interval(.verify) { try await inspect(output) }
             try Self.stopIfCancelled(removing: output)
@@ -220,9 +220,7 @@ public struct DownscaleRunner: JobRunner {
         }
         var notes: [String] = []
         if container.fallsBackToQuickTime {
-            notes.append(
-                "Saved as a .\(container.pathExtension) file because \(source.pathExtension.uppercased()) can't hold "
-                    + "all of its tracks")
+            notes.append(Self.containerNote(source: source, pathExtension: container.pathExtension))
         }
         return .converted(
             Conversion(
@@ -290,13 +288,26 @@ public struct DownscaleRunner: JobRunner {
         }
         guard identity.matches(source) else { return (output, Self.originalChanged, nil) }
         guard (try? trash(source)) != nil else {
-            return (output, Self.keptBecause("it couldn't be moved to the Trash"), nil)
+            return (output, Self.keptBecause(Self.trashFailedReason), nil)
         }
         // Take the original's name if it is still free, else keep the output's own name and say why.
         let target = Self.replacementURL(for: source, output: output)
         if (try? AtomicOutput.moveWithoutReplacing(output, to: target)) != nil { return (target, nil, nil) }
         let why = FileManager.default.fileExists(atPath: target.path) ? "already exists" : "couldn't be used"
-        return (output, nil, "Saved as “\(output.lastPathComponent)” because “\(target.lastPathComponent)” \(why)")
+        return (output, nil, Self.renamedNote(output: output, target: target, why: why))
+    }
+
+    static func lossNotShownReason(_ unshown: String) -> String {
+        "Converting would lose \(unshown), which wasn't known when it was added"
+    }
+
+    static func containerNote(source: URL, pathExtension: String) -> String {
+        "Saved as a .\(pathExtension) file because \(source.pathExtension.uppercased()) can't hold "
+            + "all of its tracks"
+    }
+
+    static func renamedNote(output: URL, target: URL, why: String) -> String {
+        "Saved as “\(output.lastPathComponent)” because “\(target.lastPathComponent)” \(why)"
     }
 
     /// The original's path, with the output's extension when the output is in another container
@@ -308,7 +319,10 @@ public struct DownscaleRunner: JobRunner {
 
     static let originalChanged = "The original changed during conversion"
 
-    private static func keptBecause(_ reason: String) -> String {
+    static let unverifiedCopyReason = "the copy couldn't be verified"
+    static let trashFailedReason = "it couldn't be moved to the Trash"
+
+    static func keptBecause(_ reason: String) -> String {
         "The original was kept because \(reason)"
     }
 

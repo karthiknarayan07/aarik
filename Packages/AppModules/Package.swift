@@ -52,7 +52,7 @@ let package = Package(
         ),
         .target(
             name: "QuickRunService",
-            dependencies: ["DownscaleVideo", "AppUI", "MediaEngine", "AppCore"],
+            dependencies: ["DownscaleVideo", "AppUI", "MediaEngine", "AppCore", "LocalLibrary", "PhotosLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .target(
@@ -92,7 +92,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AssistantTests",
-            dependencies: ["Assistant", "LocalLibrary", "AppCore", "DownscaleVideo"],
+            dependencies: ["Assistant", "LocalLibrary", "AppCore", "DownscaleVideo", "MediaEngine", "PhotosLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
@@ -110,7 +110,7 @@ let package = Package(
         ),
         .testTarget(
             name: "QuickRunServiceTests",
-            dependencies: ["QuickRunService", "DownscaleVideo", "AppCore", "MediaEngine"],
+            dependencies: ["QuickRunService", "DownscaleVideo", "AppCore", "MediaEngine", "LocalLibrary", "PhotosLibrary"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

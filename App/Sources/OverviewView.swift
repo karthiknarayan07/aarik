@@ -1,5 +1,6 @@
 import AppCore
 import AppUI
+import Assistant
 import DownscaleVideo
 import LocalLibrary
 import MediaEngine
@@ -31,6 +32,16 @@ struct OverviewView: View {
             saved: model.activity.savedBytes)
     }
 
+    /// What asks the model again: new groups, or the model becoming available.
+    private struct PicksTrigger: Hashable {
+        let revision: Int
+        let isAvailable: Bool
+    }
+
+    private var picksTrigger: PicksTrigger {
+        PicksTrigger(revision: model.assistant.smartPicks.revision, isAvailable: model.assistant.isAvailable)
+    }
+
     var body: some View {
         Group {
             if model.photos.items.isEmpty && model.library.items.isEmpty {
@@ -46,6 +57,7 @@ struct OverviewView: View {
                 ScrollView {
                     VStack(alignment: .leading) {
                         LibraryGroup(model: model, summary: summary)
+                        SmartPicksGroup(model: model)
                         BiggestSavingsGroup(summary: summary, reveal: model.reveal)
                         SavedGroup(savedBytes: summary.savedBytes, conversions: model.activity.completed)
                     }
@@ -62,19 +74,38 @@ struct OverviewView: View {
             let photos = model.photos.items
             let files = model.library.items
             let completed = model.completedJobs.map(\.outcome)
-            summary = await Self.summarize(
+            let shrunk = model.shrunkIDs(in: model.browser)
+            let analysis = await Self.analyze(
                 photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-                custom: model.advanced.spec, completed: completed)
+                custom: model.advanced.spec, completed: completed, shrunk: shrunk)
+            guard !Task.isCancelled else { return }
+            summary = analysis.summary
+            // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
+            model.assistant.smartPicks.update(
+                buckets: analysis.buckets, undatedCount: analysis.undated, key: inputs)
         }
+        .task(id: picksTrigger) { await model.assistant.smartPicks.generateIfNeeded() }
     }
 
-    /// The estimates read every video's metadata, so they run off the main actor.
-    @concurrent private static func summarize(
+    /// The totals, the groups and the count of undated videos. Estimating a video reads its metadata, so it is
+    /// done once for each video and shared by all three, off the main actor.
+    @concurrent private static func analyze(
         photos: [VideoItem], files: [VideoItem], preset: Preset, overrides: PresetOverrides<UUID>,
-        custom: DownscaleSpec?, completed: [JobOutcome]
-    ) async -> OverviewSummary {
-        OverviewSummary(
-            photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, completed: completed)
+        custom: DownscaleSpec?, completed: [JobOutcome], shrunk: Set<UUID>
+    ) async -> (summary: OverviewSummary, buckets: [SavingsBucket], undated: Int) {
+        let estimates = OverviewSummary.estimates(
+            photos: photos, files: files, preset: preset, overrides: overrides, custom: custom)
+        return (
+            OverviewSummary(
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
+                completed: completed, estimates: estimates),
+            SavingsAnalyzer.buckets(
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk,
+                estimates: estimates),
+            SavingsAnalyzer.undatedCount(
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk,
+                estimates: estimates)
+        )
     }
 }
 
@@ -83,6 +114,7 @@ struct OverviewView: View {
 /// A titled group: a headline over a grouped box, as in System Settings.
 private struct OverviewGroup<Content: View>: View {
     let title: String
+    var systemImage: String?
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -90,9 +122,15 @@ private struct OverviewGroup<Content: View>: View {
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Text(title)
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
+            Group {
+                if let systemImage {
+                    Label(title, systemImage: systemImage)
+                } else {
+                    Text(title)
+                }
+            }
+            .font(.headline)
+            .accessibilityAddTraits(.isHeader)
         }
     }
 }
@@ -168,6 +206,137 @@ private struct TotalsRows: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Smart picks
+
+/// Where to start: with the on-device model, up to three groups of videos worth shrinking first, each with a
+/// reason, Show and Add These to the Queue. Without it (unavailable, or no usable answer) the same place lists the
+/// biggest groups as plain rows, with no mention of the model.
+private struct SmartPicksGroup: View {
+    let model: AppModel
+
+    private var store: SmartPicksStore { model.assistant.smartPicks }
+
+    var body: some View {
+        if !store.buckets.isEmpty {
+            if store.isShowingPicks {
+                OverviewGroup(title: "Smart Picks", systemImage: "sparkles") {
+                    if case .picks(let picks) = store.state {
+                        VStack(alignment: .leading) {
+                            ForEach(Array(picks.enumerated()), id: \.element.id) { index, pick in
+                                if index > 0 { Divider() }
+                                SmartPickRow(
+                                    pick: pick, canAdd: model.canAddToQueue(pick.bucket),
+                                    show: { model.show(pick.bucket) }, add: { model.addToQueue(pick.bucket) })
+                            }
+                            Text("Suggested on this Mac. Nothing is added until you choose.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            UndatedNote(count: store.undatedCount)
+                        }
+                    } else {
+                        HStack {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Finding where to start…")
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            } else {
+                OverviewGroup(title: "Biggest Groups") {
+                    VStack(alignment: .leading) {
+                        ForEach(Array(store.buckets.prefix(Self.listedGroups).enumerated()), id: \.element.identity) {
+                            index, bucket in
+                            if index > 0 { Divider() }
+                            BiggestGroupRow(bucket: bucket) { model.show(bucket) }
+                        }
+                        UndatedNote(count: store.undatedCount)
+                    }
+                }
+            }
+        }
+    }
+
+    private static let listedGroups = 5
+}
+
+/// Videos left out of every group for want of a capture date; nothing when there are none.
+private struct UndatedNote: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(
+                count == 1
+                    ? "1 video without a capture date isn't in any group."
+                    : "\(count.formatted()) videos without a capture date aren't in any group."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct SmartPickRow: View {
+    let pick: SmartPick
+    let canAdd: Bool
+    let show: () -> Void
+    let add: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(pick.title)
+                .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
+            Text(pick.why)
+                .foregroundStyle(.secondary)
+            Text(pick.bucket.detail)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Show", action: show)
+                    .help("Show these videos in \(pick.bucket.sourceName)")
+                    .accessibilityLabel("Show \(pick.bucket.title)")
+                    .accessibilityHint("Opens \(pick.bucket.sourceName) with filters for these videos")
+                Button("Add These to the Queue…", action: add)
+                    .disabled(!canAdd)
+                    .help(
+                        canAdd ? "Select these videos and add them to the queue" : "Choose where to save copies first"
+                    )
+                    .accessibilityLabel("Add \(pick.bucket.title) to the queue")
+                    .accessibilityHint("Selects these videos and adds them to the queue after the usual checks")
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(pick.title). \(pick.why). \(pick.bucket.detail)")
+    }
+}
+
+private struct BiggestGroupRow: View {
+    let bucket: SavingsBucket
+    let show: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(bucket.title)
+                Text(bucket.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Show", action: show)
+                .help("Show these videos in \(bucket.sourceName)")
+                .accessibilityLabel("Show \(bucket.title)")
+                .accessibilityHint("Opens \(bucket.sourceName) with filters for these videos")
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 

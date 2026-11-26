@@ -6,8 +6,8 @@ import Dispatch
 final class BlockingWorkExecutor: TaskExecutor {
     private let queue: DispatchQueue
 
-    init(label: String) {
-        queue = DispatchQueue(label: label)
+    init(label: String, qos: DispatchQoS = .unspecified) {
+        queue = DispatchQueue(label: label, qos: qos)
     }
 
     func enqueue(_ job: consuming ExecutorJob) {

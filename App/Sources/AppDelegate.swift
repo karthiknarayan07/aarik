@@ -1,3 +1,4 @@
+import AppCore
 import AppKit
 import PhotosLibrary
 import QuickRunService
@@ -26,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var openedFiles = LaunchBuffer<URL>()
     /// Quick-run notification responses that arrived before launch finished (a click that relaunched the app).
     private var notificationResponses = LaunchBuffer<UUID>()
+    /// Intent runs (Shortcuts, Finder Quick Action, Siri, Spotlight) that arrived before launch finished.
+    private var intentRuns = LaunchBuffer<Bool>()
 
     /// Set before launch finishes, so a click on a notification that relaunched the app reaches `didReceive`.
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -46,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         self.model = model
         updater = Updater(relaunchGate: model.relaunchGate)
         super.init()
+        model.intentRunHandler = { [weak self] in _ = self?.intentRuns.receive([true]) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -88,9 +92,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let files = openedFiles.launchFinished()
         let serviced = serviceFiles.launchFinished()
         let responses = notificationResponses.launchFinished()
-        if LaunchWindowPlan.plan(
-            openedFileCount: files.count + serviced.count, hasNotificationResponse: !responses.isEmpty) == .show
-        {
+        // An intent run that started this launch is a quick run: the window stays hidden. One that arrives later
+        // leaves the window as it is.
+        let intents = intentRuns.launchFinished()
+        let plan = LaunchWindowPlan.plan(
+            openedFileCount: files.count + serviced.count, hasNotificationResponse: !responses.isEmpty,
+            hasIntentRun: !intents.isEmpty)
+        if plan == .show {
             model.showMainWindow()
         }
         if !files.isEmpty { model.openFiles(files) }
@@ -148,6 +156,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isTerminating else { return .terminateLater }
+        // Work under way: ask first, unless the system is logging out or restarting. The running job and the rest of
+        // the queue are saved as queued below and continue next launch.
+        if QuitPolicy.needsConfirmation(
+            jobs: model.jobs, isQueuePaused: model.queuePause.isPaused,
+            isSessionEnding: QuitConfirmation.isSessionEnding)
+            && !QuitConfirmation.confirmStop(
+                queueStartsAutomatically: AppSettings.autoStartQueue(model.defaults),
+                automaticPause: model.queuePause.automatic)
+        {
+            return .terminateCancel
+        }
         isTerminating = true
         Task {
             // Pending library saves finish and the running job goes back to the queue for next launch.

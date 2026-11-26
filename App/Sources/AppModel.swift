@@ -5,6 +5,7 @@ import Assistant
 import DownscaleVideo
 import Foundation
 import LocalLibrary
+import MediaEngine
 import Observation
 import PhotosLibrary
 import QuickRunService
@@ -52,9 +53,24 @@ final class AppModel {
     var jobs: [Job] = []
     /// Counts, saved total and running progress for the Activity rows, updated with `jobs`.
     var activity = ActivitySummary(jobs: [])
+    /// The user's pause (the Pause button, auto-start off). The queue is also held, apart from this, while the Mac is
+    /// hot or the battery is low: see `queuePause`.
     var isQueuePaused = false {
-        didSet { relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused) }
+        didSet { refreshQueuePause() }
     }
+    /// Whether the queue is paused and why, user and automatic together; its `statusText` is the status line.
+    var queuePause = QueuePause(isPausedByUser: false, automatic: nil)
+    /// How hard conversion works (Settings); thermal rules apply on top.
+    var speed: SpeedSetting {
+        didSet {
+            defaults.set(speed.rawValue, forKey: AppSettings.Keys.speed)
+            pressure.setSpeed(speed)
+        }
+    }
+    /// Reads the thermal state and power source, keeps the Mac awake while the queue works, and tells the queue and
+    /// the downscale limit what to do.
+    @ObservationIgnored lazy var pressure = makePressure()
+    @ObservationIgnored var lastThrottle: Task<Void, Never>?
     /// Holds an update's relaunch while a job runs or jobs are waiting; the updater asks it, the queue feeds it.
     @ObservationIgnored let relaunchGate = RelaunchGate()
     var isConfirmingReplace = false
@@ -64,8 +80,8 @@ final class AppModel {
     var lossReview: LossReview?
     /// A message for the user: something couldn't be added, was already queued, or the saved queue was unreadable.
     var alert: AppAlert?
-    /// The current or most recent quick run started from the menu bar, shown in its popover.
-    var quickRunStatus: QuickRunStatus?
+    /// The quick runs started from the menu bar (several can overlap), shown in its popover.
+    var menuBarRuns = MenuBarRunBoard()
     /// Whether the menu bar popover is open; a run started there reports itself, so its banner is skipped then.
     @ObservationIgnored var isStatusPopoverVisible = false
 
@@ -107,6 +123,18 @@ final class AppModel {
     /// The quick runs of the last week, so their jobs get their own notification (see `receive`).
     @ObservationIgnored let quickRunStore: QuickRunStore
     @ObservationIgnored lazy var quickRun = makeQuickRun()
+    /// The Shortcuts, Siri and Spotlight action: files or a selection of the libraries, as one quick run.
+    @ObservationIgnored lazy var shrinkVideosAction = makeShrinkVideosAction()
+    /// Set once `start()` has finished; entry points that arrive earlier (an intent that launched the app) wait.
+    @ObservationIgnored var hasFinishedStarting = false
+    @ObservationIgnored var startWaiters: [CheckedContinuation<Void, Never>] = []
+    /// The app's own copies of videos that reached the action as data only. Not the Photos Work folder: that one is
+    /// swept at every launch, this one keeps what a queued job still reads.
+    @ObservationIgnored let stagedInputs: StagedInputs
+    /// Copies whose jobs are queued; each is removed once none of its jobs is pending.
+    @ObservationIgnored var stagedWatch: Set<URL> = []
+    /// Told when an intent run arrives, so a launch it started stays windowless (set by `AppDelegate`).
+    @ObservationIgnored var intentRunHandler: (@MainActor () -> Void)?
     /// Completed Replace jobs already reflected in the library; nil until the first queue update, which seeds it
     /// with the jobs finished in earlier sessions.
     @ObservationIgnored var reconciledReplaceIDs: Set<UUID>?
@@ -119,9 +147,11 @@ final class AppModel {
         self.defaults = defaults
         self.preset =
             defaults.string(forKey: AppSettings.Keys.preset).flatMap(Preset.init(rawValue:)) ?? .balanced
+        self.speed = AppSettings.speed(defaults)
         self.isInspectorPresented = defaults.object(forKey: Keys.inspector) as? Bool ?? true
         self.saveLocation = AppSettings.defaultSaveLocation(defaults)
         self.quickRunStore = QuickRunStore(fileURL: directory.appending(path: "quick-runs.json"))
+        self.stagedInputs = StagedInputs(directory: directory.appending(path: "Staging", directoryHint: .isDirectory))
         let library = LocalLibrary(directory: directory)
         self.library = library
         self.browser = LibraryBrowser(collection: library)

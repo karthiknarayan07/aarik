@@ -11,6 +11,15 @@ not in the code yet.
 - **Bounded concurrency.** `WorkSlots` (an actor) admits half the cores, at least 2, concurrent downscales; waiters
   hold no thread. Blocking reads run on a `BlockingWorkExecutor` of their own, off the shared Swift pool, and
   `downscale` is `@concurrent` so a main-actor caller never blocks.
+- **Speed setting and thermal rules.** Settings has Quiet, Balanced (default) and Fastest. `PressureState` turns
+  the choice, the thermal state and the core counts into a limit, and the app applies it to `WorkSlots` at runtime
+  (`DownscaleThrottle.apply`): Quiet is 1 with the encoder's blocking work at background priority; Balanced is half
+  the cores, at least 2; Fastest is the performance cores (`hw.perflevel0.physicalcpu`), never fewer than Balanced and never more than the active cores (M3: 4 and 4, M4: 5 and 5, M4 Pro: 7 and 10). `.serious` heat makes it 1
+  and `.critical` pauses the queue (STABILITY.md). Lowering the limit never stops a running downscale: it applies
+  as they finish; raising it admits waiting ones at once. Note that `JobQueue` starts one job at a time, so the
+  limit and the priority matter for concurrent callers (tests, tools); the visible effect today is the priority.
+  **Planned (B2b):** `JobQueue` runs several jobs at once, up to this limit (Photos input stays one at a time), which
+  is what makes Balanced and Fastest differ.
 - **One job at a time in the queue.** `JobQueue` (actor) runs jobs in order and persists after each state change.
 - **Progress throttle.** Progress alone is published to the UI at most every 100 ms (`progressInterval`); state
   changes go out immediately.

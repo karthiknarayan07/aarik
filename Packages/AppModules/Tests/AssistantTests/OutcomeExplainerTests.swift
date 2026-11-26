@@ -1,6 +1,7 @@
 import AppCore
 import DownscaleVideo
 import Foundation
+import MediaEngine
 import Testing
 
 @testable import Assistant
@@ -27,7 +28,7 @@ import Testing
             output: Self.output, bytesBefore: 1_200_000_000, bytesAfter: 400_000_000,
             report: MetadataReport(
                 kept: [item("Make", value: "Apple")],
-                changed: [MetadataChange(key: "k", displayName: "Duration", from: "10.0", to: "10.02")],
+                changed: [MetadataChange(key: "video.duration", displayName: "Duration", from: "10.0", to: "10.02")],
                 lost: [item("Location", value: "37.7749,-122.4194")]),
             replacedOriginal: false, warnings: warnings, notes: notes, source: Self.source)
     }
@@ -43,31 +44,90 @@ import Testing
         for expected in ["Balanced", "Location", "Duration", "1.2 GB", "400 MB", "completed with warnings"] {
             #expect(prompt.localizedCaseInsensitiveContains(expected), "missing \(expected)")
         }
-        for secret in ["Anna", "jane", "Holiday", "37.77", "122.41", "Apple", "/Users", ".mov"] {
+        for secret in ["Anna", "jane", "Holiday", "37.77", "122.41", "Apple", "/Users", ".mov", "QuickTime"] {
             #expect(!prompt.contains(secret), "leaked \(secret)")
         }
     }
 
-    @Test func keptAsIsAndFailedPromptsCarryTheRedactedReasonOnly() {
-        let reason = "Couldn't read /Users/jane/Holiday with Anna/Beach day with Anna.mov: no video track"
-        for state in [JobState.keptAsIs(reason: reason), .failed(reason: reason)] {
+    @Test func keptAsIsAndFailedPromptsCarryAReasonCodeNotTheReasonText() {
+        let text = "Couldn't read /Users/jane/Holiday with Anna/Beach day with Anna.mov: Already small"
+        for state in [JobState.keptAsIs(reason: text), .failed(reason: text)] {
             let prompt = OutcomeExplainer.prompt(job: job(state), outcome: nil, report: nil)
-            #expect(prompt.contains("no video track"))
-            for secret in ["Anna", "jane", "/Users", ".mov"] { #expect(!prompt.contains(secret)) }
+            #expect(prompt.contains("Reason: \(OutcomeReason.alreadySmall.sentence)"))
+            for secret in ["Anna", "jane", "Holiday", "/Users", ".mov", "Couldn"] {
+                #expect(!prompt.contains(secret), "leaked \(secret)")
+            }
         }
         #expect(
             OutcomeExplainer.prompt(job: job(.keptAsIs(reason: "x")), outcome: nil, report: nil)
                 .localizedCaseInsensitiveContains("kept as is"))
         #expect(
             OutcomeExplainer.prompt(job: job(.failed(reason: "x")), outcome: nil, report: nil)
-                .localizedCaseInsensitiveContains("failed"))
+                .contains("Reason: \(OutcomeReason.other.sentence)"))
+    }
+
+    @Test func aJobWhoseReasonsNameAFileAFolderAndAPathProducesAPromptWithNoneOfThem() {
+        let folder = "Holiday with Anna"
+        let name = "Beach day with Anna.mov"
+        let path = "/Users/jane/\(folder)/\(name)"
+        let warnings = [
+            "Saved as \u{201C}\(name)\u{201D} because \u{201C}\(name) 2\u{201D} already exists",
+            "The original was kept because \(path) couldn't be copied to the originals folder \(folder)",
+            "\(folder) changed from \(path) to somewhere else",
+            "Extended attribute \(folder) is lost",
+        ]
+        let outcome = outcome(warnings: warnings, notes: [path, "Saved as \(name) \(folder)"])
+        for state in [JobState.completed(outcome), .keptAsIs(reason: path), .failed(reason: "\(folder): \(path)")] {
+            let prompt = OutcomeExplainer.prompt(job: job(state), outcome: outcome, report: outcome.report)
+            for secret in ["Anna", "Holiday", "Beach", "jane", "/Users", ".mov", folder, name, path] {
+                #expect(!prompt.contains(secret), "leaked \(secret) in \(state)")
+            }
+        }
+    }
+
+    @Test func metadataNamesFromTheFileNeverReachThePrompt() {
+        let report = MetadataReport(
+            kept: [],
+            changed: [
+                MetadataChange(key: "qt.com.example.secret-plan", displayName: "secret-plan", from: "a", to: "b")
+            ],
+            lost: [
+                MetadataItem(
+                    key: "fs.xattr.com.example.Trip to Anna", category: .fileSystem,
+                    displayName: "Extended attribute com.example.Trip to Anna", value: "hash"),
+                MetadataItem(key: "qt.uiso/loci", category: .location, displayName: "Location", value: "37.7,-122.4"),
+            ])
+        let outcome = JobOutcome(
+            output: Self.output, bytesBefore: 10, bytesAfter: 5, report: report, replacedOriginal: false)
+        let prompt = OutcomeExplainer.prompt(job: job(.completed(outcome)), outcome: outcome, report: report)
+        #expect(prompt.contains("Actual losses: Extended attribute, Location"))
+        #expect(prompt.contains("Changed: Other metadata"))
+        for secret in ["Anna", "secret", "example", "37.7"] { #expect(!prompt.contains(secret), "leaked \(secret)") }
+    }
+
+    @Test func customSettingsAreShownAsResolutionAndCodecLabels() {
+        let settings = DownscaleJobSettings(
+            preset: .high, saveTo: .nextToOriginal,
+            custom: DownscaleSpec(
+                targetShortSide: 720, averageBitRate: 4_000_000, maxFrameRate: 30, codec: .h264Compatible))
+        let job = Job(
+            toolID: DownscaleTool.toolID, source: Self.source, sourceBookmark: Data(),
+            settings: (try? JSONEncoder().encode(settings)) ?? Data(), state: .failed(reason: "x"))
+        let prompt = OutcomeExplainer.prompt(job: job, outcome: nil, report: nil)
+        for line in [
+            "Preset: Custom settings", "Resolution: 720p short side", "Codec: H.264 (SDR)", "capped at 30 fps",
+        ] {
+            #expect(prompt.contains(line), "missing \(line)")
+        }
     }
 
     @Test func predictedAndActualLossesAreBothThere() {
         let outcome = outcome()
         let prompt = OutcomeExplainer.prompt(
-            job: job(.completed(outcome), predicted: ["Location", "Camera"]), outcome: outcome, report: outcome.report)
-        #expect(prompt.contains("Predicted losses: Location, Camera"))
+            job: job(.completed(outcome), predicted: ["Location", "Camera make", "Trip to Anna"]), outcome: outcome,
+            report: outcome.report)
+        #expect(prompt.contains("Predicted losses: Location, Camera make, Other metadata"))
+        #expect(!prompt.contains("Anna"))
         #expect(prompt.contains("Actual losses: Location"))
     }
 
@@ -80,7 +140,7 @@ import Testing
             job: job(.completed(outcome)), outcome: outcome, report: outcome.report)
         #expect(text == "Location was lost because the format can't hold it.")
         #expect(client.prompts.count == 1)
-        #expect(client.prompts[0].contains("Location was lost"))
+        #expect(client.prompts[0].contains("Actual losses: Location"))
         #expect(client.instructions[0].contains("sentences"))
     }
 
@@ -147,7 +207,7 @@ import Testing
         let explanations = OutcomeExplanations(explainer: OutcomeExplainer(client: client))
         var job = job(.failed(reason: "Disk full"))
         _ = await explanations.explain(job: job, outcome: nil)
-        job.state = .failed(reason: "Out of memory")
+        job.state = .failed(reason: "Already small")
         _ = await explanations.explain(job: job, outcome: nil)
         #expect(client.callCount == 2)
     }

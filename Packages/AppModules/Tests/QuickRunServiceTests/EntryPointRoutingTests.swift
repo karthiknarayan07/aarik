@@ -30,6 +30,12 @@ import Testing
         #expect(LaunchWindowPlan.plan(openedFileCount: 2, hasNotificationResponse: false) == .stayHidden)
         #expect(LaunchWindowPlan.plan(openedFileCount: 2, hasNotificationResponse: true) == .show)
         #expect(LaunchWindowPlan.plan(openedFileCount: 0, hasNotificationResponse: true) == .show)
+        // An intent run that started the launch is a quick run too; a notification click still needs the window.
+        #expect(
+            LaunchWindowPlan.plan(openedFileCount: 0, hasNotificationResponse: false, hasIntentRun: true)
+                == .stayHidden)
+        #expect(
+            LaunchWindowPlan.plan(openedFileCount: 0, hasNotificationResponse: true, hasIntentRun: true) == .show)
     }
 
     @Test func aWindowIsOnScreenOnlyWhenShownNotMinimizedAndTheAppIsNotHidden() {

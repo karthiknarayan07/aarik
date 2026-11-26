@@ -54,5 +54,6 @@ Format with `swift format -i <files>`. Do not open or launch the app from an aut
 ## Status of the hardening work
 
 `docs/superpowers/plans/2026-11-25-plan-6-stability-performance.md`. Done: sanitizer CI jobs, warnings as errors,
-scheme diagnostics, update relaunch held while work runs, disk-space preflight, signposts and performance tests
-(launch-time test waits for the `ui-tests` branch). Planned (not in the code): sleep and thermal handling.
+scheme diagnostics, update relaunch held while work runs, disk-space preflight, signposts and performance tests,
+sleep prevention, thermal and battery pauses, the speed setting and the quit confirmation (`AppCore/Pressure`), and
+the engine stall watchdog.

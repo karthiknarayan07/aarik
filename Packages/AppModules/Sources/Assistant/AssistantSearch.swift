@@ -21,6 +21,12 @@ public final class AssistantSearch {
     public private(set) var tokens: [FilterToken] = []
     /// What is shown, in a sentence, plus notes on anything dropped; empty when nothing was applied.
     public private(set) var note = ""
+    /// Filters were applied by `show` (an Overview group's "Show"), not by the model. They stay as search tokens
+    /// the user can remove, whether or not the model is available.
+    public private(set) var isShowingChosenFilters = false
+
+    /// Whether the search field shows these tokens and note: the model's, or ones the user chose to show.
+    public var showsFilters: Bool { isVisible || isShowingChosenFilters }
 
     @ObservationIgnored private var filters = LibraryFilters()
     @ObservationIgnored private var shrunkIDs: Set<UUID> = []
@@ -30,6 +36,12 @@ public final class AssistantSearch {
     public init(availability: AssistantAvailability, translator: QueryTranslator) {
         self.availability = availability
         self.translator = translator
+    }
+
+    /// The search field gained focus: reads the model's availability again, so a person who turned Apple
+    /// Intelligence on or off in System Settings sees the button appear or go without leaving the app.
+    public func searchFieldGainedFocus() {
+        availability.refresh()
     }
 
     /// Return in the search field goes to the model only for something that reads as a sentence.
@@ -75,8 +87,28 @@ public final class AssistantSearch {
         }
         self.shrunkIDs = shrunkIDs ?? []
         filters = result.filters
+        isShowingChosenFilters = false
         apply(browser: browser, sidebarBadge: sidebarBadge)
         note = ([result.echo] + result.dropped).joined(separator: " ")
+    }
+
+    /// Applies filters the user chose to show (an Overview group's "Show"), as search tokens they can remove. No
+    /// model is involved, so the tokens stay when the model is unavailable. Replaces whatever was applied before.
+    public func show(
+        _ filters: LibraryFilters, browser: LibraryBrowser, sidebarBadge: MediaBadge?, shrunkIDs: Set<UUID>
+    ) {
+        generation += 1
+        isWorking = false
+        guard !filters.isEmpty else {
+            clear(browser: browser, sidebarBadge: sidebarBadge)
+            browser.search = ""
+            return
+        }
+        self.shrunkIDs = shrunkIDs
+        self.filters = filters
+        apply(browser: browser, sidebarBadge: sidebarBadge)
+        isShowingChosenFilters = true
+        note = filters.echo
     }
 
     /// The user removed tokens in the search field: drop those filters.
@@ -104,7 +136,7 @@ public final class AssistantSearch {
 
     /// Call when availability may have changed or a page appears: if the model went away, so do its filters.
     public func availabilityChanged(browser: LibraryBrowser, sidebarBadge: MediaBadge?) {
-        if !isVisible { reset(browser: browser, sidebarBadge: sidebarBadge) }
+        if !showsFilters { reset(browser: browser, sidebarBadge: sidebarBadge) }
     }
 
     private func apply(browser: LibraryBrowser, sidebarBadge: MediaBadge?) {
@@ -120,6 +152,7 @@ public final class AssistantSearch {
     private func clear(browser: LibraryBrowser, sidebarBadge: MediaBadge?) {
         let hadApplied = hasApplied
         hasApplied = false
+        isShowingChosenFilters = false
         filters = LibraryFilters()
         tokens = []
         note = ""

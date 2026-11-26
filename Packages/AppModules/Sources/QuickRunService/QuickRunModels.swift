@@ -1,6 +1,7 @@
 import AppCore
 import DownscaleVideo
 import Foundation
+import MediaEngine
 
 /// A file a quick run left out, and why.
 public struct QuickRunSkip: Codable, Sendable, Equatable {
@@ -18,10 +19,28 @@ public struct QuickRunSkip: Codable, Sendable, Equatable {
 public struct QuickRunOverrides: Sendable, Equatable {
     public var preset: Preset?
     public var saveLocation: SaveLocation?
+    /// The format to write; nil keeps the preset's own (HEVC).
+    public var codec: VideoCodec?
 
-    public init(preset: Preset? = nil, saveLocation: SaveLocation? = nil) {
+    public init(preset: Preset? = nil, saveLocation: SaveLocation? = nil, codec: VideoCodec? = nil) {
         self.preset = preset
         self.saveLocation = saveLocation
+        self.codec = codec
+    }
+}
+
+/// A video in the Photos library, as a quick run needs to know it. Nothing here is the video itself.
+public struct QuickRunPhotoVideo: Sendable, Equatable {
+    public let assetID: String
+    public let name: String
+    public let isCinematic: Bool
+    public let isHDR: Bool
+
+    public init(assetID: String, name: String, isCinematic: Bool, isHDR: Bool) {
+        self.assetID = assetID
+        self.name = name
+        self.isCinematic = isCinematic
+        self.isHDR = isHDR
     }
 }
 
@@ -47,13 +66,30 @@ public struct QuickRunReceipt: Sendable, Equatable {
     public let skipped: [QuickRunSkip]
     /// Sentences about how the run differs from the saved settings, such as a Replace turned into a copy.
     public let notes: [String]
+    /// Whether the queue was started for this run. When it wasn't (auto-start is off), the jobs wait until the user
+    /// resumes the queue, so nothing should wait for them to finish.
+    public let startedQueue: Bool
 
-    public init(runID: UUID, queuedJobIDs: [UUID], skipped: [QuickRunSkip], notes: [String]) {
+    public init(
+        runID: UUID, queuedJobIDs: [UUID], skipped: [QuickRunSkip], notes: [String], startedQueue: Bool = true
+    ) {
         self.runID = runID
         self.queuedJobIDs = queuedJobIDs
         self.skipped = skipped
         self.notes = notes
+        self.startedQueue = startedQueue
     }
+}
+
+/// How waiting for a run ended.
+public enum QuickRunWait: Sendable, Equatable {
+    /// Every job ended. `outputs` are the files the converted ones made; `converted` counts every converted job,
+    /// Photos ones too (their copies are in Photos or in the folder chosen, not in `outputs`).
+    case finished(outputs: [URL], converted: Int)
+    /// The queue is paused and none of the run's jobs is running, so nothing will move until the user resumes.
+    case paused
+    /// The queue stopped under the wait: the app is quitting, or the wait was cancelled.
+    case interrupted
 }
 
 /// Where a quick run was started from.
@@ -119,6 +155,7 @@ public protocol QuickRunQueue: Sendable {
     var jobs: [Job] { get async }
     func enqueue(_ jobs: [Job]) async -> [Job]
     func resume() async
+    func isPaused() async -> Bool
     func updates() async -> AsyncStream<[Job]>
 }
 

@@ -42,7 +42,7 @@ public struct VideoDownscaler: Sendable {
         // shared pool (`BlockingWorkExecutor`).
         let slots = self.slots ?? WorkSlots.downscales
         await slots.acquire()
-        let executor = BlockingWorkExecutor(label: "downscale \(output.lastPathComponent)")
+        let executor = BlockingWorkExecutor(label: "downscale \(output.lastPathComponent)", qos: DownscaleThrottle.qos)
         // The job runs as its own task, raced against a watchdog that reads its heartbeat. If the job is stuck in a
         // call that can't be interrupted (`copyNextSampleBuffer`, `completeFrames`), the watchdog fails this call
         // anyway, so the slot below is released; the stuck task is abandoned and ends when its call returns.

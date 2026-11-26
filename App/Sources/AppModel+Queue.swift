@@ -12,6 +12,7 @@ extension AppModel {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
+        await startPressure()
         await quickRun.start()
         let queue = self.queue
         let loadError = await queue.loadError
@@ -24,8 +25,23 @@ extension AppModel {
         if let loadError {
             alert = AppAlert(title: "Couldn't read the queue", message: loadError)
         }
+        // Copies of action inputs that no waiting job reads are left over from a crash or quit.
+        let stillRead = await queue.jobs.filter(StagedInputs.isNeeded(by:)).map(\.source)
+        let staged = stagedInputs
+        await Task.detached(priority: .utility) { staged.sweep(keeping: stillRead) }.value
         // A queue created paused (auto-start off) waits for Resume.
         if !isQueuePaused { await queue.resume() }
+        hasFinishedStarting = true
+        let waiters = startWaiters
+        startWaiters = []
+        for waiter in waiters { waiter.resume() }
+    }
+
+    /// Returns once `start()` has finished: the work-folder sweep is done and the queue is running, so what an
+    /// entry point adds can't start a job too early.
+    func waitUntilStarted() async {
+        guard !hasFinishedStarting else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
     }
 
     /// Stops scanning (items found so far stay), lets library saves finish, and stops the queue before the app
@@ -40,7 +56,7 @@ extension AppModel {
 
     private func receive(_ jobs: [Job]) {
         self.jobs = jobs
-        relaunchGate.update(jobs: jobs, isQueuePaused: isQueuePaused)
+        refreshQueuePause()
         activity = ActivitySummary(jobs: jobs)
         // A saved copy is only needed while its job can still be put back in the queue.
         if !queueLoadFailed {
@@ -54,7 +70,7 @@ extension AppModel {
                     }.map(\.id)))
         }
         pendingOriginals = pendingDeletions.all
-        clearStaleQuickRunStatus(jobs: jobs)
+        menuBarRuns.dropStale(presentJobs: Set(jobs.map(\.id)))
         // A quick run announces itself; the generic "Queue finished" is for the window's jobs.
         let quickRunJobs = quickRunStore.jobIDs
         let windowJobs = quickRunJobs.isEmpty ? jobs : jobs.filter { !quickRunJobs.contains($0.id) }
@@ -67,6 +83,7 @@ extension AppModel {
             moveOriginalsAfterRun()
         }
         reconcileReplacedFiles(jobs)
+        if !stagedWatch.isEmpty { Task { await releaseStagedInputs() } }
     }
 
     /// A Replace put a smaller file where a library item was: update that item in place. The item is found by

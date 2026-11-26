@@ -14,8 +14,9 @@ public struct OutcomeExplanation: Sendable, Equatable {
 /// Explains a result in two to four plain sentences, from the job's own report: reason, notes and warnings,
 /// predicted versus actual losses, sizes and preset.
 ///
-/// The prompt holds metadata names and sizes only: never a file name or path, and never a metadata value such as
-/// a location. Without an answer (error, refusal, timeout) the result's existing text is shown instead.
+/// The prompt is built from structured fields only (see `prompt`): never a file name or path, never a metadata
+/// value such as a location, and never the result's free-text reasons. Without an answer (error, refusal,
+/// timeout) the result's existing text is shown instead.
 public struct OutcomeExplainer: Sendable {
     let client: any LanguageModelClient
     let timeout: Duration
@@ -54,26 +55,31 @@ public struct OutcomeExplainer: Sendable {
 
     // MARK: Prompt
 
+    /// The facts the model reads, built only from structured fields: the result's kind, reason codes (see
+    /// `OutcomeReason`), plain metadata names from `MetadataNames`, sizes, the preset and the codec and
+    /// resolution labels, and the names of predicted and actual losses. The result's own reason, warning and
+    /// note texts are never included: they can hold a file name, a folder or a metadata value.
     static func prompt(job: Job, outcome: JobOutcome?, report: MetadataReport?) -> String {
         let report = report ?? outcome?.report
-        let redact = Redactor(job: job, outcome: outcome)
+        let names = fileNames(of: job, outcome: outcome)
         var lines: [String] = []
         switch job.state {
         case .completed(let done):
             lines.append("Result: \(done.isVerified ? "completed" : "completed with warnings")")
         case .keptAsIs(let reason):
             lines.append("Result: kept as is, no new file was made")
-            lines.append("Reason: \(redact(reason))")
+            lines.append("Reason: \(OutcomeReason.classify(reason, removing: names).sentence)")
         case .failed(let reason):
             lines.append("Result: failed")
-            lines.append("Reason: \(redact(reason))")
+            lines.append("Reason: \(OutcomeReason.classify(reason, removing: names).sentence)")
         case .queued, .running:
             lines.append("Result: not finished")
         }
         if let settings = settings(of: job) {
-            lines.append("Preset: \(settings.custom == nil ? settings.preset.displayName : "Custom settings")")
+            lines.append(contentsOf: settingsLines(settings))
             if let predicted = settings.predictedLost {
-                lines.append("Predicted losses: \(predicted.isEmpty ? "none" : predicted.joined(separator: ", "))")
+                let names = PromptMetadataNames.names(predicted: predicted, keys: settings.predictedLostKeys)
+                lines.append("Predicted losses: \(list(names))")
             }
         }
         if let outcome {
@@ -82,70 +88,53 @@ public struct OutcomeExplainer: Sendable {
             lines.append("Original replaced: \(outcome.replacedOriginal ? "yes" : "no")")
         }
         if let report {
-            lines.append("Actual losses: \(names(report.lost.map(\.displayName)))")
-            lines.append("Changed: \(names(report.changed.map(\.displayName)))")
+            let context = report.kept + report.lost
+            lines.append("Actual losses: \(list(PromptMetadataNames.names(of: report.lost, context: context)))")
+            lines.append("Changed: \(list(PromptMetadataNames.names(of: report.changed, context: context)))")
             lines.append("Kept: \(report.kept.count) items")
         }
         if let outcome {
-            for warning in outcome.warnings { lines.append("Warning: \(redact(warning))") }
-            for note in outcome.notes { lines.append("Note: \(redact(note))") }
+            for reason in codes(outcome.warnings, removing: names) { lines.append("Warning: \(reason.sentence)") }
+            for reason in codes(outcome.notes, removing: names) { lines.append("Note: \(reason.sentence)") }
         }
         return lines.joined(separator: "\n")
     }
 
-    private static func names(_ names: [String]) -> String {
+    /// The codes of some texts, each once, in order; a text the app can't place is one `.other`.
+    private static func codes(_ texts: [String], removing names: [String]) -> [OutcomeReason] {
+        var seen = Set<OutcomeReason>()
+        return texts.map { OutcomeReason.classify($0, removing: names) }.filter { seen.insert($0).inserted }
+    }
+
+    /// The job's own file names, which are taken out of a text before it is matched to a code.
+    static func fileNames(of job: Job, outcome: JobOutcome?) -> [String] {
+        var urls = [job.source, job.sourceUsed]
+        if let outcome {
+            urls.append(outcome.output)
+            if let source = outcome.source { urls.append(source) }
+        }
+        var names = urls.filter(\.isFileURL).map(\.lastPathComponent)
+        if let photosName = settings(of: job)?.photosFileName { names.append(photosName) }
+        return names
+    }
+
+    private static func list(_ names: [String]) -> String {
         names.isEmpty ? "none" : names.joined(separator: ", ")
     }
 
-    private static func settings(of job: Job) -> DownscaleJobSettings? {
-        guard job.toolID == DownscaleTool.toolID else { return nil }
-        return try? JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+    private static func settingsLines(_ settings: DownscaleJobSettings) -> [String] {
+        guard let custom = settings.custom else { return ["Preset: \(settings.preset.displayName)"] }
+        var lines = ["Preset: Custom settings"]
+        lines.append(
+            "Resolution: \(custom.targetShortSide.map { "\($0)p short side" } ?? "kept as in the original")")
+        lines.append("Codec: \(custom.codec == .h264Compatible ? "H.264 (SDR)" : "HEVC (keeps HDR)")")
+        if let rate = custom.maxFrameRate { lines.append("Frame rate: capped at \(Int(rate)) fps") }
+        return lines
     }
 
-    /// Takes file names and paths out of text that is about to be sent. Whole names and paths go first; then
-    /// names without their extension, only as whole words of four or more letters (so "video" in "Video track
-    /// was kept" stays unless the file is called exactly that); then anything that looks like a path or a movie
-    /// file name. Text such as "H.264/AAC" is left alone.
-    private struct Redactor {
-        let literals: [String]
-        let stems: [NSRegularExpression]
-
-        static let pathPattern = try? NSRegularExpression(
-            pattern: #"(?<![\w.])/(?:[^\s/]+/)*[^\s/]*"#)
-        static let moviePattern = try? NSRegularExpression(
-            pattern: #"\S+\.(?:mov|mp4|m4v|hevc|mkv|avi)\b"#, options: .caseInsensitive)
-
-        init(job: Job, outcome: JobOutcome?) {
-            var urls = [job.source, job.sourceUsed]
-            if let outcome {
-                urls.append(outcome.output)
-                if let source = outcome.source { urls.append(source) }
-            }
-            var literals: [String] = []
-            for url in urls {
-                literals.append(url.path)
-                literals.append(url.deletingLastPathComponent().path)
-                literals.append(url.lastPathComponent)
-            }
-            self.literals = Array(Set(literals.filter { $0.count > 1 })).sorted { $0.count > $1.count }
-            let stems = Set(urls.map { $0.deletingPathExtension().lastPathComponent }.filter { $0.count >= 4 })
-            self.stems = stems.sorted { $0.count > $1.count }.compactMap {
-                try? NSRegularExpression(
-                    pattern: #"(?<!\w)"# + NSRegularExpression.escapedPattern(for: $0) + #"(?!\w)"#,
-                    options: .caseInsensitive)
-            }
-        }
-
-        func callAsFunction(_ text: String) -> String {
-            var result = text
-            for literal in literals { result = result.replacingOccurrences(of: literal, with: "the file") }
-            for expression in stems + [Self.moviePattern, Self.pathPattern].compactMap({ $0 }) {
-                result = expression.stringByReplacingMatches(
-                    in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "the file")
-            }
-            // Free text is capped, so a long error message can't carry much.
-            return String(result.prefix(300))
-        }
+    private static func settings(of job: Job) -> DownscaleJobSettings? {
+        guard job.toolID == DownscaleTool.toolID || job.toolID == DownscaleTool.photosToolID else { return nil }
+        return try? JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
     }
 
     // MARK: Fallback

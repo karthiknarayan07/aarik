@@ -669,3 +669,110 @@ private actor FloodRunner: JobRunner {
     await waitUntil(queue) { $0.first?.state == .keptAsIs(reason: "done") }
     await queue.shutdown()
 }
+
+// MARK: - Automatic hold (a hot Mac, a low battery)
+
+@Test func automaticHoldFinishesTheCurrentJobThenStartsNothing() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let first = makeJob(name: "a")
+    let second = makeJob(name: "b")
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue([first, second])
+    _ = await starts.next()
+    await queue.setAutomaticHold(true)
+    #expect(await queue.isHeldAutomatically())
+    #expect(await queue.isPaused() == false)
+    await runner.finish(first.id, .success(completed()))
+    await waitUntil(queue) { jobs in
+        if case .completed = jobs[0].state { return true } else { return false }
+    }
+
+    #expect(await queue.jobs[1].state == .queued)
+    #expect(await runner.events == ["start a", "end a"])
+
+    await queue.setAutomaticHold(false)
+    let startedID = await starts.next()
+    #expect(startedID == second.id)
+    await runner.finish(second.id, .success(completed()))
+    await waitUntil(queue) { $0.allSatisfy { if case .completed = $0.state { true } else { false } } }
+    await queue.shutdown()
+}
+
+@Test func resumeDoesNotLiftAnAutomaticHold() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    await queue.setAutomaticHold(true)
+
+    await queue.enqueue([makeJob(name: "a")])
+    await queue.resume()
+
+    #expect(await queue.jobs.map(\.state) == [.queued])
+    #expect(await runner.events.isEmpty)
+    await queue.shutdown()
+}
+
+@Test func liftingTheAutomaticHoldNeverOverridesTheUsersPause() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    await queue.pause()
+    await queue.setAutomaticHold(true)
+
+    await queue.enqueue([makeJob(name: "a")])
+    await queue.setAutomaticHold(false)
+
+    #expect(await queue.isPaused())
+    #expect(await queue.jobs.map(\.state) == [.queued])
+    #expect(await runner.events.isEmpty)
+    await queue.shutdown()
+}
+
+@Test func theUsersResumeStartsTheQueueOnceTheHoldIsLifted() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let job = makeJob(name: "a")
+    var starts = runner.started.makeAsyncIterator()
+    await queue.pause()
+    await queue.setAutomaticHold(true)
+    await queue.enqueue([job])
+
+    await queue.resume()
+    #expect(await runner.events.isEmpty)
+    await queue.setAutomaticHold(false)
+    let startedID = await starts.next()
+    #expect(startedID == job.id)
+    await runner.finish(job.id, .success(completed()))
+    await waitUntil(queue) { $0.allSatisfy { if case .completed = $0.state { true } else { false } } }
+    await queue.shutdown()
+}
+
+// MARK: - Quitting while converting
+
+@Test func quittingKeepsTheRunningJobAndTheRestOfTheQueueForNextLaunch() async throws {
+    let (store, dir) = try makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let runner = ScriptedRunner()
+    let queue = JobQueue(store: store, runners: ["fake": runner])
+    let jobs = ["a", "b", "c"].map { makeJob(name: $0) }
+    var starts = runner.started.makeAsyncIterator()
+
+    await queue.enqueue(jobs)
+    _ = await starts.next()
+    await queue.shutdown()
+
+    // Saved as queued, in order, ready for the next launch.
+    #expect(store.load().map(\.id) == jobs.map(\.id))
+    #expect(store.load().map(\.state) == [.queued, .queued, .queued])
+    let relaunched = JobQueue(store: store, runners: ["fake": ScriptedRunner()], startPaused: true)
+    #expect(await relaunched.jobs.map(\.state) == [.queued, .queued, .queued])
+    await relaunched.shutdown()
+}

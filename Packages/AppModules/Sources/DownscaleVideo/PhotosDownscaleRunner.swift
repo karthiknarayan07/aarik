@@ -88,6 +88,8 @@ public struct PhotosDownscaleRunner: JobRunner {
     }
 
     static let goneNote = "Original no longer in Photos"
+    static let backupDownloadReason = "its original couldn't be downloaded for the backup"
+    static let albumsWarning = "The new video couldn't be added to the original's albums"
 
     /// Records on a finished job that its original was moved to Recently Deleted.
     public static func markOriginalMoved(_ outcome: inout JobOutcome) {
@@ -233,7 +235,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         } catch PhotoStoreError.notInLibrary {
             throw PhotoFetchError.notInLibrary
         } catch {
-            warnings.append("The new video couldn't be added to the original's albums")
+            warnings.append(Self.albumsWarning)
         }
         // Throws when Photos refuses, or when the new video doesn't check out (it is then removed again).
         let newID = try await Signposts.interval(.save) {
@@ -302,7 +304,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         fetcher: PhotoInputFetcher, phase: @escaping @Sendable (String?) -> Void
     ) async throws {
         if !outcome.warnings.isEmpty {
-            outcome.warnings.append(Self.keptBecause("the copy couldn't be verified"))
+            outcome.warnings.append(Self.keptBecause(DownscaleRunner.unverifiedCopyReason))
         } else if let problem = try await prepareReplace(
             job, id: id, input: input, jobFolder: jobFolder, fetcher: fetcher, phase: phase)
         {
@@ -346,7 +348,7 @@ public struct PhotosDownscaleRunner: JobRunner {
                     } catch PhotoFetchError.cancelled {
                         throw CancellationError()
                     } catch {
-                        return Self.keptBecause("its original couldn't be downloaded for the backup")
+                        return Self.keptBecause(Self.backupDownloadReason)
                     }
                 }
                 try Task.checkCancellation()
@@ -441,7 +443,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         try core.diskSpace.verify(needs)
     }
 
-    private static func keptBecause(_ reason: String) -> String {
+    static func keptBecause(_ reason: String) -> String {
         "The original was kept because \(reason)"
     }
 

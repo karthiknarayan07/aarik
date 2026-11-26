@@ -3,6 +3,7 @@ import AppUI
 import DownscaleVideo
 import Foundation
 import MediaEngine
+import PhotosLibrary
 
 /// Converts files in the background with the saved defaults, without asking anything or showing a window.
 ///
@@ -56,34 +57,146 @@ public actor QuickRun {
         let (destination, notes) = Self.destination(for: overrides?.saveLocation ?? saved.saveLocation)
 
         let unique = Self.unique(urls)
-        let (accepted, skippedByPlan) = await plan(unique, preset: preset)
-        let batch = JobFactory.makeJobs(
-            for: accepted, settings: DownscaleJobSettings(preset: preset, saveTo: destination), losses: [:],
-            now: now())
+        let (accepted, skippedByPlan) = await plan(unique, preset: preset, codec: overrides?.codec)
+        var jobs: [Job] = []
+        var unreadable: [QuickRunSkip] = []
+        for file in accepted {
+            let batch = JobFactory.makeJobs(
+                for: [(url: file.url, preset: preset)],
+                settings: DownscaleJobSettings(preset: preset, saveTo: destination, custom: file.custom),
+                losses: [:], now: now())
+            jobs += batch.jobs
+            unreadable += batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
+        }
+        return await enqueue(
+            jobs, order: unique, skipped: skippedByPlan + unreadable, notes: notes, startsQueue: saved.startsQueue,
+            origin: origin)
+    }
+
+    /// Plans Photos videos like `run(urls:overrides:)` plans files. Nothing is downloaded: what a video would lose
+    /// comes from what Photos says about it (`PhotosLossCheck`), and the run keeps the original as is when it finds
+    /// more. Copies go to Photos as new videos, or to the folder in `overrides`; never Replace.
+    public func runPhotos(
+        _ videos: [QuickRunPhotoVideo], overrides: QuickRunOverrides?, origin: QuickRunOrigin = .background
+    ) async -> QuickRunReceipt {
+        let saved = await settings()
+        let preset = overrides?.preset ?? saved.preset
+        var seen = Set<String>()
+        let unique = videos.filter { seen.insert($0.assetID).inserted }
+        let destination: PhotosDestination
+        if let location = overrides?.saveLocation, location.choice == .folder, let bookmark = location.folderBookmark {
+            destination = .folder(bookmark: bookmark)
+        } else {
+            destination = .newAsset
+        }
+        var skipped: [QuickRunSkip] = []
+        var accepted: [QuickRunPhotoVideo] = []
+        for video in unique {
+            let lost = PhotosLossCheck.lostNames(isCinematic: video.isCinematic, isHDR: video.isHDR, custom: nil)
+            if lost.isEmpty {
+                accepted.append(video)
+            } else {
+                skipped.append(
+                    QuickRunSkip(
+                        url: PhotoAssetURL.url(for: video.assetID), reason: "Would lose " + lost.joined(separator: ", ")
+                    ))
+            }
+        }
+        let jobs = PhotosJobFactory.makeJobs(
+            for: accepted.map { (assetID: $0.assetID, name: $0.name, preset: preset) },
+            settings: DownscaleJobSettings(preset: preset, saveTo: .nextToOriginal), destination: destination,
+            lost: [:], now: now())
+        // The saved Save to is for files; say so when it isn't what the copies got.
+        var notes: [String] = []
+        if overrides?.saveLocation == nil {
+            switch saved.saveLocation.choice {
+            case .nextToOriginal: break
+            case .folder: notes.append("Saved as new videos in Photos: the Save to folder is for files.")
+            case .replace:
+                notes.append("Saved as new videos in Photos: replacing originals needs your confirmation in the app.")
+            }
+        }
+        return await enqueue(
+            jobs, order: unique.map { PhotoAssetURL.url(for: $0.assetID) }, skipped: skipped, notes: notes,
+            startsQueue: saved.startsQueue, origin: origin)
+    }
+
+    /// Remembers the run, adds its jobs to the queue (skipping what is already in it) and starts the queue.
+    private func enqueue(
+        _ jobs: [Job], order: [URL], skipped skippedByPlan: [QuickRunSkip], notes: [String], startsQueue: Bool,
+        origin: QuickRunOrigin
+    ) async -> QuickRunReceipt {
         // Remembered before the jobs exist in the queue, so the app never sees them as the window's own jobs, and
         // held back from `refresh` until the run is complete.
-        let unreadable = batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
         let runID = UUID()
         store.add(
             QuickRunRecord(
-                runID: runID, createdAt: now(), jobIDs: batch.jobs.map(\.id), skipped: [], notes: notes,
-                origin: origin))
+                runID: runID, createdAt: now(), jobIDs: jobs.map(\.id), skipped: [], notes: notes, origin: origin))
         starting.insert(runID)
-        let added = await queue.enqueue(batch.jobs)
+        let added = await queue.enqueue(jobs)
         let addedSources = Set(added.map(\.source))
-        let duplicates = batch.jobs.filter { !addedSources.contains($0.source) }.map {
+        let duplicates = jobs.filter { !addedSources.contains($0.source) }.map {
             QuickRunSkip(url: $0.source, reason: "Already in the queue")
         }
-        let skipped = Self.inOrder(unique, skippedByPlan + unreadable + duplicates)
+        let skipped = Self.inOrder(order, skippedByPlan + duplicates)
         store.update(runID) {
             $0.jobIDs = added.map(\.id)
             $0.skipped = skipped
         }
         starting.remove(runID)
-        if saved.startsQueue, !added.isEmpty { await queue.resume() }
+        if startsQueue, !added.isEmpty { await queue.resume() }
         // A run with nothing queued is done now; one whose jobs already finished is too.
         await refresh()
-        return QuickRunReceipt(runID: runID, queuedJobIDs: added.map(\.id), skipped: skipped, notes: notes)
+        return QuickRunReceipt(
+            runID: runID, queuedJobIDs: added.map(\.id), skipped: skipped, notes: notes, startedQueue: startsQueue)
+    }
+
+    /// Waits until every job of the run has ended (a job removed from the queue counts as ended), or until it is
+    /// clear that waiting would not end: the queue is paused with none of the run's jobs running (checked on every
+    /// queue change and every `pollInterval`, because pausing is not a queue change), or the queue stopped.
+    public func wait(for receipt: QuickRunReceipt, pollInterval: Duration = .seconds(1)) async -> QuickRunWait {
+        let wanted = receipt.queuedJobIDs
+        guard !wanted.isEmpty else { return .finished(outputs: [], converted: 0) }
+        let queue = self.queue
+        return await withTaskGroup(of: QuickRunWait?.self) { group in
+            group.addTask {
+                for await jobs in await queue.updates() {
+                    if let done = await Self.decide(wanted, jobs: jobs, queue: queue) { return done }
+                }
+                return .interrupted
+            }
+            group.addTask {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: pollInterval)
+                    if Task.isCancelled { break }
+                    if let done = await Self.decide(wanted, jobs: await queue.jobs, queue: queue) { return done }
+                }
+                return .interrupted
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? .interrupted
+        }
+    }
+
+    private static func decide(_ wanted: [UUID], jobs: [Job], queue: any QuickRunQueue) async -> QuickRunWait? {
+        let byID = Dictionary(jobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let present = wanted.compactMap { byID[$0] }
+        if !present.contains(where: { result(of: $0) == nil }) {
+            let outputs = present.compactMap { job -> URL? in
+                guard job.source.isFileURL, case .completed(let outcome) = job.state else { return nil }
+                return outcome.output
+            }
+            let converted = present.filter { job in
+                if case .completed = job.state { true } else { false }
+            }.count
+            return .finished(outputs: outputs, converted: converted)
+        }
+        let running = present.contains { job in
+            if case .running = job.state { true } else { false }
+        }
+        if !running, await queue.isPaused() { return .paused }
+        return nil
     }
 
     /// Posts the notification of every run whose jobs have all finished and that wasn't announced yet. The queue's
@@ -135,8 +248,15 @@ public actor QuickRun {
 
     static let unreadable = "Couldn't be read as a video"
 
-    /// Splits `urls` into the ones to convert and the ones to skip, with the reason.
-    private func plan(_ urls: [URL], preset: Preset) async -> ([(url: URL, preset: Preset)], [QuickRunSkip]) {
+    /// A file to convert, with the custom spec its format needs (nil: the preset's own).
+    struct Accepted {
+        let url: URL
+        let custom: DownscaleSpec?
+    }
+
+    /// Splits `urls` into the ones to convert and the ones to skip, with the reason. With H.264 asked for, each
+    /// file's spec is its preset's with the codec changed, so an HDR clip is judged by what H.264 drops.
+    private func plan(_ urls: [URL], preset: Preset, codec: VideoCodec?) async -> ([Accepted], [QuickRunSkip]) {
         var sources: [(id: URL, source: SavingsCalculator.Source)] = []
         var skipped: [QuickRunSkip] = []
         for url in urls {
@@ -147,27 +267,40 @@ public actor QuickRun {
             }
         }
         let fallbacks = await LossCheck.quickTimeFallbacks(among: sources.map { (id: $0.id, url: $0.id) })
-        let losses = Dictionary(
-            uniqueKeysWithValues: LossCheck.losses(
-                for: sources.map { (id: $0.id, source: $0.source, preset: preset) }, quickTimeFallbacks: fallbacks
-            ).map { ($0.id, $0) })
-        var accepted: [(url: URL, preset: Preset)] = []
+        var accepted: [Accepted] = []
         for (url, source) in sources {
+            let custom = Self.customSpec(for: source, preset: preset, codec: codec)
             let decision = SavingsCalculator.decision(
-                byteSize: source.byteSize, inventory: source.inventory, preset: preset,
+                byteSize: source.byteSize, inventory: source.inventory, preset: preset, custom: custom,
                 fallsBackToQuickTime: fallbacks.contains(url))
             switch decision {
             case .keptAsIs(let reason):
                 skipped.append(QuickRunSkip(url: url, reason: reason))
             case .convert:
-                if let loss = losses[url] {
+                let loss = LossCheck.losses(
+                    for: [(id: url, source: source)], preset: preset, custom: custom,
+                    quickTimeFallbacks: fallbacks.intersection([url])
+                ).first
+                if let loss {
                     skipped.append(QuickRunSkip(url: url, reason: "Would lose " + loss.lost.joined(separator: ", ")))
                 } else {
-                    accepted.append((url, preset))
+                    accepted.append(Accepted(url: url, custom: custom))
                 }
             }
         }
         return (accepted, skipped)
+    }
+
+    /// The preset's spec for this file with the codec changed and the bit rate raised the way the Advanced Format
+    /// picker does; nil when the codec is not changed (HEVC is what every preset produces).
+    static func customSpec(
+        for source: SavingsCalculator.Source, preset: Preset, codec: VideoCodec?
+    ) -> DownscaleSpec? {
+        guard codec == .h264Compatible else { return nil }
+        var spec = preset.spec(for: source.inventory, byteSize: source.byteSize)
+        spec.codec = .h264Compatible
+        spec.averageBitRate = Int((Double(spec.averageBitRate) * AdvancedOptions.h264BitRateFactor).rounded())
+        return spec
     }
 
     /// Replace needs the window's confirmation, so a quick run saves next to the original instead; so does a
@@ -196,11 +329,15 @@ public actor QuickRun {
     /// Skips sorted as the files were given.
     private static func inOrder(_ urls: [URL], _ skips: [QuickRunSkip]) -> [QuickRunSkip] {
         let position = Dictionary(
-            urls.enumerated().map { ($1.standardizedFileURL.path, $0) }, uniquingKeysWith: { first, _ in first })
+            urls.enumerated().map { (key(of: $1), $0) }, uniquingKeysWith: { first, _ in first })
         return skips.enumerated().sorted {
-            (position[$0.element.url.standardizedFileURL.path] ?? 0, $0.offset)
-                < (position[$1.element.url.standardizedFileURL.path] ?? 0, $1.offset)
+            (position[key(of: $0.element.url)] ?? 0, $0.offset) < (position[key(of: $1.element.url)] ?? 0, $1.offset)
         }.map(\.element)
+    }
+
+    /// A file by its standardized path; a Photos address by itself.
+    private static func key(of url: URL) -> String {
+        url.isFileURL ? url.standardizedFileURL.path : url.absoluteString
     }
 
     // MARK: - Notification
