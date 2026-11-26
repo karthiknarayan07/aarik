@@ -41,7 +41,7 @@ private struct NotificationsHelpSection: View {
             } label: {
                 Text("Quick Run Notifications")
                 Text(
-                    "A quick run says how it went in one notification, and stays quiet while the window is in front. "
+                    "A quick run says how it went in one notification. It stays quiet while the window is in front, or, for a run started from the menu bar, while its panel is open. "
                         + "If none arrive, allow notifications for the app in System Settings.")
             }
         }

@@ -113,6 +113,17 @@ import Testing
         #expect(!MovieDropFilter.mightContainMovie([text]))
     }
 
+    @Test func theDropPanelRefusesItemsThatNameANonMovieType() {
+        let movie = ["public.file-url", "com.apple.quicktime-movie"]
+        #expect(MovieDropFilter.providersMightHoldMovie([movie]))
+        #expect(MovieDropFilter.providersMightHoldMovie([["public.jpeg", "public.file-url"], movie]))
+        #expect(!MovieDropFilter.providersMightHoldMovie([["public.jpeg", "public.file-url"]]))
+        #expect(!MovieDropFilter.providersMightHoldMovie([["public.folder", "public.file-url"]]))
+        // A file address and nothing else says nothing against it.
+        #expect(MovieDropFilter.providersMightHoldMovie([["public.file-url"]]))
+        #expect(!MovieDropFilter.providersMightHoldMovie([]))
+    }
+
     @Test func systemSettingsLinksPointAtTheRightPanes() {
         #expect(SystemSettingsPane.keyboard?.absoluteString.hasPrefix("x-apple.systempreferences:") == true)
         #expect(

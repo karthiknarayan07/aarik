@@ -73,20 +73,28 @@ import Testing
         #expect(board.entries.map(\.id) == [first.entry])
     }
 
-    @Test func rejectedItemsAreReportedAsSkippedNotDroppedSilently() {
+    @Test func rejectedItemsAreCountedSeparatelyFromTheSkippedFiles() {
         var board = MenuBarRunBoard()
         let none = board.begin(files: 2)
         board.checked(none, movies: 0, rejected: 2, now: start)
-        #expect(board.notice?.text == "Nothing to shrink, 2 skipped")
-        // Mixed: they count in the run's tally.
+        #expect(board.notice?.text == "Nothing to shrink, 2 items weren't videos")
+        // Mixed: they are said apart from the skipped files, which are the ones Show Skipped can open.
         let entry = board.begin(files: 3)
         board.checked(entry, movies: 1, rejected: 2, now: start)
         let run = UUID()
         board.queued(entry, runID: run, jobIDs: [UUID()], skipped: 0, now: start, popoverVisible: false)
         board.finished(runID: run, tally: tally(1), now: start, popoverVisible: false)
-        #expect(board.lines == ["Done: 1 shrunk, 2 skipped"])
+        #expect(board.lines == ["Done: 1 shrunk", "2 items weren't videos"])
         // Nothing of those can be reviewed in the window: no run holds them.
         #expect(board.reviewRunIDs.isEmpty)
+        let single = board.begin(files: 1)
+        board.checked(single, movies: 0, rejected: 1, now: start)
+        #expect(board.notice?.text == "Nothing to shrink, 1 item wasn't a video")
+    }
+
+    @Test func theDoneTextIsWhatVoiceOverHears() {
+        #expect(
+            MenuBarRunBoard.doneText(QuickRunTally(converted: 2, skipped: 1, failed: 0)) == "Done: 2 shrunk, 1 skipped")
     }
 
     @Test func theBriefMessageGoesByItself() {

@@ -39,6 +39,19 @@ extension MovieDropFilter {
         return values.contentType
     }
 
+    /// Whether a drag whose items advertise these type identifiers (one list per item, as a drop target sees them
+    /// without reading any file) might hold a movie. An item counts when one of its types is a movie, or when it
+    /// names no real content type (only a file address, say), because then nothing says it isn't one. A folder, an
+    /// image or a document names its type and is refused.
+    public static func providersMightHoldMovie(_ typeIdentifiers: [[String]]) -> Bool {
+        typeIdentifiers.contains { identifiers in
+            let types = identifiers.compactMap { UTType($0) }
+            if types.contains(where: { $0.conforms(to: .movie) }) { return true }
+            let uninformative: [UTType] = [.fileURL, .url, .item, .data, .content]
+            return types.allSatisfy { type in type.isDynamic || uninformative.contains(type) }
+        }
+    }
+
     /// Splits `urls` into the movies and everything else (folders, packages, unreadable files, other types). Reads
     /// the disk, so call it off the main thread.
     public static func partition(_ urls: [URL]) -> (movies: [URL], others: [URL]) {

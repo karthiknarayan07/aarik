@@ -57,16 +57,7 @@ struct MenuBarPanel: View {
         .frame(width: 300, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(AppModel.displayName) menu bar")
-        .dropDestination(for: URL.self) { urls, _ in
-            // Any file goes to the check, which runs off the main thread: a drop with no video says so, and
-            // anything that isn't one is counted as skipped.
-            let files = urls.filter(\.isFileURL)
-            guard !files.isEmpty else { return false }
-            model.runFromMenuBar(files)
-            return true
-        } isTargeted: {
-            isDropTargeted = $0
-        }
+        .onDrop(of: [.fileURL], delegate: PopoverDropDelegate(model: model, isTargeted: $isDropTargeted))
     }
 
     /// The runs started from the menu bar: what they are doing, then how they ended in one tally, with the skipped
@@ -168,5 +159,39 @@ struct MenuBarPanel: View {
             let urls = panel.urls
             Task { @MainActor in model.runFromMenuBar(urls) }
         }
+    }
+}
+
+/// The popover's drop target. Like the status icon it refuses a drag that names a type other than a movie (a folder,
+/// an image), judged from the types the drag advertises, so no file is read while the pointer moves. The files
+/// themselves are checked before the run starts.
+private struct PopoverDropDelegate: DropDelegate {
+    let model: AppModel
+    @Binding var isTargeted: Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        MovieDropFilter.providersMightHoldMovie(
+            info.itemProviders(for: [.fileURL]).map(\.registeredTypeIdentifiers))
+    }
+
+    func dropEntered(info: DropInfo) { isTargeted = true }
+
+    func dropExited(info: DropInfo) { isTargeted = false }
+
+    func performDrop(info: DropInfo) -> Bool {
+        isTargeted = false
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+        Task { @MainActor in
+            var urls: [URL] = []
+            for provider in providers {
+                let url: URL? = await withCheckedContinuation { continuation in
+                    _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
+                }
+                if let url { urls.append(url) }
+            }
+            if !urls.isEmpty { model.runFromMenuBar(urls) }
+        }
+        return true
     }
 }

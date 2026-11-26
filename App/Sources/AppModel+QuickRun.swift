@@ -120,6 +120,7 @@ extension AppModel {
         if notice.origin == .statusItem {
             menuBarRuns.finished(
                 runID: notice.runID, tally: notice.tally, now: Date(), popoverVisible: isStatusPopoverVisible)
+            announce(MenuBarRunBoard.doneText(notice.tally))
         }
         guard
             NotificationPolicy.shouldPost(
@@ -129,5 +130,18 @@ extension AppModel {
         notifier.post(
             title: notice.title, body: notice.body, category: QuickRunNotice.category,
             userInfo: [QuickRunNotice.runIDKey: notice.runID.uuidString])
+    }
+}
+
+extension AppModel {
+    /// Says `text` to VoiceOver, so a person who dropped videos hears the result without going back to the popover.
+    func announce(_ text: String) {
+        guard NSWorkspace.shared.isVoiceOverEnabled else { return }
+        NSAccessibility.post(
+            element: NSApp as Any, notification: .announcementRequested,
+            userInfo: [
+                .announcement: text,
+                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            ])
     }
 }

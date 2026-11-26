@@ -25,7 +25,7 @@ public struct MenuBarRunBoard: Sendable, Equatable {
         /// The run's jobs, so an entry stuck on "running" can be cleared when they are gone.
         public var jobIDs: Set<UUID>
         /// Items of the drop that looked like movies by name but weren't (a folder named x.mov, an unreadable
-        /// file): reported as skipped.
+        /// file): said so in the status. They aren't files "Show Skipped…" can open.
         public var rejected: Int
         /// Whether the popover was open once the run had finished, so the next opening can clear the line.
         public var seen: Bool
@@ -70,7 +70,7 @@ public struct MenuBarRunBoard: Sendable, Equatable {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         if movies == 0 {
             entries.remove(at: index)
-            let text = rejected > 0 ? "Nothing to shrink, \(rejected) skipped" : "Nothing to shrink"
+            let text = rejected > 0 ? "Nothing to shrink, " + Self.notVideos(rejected) : "Nothing to shrink"
             notice = Notice(text: text, expires: now.addingTimeInterval(Self.noticeLifetime))
         } else {
             entries[index].phase = .checking(files: movies)
@@ -149,21 +149,24 @@ public struct MenuBarRunBoard: Sendable, Equatable {
         var running = 0
         var tally = QuickRunTally(converted: 0, skipped: 0, failed: 0)
         var anyFinished = false
+        var rejected = 0
         for entry in entries {
+            rejected += entry.rejected
             switch entry.phase {
             case .checking(let files): checking += files
             case .running(let videos): running += videos
             case .finished(let result, _):
                 anyFinished = true
                 tally = QuickRunTally(
-                    converted: tally.converted + result.converted,
-                    skipped: tally.skipped + result.skipped + entry.rejected, failed: tally.failed + result.failed)
+                    converted: tally.converted + result.converted, skipped: tally.skipped + result.skipped,
+                    failed: tally.failed + result.failed)
             }
         }
         var lines: [String] = []
         if checking > 0 { lines.append("Checking \(Self.videos(checking))…") }
         if running > 0 { lines.append("Shrinking \(Self.videos(running))…") }
-        if anyFinished { lines.append("Done: " + Self.summary(tally)) }
+        if anyFinished { lines.append(Self.doneText(tally)) }
+        if rejected > 0 { lines.append(Self.notVideos(rejected)) }
         return lines
     }
 
@@ -173,6 +176,13 @@ public struct MenuBarRunBoard: Sendable, Equatable {
             guard case .finished(let tally, _) = entry.phase, tally.skipped > 0 else { return nil }
             return entry.runID
         }
+    }
+
+    /// "Done: 2 shrunk, 1 skipped", as shown and as announced to VoiceOver.
+    public static func doneText(_ tally: QuickRunTally) -> String { "Done: " + summary(tally) }
+
+    private static func notVideos(_ count: Int) -> String {
+        count == 1 ? "1 item wasn't a video" : "\(count) items weren't videos"
     }
 
     private static func videos(_ count: Int) -> String { "\(count) \(count == 1 ? "video" : "videos")" }

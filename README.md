@@ -52,8 +52,9 @@ the window back. The app is listed in Open With as an alternate and never become
 
 **The menu bar item.** The app puts an icon in the menu bar (turn it off in Settings ▸ General ▸ Show in Menu Bar). It
 shows progress while videos convert. Drop videos on the icon, or click it and drop them on the popover, or click
-Choose Videos… in the popover. The popover shows what is running, the queue, Pause Queue and Open Main Window, and
-when a run ends it says how many videos were shrunk or skipped, with Show Skipped… to look at the skipped ones. When
+Choose Videos… in the popover. The popover shows the current job, Pause Queue and Open Main Window, and
+when a run ends it says how many videos were shrunk or skipped, with Show Skipped… to look at the skipped ones, and how
+many dropped items weren't videos. When
 you open the popover with the mouse, macOS keeps the app in the background, so the popover can't take the Esc or Tab
 keys; open it with VoiceOver or from the keyboard (or click its buttons) if you need them.
 
@@ -82,8 +83,9 @@ Quick Action above is the more dependable way to get this into Finder.
   the menu bar popover, opens them in Local Files.
 - It never converts two videos at once: quick runs share the queue with the window. With Start the queue automatically
   off in Settings, quick-run videos wait until you press Resume.
-- It posts one notification per run when it ends, and none while the app's window is in front. If you don't get any,
-  allow notifications for the app in System Settings ▸ Notifications (Settings ▸ General ▸ Notifications has a button).
+- It posts one notification per run when it ends. Runs from the Dock, Open With, Services and Shortcuts post none while
+  the app's window is in front; runs from the menu bar post none while the menu bar panel is open. If you don't get
+  any, allow notifications for the app in System Settings ▸ Notifications (Settings ▸ General ▸ Notifications has a button).
 
 **Because the app is unsigned.** Until a signed release exists, macOS can be stricter with these entry points. Shortcuts,
 Spotlight and Siri may need the app to be in the Applications folder and opened once before they list the action, and
