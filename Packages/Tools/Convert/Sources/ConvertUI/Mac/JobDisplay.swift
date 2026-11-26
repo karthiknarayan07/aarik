@@ -68,6 +68,7 @@ struct PredictedLossBadge: View {
 struct JobThumbnail: View {
     let url: URL
     let thumbnails: ThumbnailCache
+    var size = CGSize(width: 48, height: 32)
     @State private var image: CGImage?
 
     var body: some View {
@@ -78,14 +79,14 @@ struct JobThumbnail: View {
                 Image(systemName: "film").foregroundStyle(.secondary)
             }
         }
-        .frame(width: 48, height: 32)
+        .frame(width: size.width, height: size.height)
         .background(.quaternary)
         .clipShape(.rect(cornerRadius: 4))
         .accessibilityHidden(true)
         // A Photos address isn't a file: it gets the generic icon.
         .task(id: url) {
             guard url.isFileURL else { return image = nil }
-            image = await thumbnails.thumbnail(for: url, maxPixel: 96)
+            image = await thumbnails.thumbnail(for: url, maxPixel: Int(size.width * 2))
         }
     }
 }

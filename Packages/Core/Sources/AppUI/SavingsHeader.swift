@@ -40,6 +40,7 @@ struct SavingsSummary: Equatable {
 public struct SavingsHeader<Accessory: View>: View {
     let summary: SavingsSummary
     let accessory: Accessory
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var horizontalPadding: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var verticalPadding: CGFloat = 10
 
@@ -87,6 +88,8 @@ public struct SavingsHeader<Accessory: View>: View {
                     .font(.title2.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.tint)
+                    .contentTransition(.numericText())
+                    .animation(reduceMotion ? nil : .smooth, value: summary.couldFree)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(summary.title)

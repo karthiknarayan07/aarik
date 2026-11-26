@@ -136,6 +136,11 @@
                             VStack(spacing: 0) {
                                 PhotosHeader(
                                     totalBytes: browser.snapshot.totalBytes, count: browser.snapshot.items.count)
+                                StorageBarLoader(
+                                    items: browser.snapshot.items, preset: model.effectivePreset(for:),
+                                    presetKey: AnyHashable([
+                                        AnyHashable(model.preset), AnyHashable(model.presetOverrides),
+                                    ]))
                                 PhotosNotes(authorization: photos.authorization, indexStatus: photos.indexStatus)
                             }
                         }
@@ -175,8 +180,11 @@
                     sections: sections, selection: $browser.selection, name: \.name,
                     actions: MediaGridActions(open: model.showInPhotos, quickLook: model.quickLookPhotoPoster)
                 ) { item, state in
-                    LibraryTile(item: item, state: state, thumbnails: model.thumbnailSource)
-                        .contextMenu { PhotoTileMenu(model: model, item: item) }
+                    LibraryTile(
+                        item: item, state: state, thumbnails: model.thumbnailSource,
+                        savingsBadge: LibraryInsight.savingsBadge(for: item, preset: model.effectivePreset(for: item))
+                    )
+                    .contextMenu { PhotoTileMenu(model: model, item: item) }
                 }
             }
         }
@@ -334,6 +342,12 @@
                                 "\(items.count) videos · \(ByteFormat.string(items.reduce(0) { $0 + $1.byteSize }))"
                             )
                             .font(.headline)
+                        }
+                    }
+                    if let prediction = LibraryInsight.prediction(for: items, preset: model.effectivePreset(for:)) {
+                        Section {
+                            PredictedSavingsGauge(
+                                prediction: prediction, presetName: model.photoSelectionPreset?.displayName)
                         }
                     }
                     Section {

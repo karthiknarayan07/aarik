@@ -147,3 +147,18 @@ extension LanguageModelClient where Self == SystemLanguageModelClient {
     /// The system's on-device model.
     public static var real: SystemLanguageModelClient { SystemLanguageModelClient() }
 }
+
+/// A model that is never available, for UI tests of a device without Apple Intelligence (`-uiTestingAssistant
+/// unavailable`).
+public struct UnavailableLanguageModelClient: LanguageModelClient {
+    public init() {}
+    public var isAvailable: Bool { false }
+
+    public func respond(to prompt: String, instructions: String) async throws -> String {
+        throw AssistantError.unavailable
+    }
+
+    public func generate<T: Generable & Sendable>(_ prompt: String, instructions: String) async throws -> T {
+        throw AssistantError.unavailable
+    }
+}

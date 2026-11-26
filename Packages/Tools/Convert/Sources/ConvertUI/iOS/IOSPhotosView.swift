@@ -50,7 +50,7 @@
                     }
                 }
             }
-            .navigationTitle(VideoPage.photosVideos.title)
+            .navigationTitle(IOSPage.photos.title)
             .task { await photos.start() }
         }
     }
@@ -113,6 +113,9 @@
 
     private struct IOSPhotosGridView: View {
         @Bindable var model: ConvertModel
+        @State private var opened: UUID?
+        @State private var isSelecting = false
+        @Namespace private var zoom
 
         var body: some View {
             @Bindable var browser = model.photosBrowser
@@ -143,7 +146,18 @@
                 }
             }
             .navigationSubtitle(subtitle)
-            .toolbar { IOSGridToolbar(browser: browser, shareURLs: nil) }
+            .toolbar { IOSGridToolbar(browser: browser, shareURLs: nil, isSelecting: $isSelecting) }
+            .sensoryFeedback(.selection, trigger: browser.selection)
+            .safeAreaInset(edge: .bottom) {
+                IOSSelectionBar(
+                    model: model, count: model.selectedPhotoItems.count, isSelecting: $isSelecting,
+                    clear: { browser.selection = [] })
+            }
+            .animation(.smooth, value: isSelecting)
+            .navigationDestination(item: $opened) { id in
+                IOSVideoDetailView(model: model, id: id)
+                    .navigationTransition(.zoom(sourceID: id, in: zoom))
+            }
             .assistantSearchable(
                 search: model.assistant.photosSearch, browser: browser, sidebarBadge: nil, shrunkIDs: nil
             )
@@ -171,14 +185,19 @@
             } else {
                 MediaGrid(
                     sections: sections, selection: $browser.selection, name: \.name,
-                    actions: MediaGridActions(open: model.showInPhotos, quickLook: model.quickLookPhotoPoster)
+                    actions: MediaGridActions(open: { opened = $0.first }, quickLook: model.quickLookPhotoPoster),
+                    opensOnTap: !isSelecting
                 ) { item, state in
                     LibraryTile(item: item, state: state, thumbnails: model.thumbnailSource)
+                        .matchedTransitionSource(id: item.id, in: zoom)
                         .contextMenu {
                             Button("Add to Queue", systemImage: "plus") { model.addPhotosToQueue(clicked: item) }
                             Divider()
                             Button("Show in Photos", systemImage: "photo.on.rectangle") { model.showInPhotos(item) }
                             Button("Quick Look", systemImage: "eye") { model.quickLookPhotoPoster(of: item) }
+                        } preview: {
+                            LibraryTile(item: item, state: MediaTileState(), thumbnails: model.thumbnailSource)
+                                .frame(width: 280, height: 190)
                         }
                 }
                 .accessibilityElement(children: .contain)

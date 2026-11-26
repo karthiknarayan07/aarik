@@ -40,7 +40,8 @@
         private func available(_ destination: Module.Destination) -> some View {
             let item = row.item
             return HStack {
-                SidebarRowLabel(title: item.title, systemImage: item.systemImage, tint: item.tint)
+                SidebarRowLabel(
+                    title: item.title, systemImage: item.systemImage, tint: item.tint, bounceValue: item.count)
                 if let progress = item.progress {
                     Spacer()
                     ProgressView(value: progress)
@@ -113,11 +114,15 @@
         let title: String
         let systemImage: String
         let tint: SidebarTint?
+        /// The symbol bounces once whenever this changes (a row's count): a finished video.
+        let bounceValue: Int?
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-        public init(title: String, systemImage: String, tint: SidebarTint?) {
+        public init(title: String, systemImage: String, tint: SidebarTint?, bounceValue: Int? = nil) {
             self.title = title
             self.systemImage = systemImage
             self.tint = tint
+            self.bounceValue = bounceValue
         }
 
         public var body: some View {
@@ -127,6 +132,7 @@
                 Image(systemName: systemImage)
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(tint?.color ?? Color.secondary)
+                    .symbolEffect(.bounce, options: .nonRepeating, value: reduceMotion ? 0 : (bounceValue ?? 0))
             }
         }
     }

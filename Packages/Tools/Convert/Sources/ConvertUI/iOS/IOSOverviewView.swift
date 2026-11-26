@@ -11,8 +11,10 @@
     /// iOS Overview: native grouped list showing Photos and Local Files totals, Smart Picks (when Apple Intelligence
     /// is available) or Biggest Groups, Biggest Savings, and Saved So Far.
     struct IOSOverviewView: View {
+        @Environment(\.openToolRoute) private var openRoute
         @Bindable var model: ConvertModel
         @State private var summary: OverviewSummary?
+        @State private var refreshTick = 0
 
         private struct Inputs: Hashable {
             let photosRevision: Int
@@ -50,34 +52,105 @@
                     } else {
                         ProgressView()
                     }
-                } else if let summary {
+                } else {
                     List {
-                        IOSLibraryOverviewSections(model: model, summary: summary)
-                        IOSSmartPicksSection(model: model)
-                        IOSBiggestSavingsSection(summary: summary, reveal: model.reveal)
-                        IOSSavedSoFarSection(savedBytes: summary.savedBytes, conversions: model.activity.completed)
+                        Section {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(IOSGreeting.text())
+                                    .font(.title3.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityAddTraits(.isHeader)
+                                IOSSavingsHero(snapshot: charts, activity: model.activity)
+                            }
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        IOSContinueSection(model: model)
+                        IOSReadySection(model: model)
+                        IOSRecentSection(model: model)
+                        Section {
+                            IOSInsightCards(
+                                snapshot: charts, activity: model.activity,
+                                open: { open($0) })
+                        } header: {
+                            Text("Pinned")
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        Section("Trends") {
+                            IOSTrendCharts(snapshot: charts)
+                        }
+                        if let summary {
+                            IOSSmartPicksSection(model: model)
+                            IOSLibraryOverviewSections(model: model, summary: summary)
+                            IOSBiggestSavingsSection(summary: summary, reveal: model.reveal)
+                        }
                     }
                     .listStyle(.insetGrouped)
-                } else {
-                    ProgressView()
                 }
             }
-            .navigationTitle(VideoPage.overview.title)
+            .navigationTitle("Home")
             .task { await model.photos.start() }
-            .task(id: inputs) {
-                let photos = model.photos.items
-                let files = model.library.items
-                let completed = model.completedJobs.map(\.outcome)
-                let shrunk = model.shrunkIDs(in: model.browser)
-                let analysis = await Self.analyze(
-                    photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-                    custom: model.advanced.spec, completed: completed, shrunk: shrunk)
-                guard !Task.isCancelled else { return }
-                summary = analysis.summary
-                model.assistant.smartPicks.update(
-                    buckets: analysis.buckets, undatedCount: analysis.undated, key: inputs)
+            .task { await cache.load() }
+            // Every few minutes while the page is showing; leaving the page cancels the loop and any refresh.
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.refreshInterval)
+                    guard !Task.isCancelled else { return }
+                    refreshTick += 1
+                }
             }
+            .task(id: RefreshKey(inputs: inputs, tick: refreshTick)) { await refresh() }
             .task(id: picksTrigger) { await model.assistant.smartPicks.generateIfNeeded() }
+        }
+
+        /// Opens one of the tool's pages in the Tools tab.
+        private func open(_ page: IOSPage) {
+            openRoute(ToolRoute(toolID: model.tool.id, page: page.rawValue))
+        }
+
+        private var cache: SavingsStatsCache { model.services.savingsStats }
+
+        /// What the charts draw: the stored numbers at once, then the refreshed ones.
+        private var charts: OverviewCharts? {
+            cache.snapshot.map(OverviewCharts.init(snapshot:))
+        }
+
+        /// How often the numbers are made again while the page is open, besides when something changes.
+        private static let refreshInterval = Duration.seconds(300)
+        /// A burst of changes (a scan, jobs finishing one after another) makes one refresh.
+        private static let debounce = Duration.seconds(1)
+
+        private struct RefreshKey: Hashable {
+            let inputs: Inputs
+            let tick: Int
+        }
+
+        private func refresh() async {
+            let photos = model.photos.items
+            let files = model.library.items
+            let finished = model.completedJobs.map { (addedOn: $0.job.createdAt, outcome: $0.outcome) }
+            let shrunk = model.shrunkIDs(in: model.browser)
+            let preset = model.preset
+            let overrides = model.presetOverrides
+            let custom = model.advanced.spec
+            let key = inputs
+            let model = model
+            // The first read of the page isn't held back: the live groups wait for it.
+            let delay = summary == nil ? Duration.zero : Self.debounce
+            await cache.refresh(after: delay) { [finished] in
+                let analysis = await Self.analyze(
+                    photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
+                    completed: finished.map(\.outcome), shrunk: shrunk)
+                await MainActor.run {
+                    // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
+                    model.assistant.smartPicks.update(
+                        buckets: analysis.buckets, undatedCount: analysis.undated, key: key)
+                    self.summary = analysis.summary
+                }
+                return OverviewCharts.snapshot(summary: analysis.summary, buckets: analysis.buckets, finished: finished)
+            }
         }
 
         @concurrent private static func analyze(
@@ -101,6 +174,7 @@
     }
 
     private struct IOSLibraryOverviewSections: View {
+        @Environment(\.openToolRoute) private var openRoute
         let model: ConvertModel
         let summary: OverviewSummary
 
@@ -132,7 +206,7 @@
                     Text("Add videos or folders from Files.")
                         .foregroundStyle(.secondary)
                     Button("Add Local Files…") {
-                        model.selection = .localFiles
+                        openRoute(model.route(to: .files))
                         model.isImporterPresented = true
                     }
                 } else {
@@ -167,6 +241,7 @@
     }
 
     private struct IOSSmartPicksSection: View {
+        @Environment(\.openToolRoute) private var openRoute
         let model: ConvertModel
 
         private var store: SmartPicksStore { model.assistant.smartPicks }
@@ -187,8 +262,11 @@
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     HStack {
-                                        Button("Show") { model.show(pick.bucket) }
-                                            .buttonStyle(.bordered)
+                                        Button("Show") {
+                                            model.show(pick.bucket)
+                                            openRoute(model.routeToSelection())
+                                        }
+                                        .buttonStyle(.bordered)
                                         Button("Add These to the Queue…") { model.addToQueue(pick.bucket) }
                                             .buttonStyle(.borderedProminent)
                                             .disabled(!model.canAddToQueue(pick.bucket))
@@ -227,8 +305,11 @@
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Button("Show") { model.show(bucket) }
-                                    .buttonStyle(.bordered)
+                                Button("Show") {
+                                    model.show(bucket)
+                                    openRoute(model.routeToSelection())
+                                }
+                                .buttonStyle(.bordered)
                             }
                         }
                     } header: {
@@ -252,6 +333,7 @@
     }
 
     private struct IOSBiggestSavingsSection: View {
+        @Environment(\.openToolRoute) private var openRoute
         let summary: OverviewSummary
         let reveal: (OverviewSummary.Entry) -> Void
 
@@ -307,6 +389,7 @@
     }
 
     private struct IOSOverviewEmptyState: View {
+        @Environment(\.openToolRoute) private var openRoute
         let model: ConvertModel
 
         var body: some View {
@@ -325,7 +408,7 @@
                     Button("Open Photos Settings…") { model.openPhotosAccessSettings() }
                 }
                 Button("Add Local Files…") {
-                    model.selection = .localFiles
+                    openRoute(model.route(to: .files))
                     model.isImporterPresented = true
                 }
             }

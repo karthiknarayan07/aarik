@@ -57,7 +57,9 @@
                         LibraryTile(
                             item: item, state: state, thumbnails: model.thumbnailSource,
                             presetOverride: model.presetOverrides.shownOverride(
-                                for: item.id, default: model.preset)?.displayName
+                                for: item.id, default: model.preset)?.displayName,
+                            savingsBadge: LibraryInsight.savingsBadge(
+                                for: item, preset: model.effectivePreset(for: item))
                         )
                         .contextMenu { TileMenu(model: model, item: item) }
                     }
@@ -66,13 +68,18 @@
             }
             // The header and a problem note sit in the system's bars, so the grid scrolls under them.
             .safeAreaBar(edge: .top) {
-                SavingsHeader(
-                    couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
-                    availableCount: browser.snapshot.items.count(where: \.isAvailable)
-                ) {
-                    PresetPicker("Quality Preset", selection: $model.preset, options: Preset.allCases) {
-                        $0.displayName
+                VStack(spacing: 0) {
+                    SavingsHeader(
+                        couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
+                        availableCount: browser.snapshot.items.count(where: \.isAvailable)
+                    ) {
+                        PresetPicker("Quality Preset", selection: $model.preset, options: Preset.allCases) {
+                            $0.displayName
+                        }
                     }
+                    StorageBarLoader(
+                        items: browser.snapshot.items, preset: model.effectivePreset(for:),
+                        presetKey: AnyHashable([AnyHashable(model.preset), AnyHashable(model.presetOverrides)]))
                 }
             }
             .safeAreaBar(edge: .bottom) {

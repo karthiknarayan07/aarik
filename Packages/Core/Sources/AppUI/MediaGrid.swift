@@ -64,6 +64,8 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     let name: (Item) -> String
     let dragFile: ((Item) -> URL?)?
     let actions: MediaGridActions<Item.ID>
+    /// Touch only: a tap opens the video instead of toggling it, until the caller turns selecting on.
+    let opensOnTap: Bool
     let tile: (Item, MediaTileState) -> Tile
 
     @State private var state = GridSelection<Item.ID>()
@@ -72,6 +74,9 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     @State private var frames = TileFrames<Item.ID>()
     @State private var headerFrames = TileFrames<String>()
     @State private var marquee = MarqueeState<Item.ID>()
+    #if os(iOS)
+        @State private var sweep = TouchSweep()
+    #endif
     @FocusState private var isFocused: Bool
     #if os(macOS)
         @Environment(\.controlActiveState) private var controlActiveState
@@ -85,7 +90,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
     ///   - dragFile: the file a tile drags out, or nil when it has none; the grid doesn't drag out when this is nil.
     public init(
         sections: [MediaSection<Item>], selection: Binding<Set<Item.ID>>, name: @escaping (Item) -> String,
-        dragFile: ((Item) -> URL?)? = nil, actions: MediaGridActions<Item.ID>,
+        dragFile: ((Item) -> URL?)? = nil, actions: MediaGridActions<Item.ID>, opensOnTap: Bool = false,
         @ViewBuilder tile: @escaping (Item, MediaTileState) -> Tile
     ) {
         self.sections = sections
@@ -93,6 +98,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
         self.name = name
         self.dragFile = dragFile
         self.actions = actions
+        self.opensOnTap = opensOnTap
         self.tile = tile
     }
 
@@ -150,6 +156,7 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
                         state.selected = []
                         selection = []
                     }
+                    .simultaneousGesture(sweepGesture)
                 #endif
             }
             .onGeometryChange(for: CGSize.self) {
@@ -191,6 +198,38 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
             .accessibilityAction(named: "Open") { actions.open([id]) }
     }
 
+    // MARK: Touch
+
+    #if os(iOS)
+        /// While selecting, a sideways swipe across the tiles selects (or, starting on a selected tile, deselects) each
+        /// tile it crosses, like Photos. A vertical drag still scrolls.
+        private var sweepGesture: some Gesture {
+            DragGesture(minimumDistance: 12, coordinateSpace: .named(mediaGridSpace))
+                .onChanged { value in
+                    guard !opensOnTap else { return }
+                    if sweep.isActive == nil {
+                        sweep.isActive = abs(value.translation.width) > abs(value.translation.height)
+                        let start = Self.tile(at: value.startLocation, in: frames.values)
+                        sweep.adds = start.map { !selection.contains($0) } ?? true
+                    }
+                    guard sweep.isActive == true,
+                        let id = Self.tile(at: value.location, in: frames.values)
+                    else { return }
+                    if sweep.adds, !selection.contains(id) {
+                        selection.insert(id)
+                    } else if !sweep.adds, selection.contains(id) {
+                        selection.remove(id)
+                    }
+                    state.selected = selection
+                }
+                .onEnded { _ in sweep.isActive = nil }
+        }
+
+        private static func tile(at point: CGPoint, in frames: [Item.ID: CGRect]) -> Item.ID? {
+            frames.first { $0.value.contains(point) }?.key
+        }
+    #endif
+
     // MARK: Mouse
 
     private func click(_ id: Item.ID) {
@@ -198,6 +237,12 @@ public struct MediaGrid<Item: Identifiable, Tile: View>: View where Item.ID: Sen
             let event = NSApp.currentEvent
             click(id, count: event?.clickCount ?? 1, modifiers: Self.clickModifiers(event?.modifierFlags ?? []))
         #else
+            if opensOnTap {
+                state.select(id)
+                selection = state.selected
+                actions.open(selection)
+                return
+            }
             // Touch has no modifier keys, so tapping a tile toggles it in the selection.
             click(id, count: 1, modifiers: .toggle)
         #endif
@@ -411,6 +456,17 @@ private struct DragOutItem<ID: Hashable & Sendable>: ViewModifier {
         #endif
     }
 }
+
+// MARK: - Touch sweep
+
+#if os(iOS)
+    /// One sideways swipe across tiles: whether it selects or deselects, and whether it counts as sideways at all.
+    @MainActor
+    private final class TouchSweep {
+        var isActive: Bool?
+        var adds = true
+    }
+#endif
 
 // MARK: - Marquee state
 

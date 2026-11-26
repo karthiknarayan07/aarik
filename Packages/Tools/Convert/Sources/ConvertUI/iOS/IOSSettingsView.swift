@@ -59,7 +59,7 @@
                     } header: {
                         Text("Performance")
                     } footer: {
-                        Text(speed.summary)
+                        Text(speed.summary(on: DeviceCopy.deviceNoun, hasFan: false))
                     }
                     Section {
                         Picker("Save Converted Files", selection: saveToChoice) {

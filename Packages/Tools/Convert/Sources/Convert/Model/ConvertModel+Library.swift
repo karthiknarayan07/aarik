@@ -46,6 +46,13 @@ extension ConvertModel {
         }
     }
 
+    /// What converting the selected videos of the page showing would free, each with its own preset.
+    public var couldFreeSelected: Int64 {
+        let items = (isPhotosPage ? selectedPhotoItems : selectedItems).filter(\.isAvailable)
+        return presetOverrides.couldFreeBytes(
+            for: items.map { (id: $0.id, source: $0.savingsSource) }, default: preset, custom: advanced.spec)
+    }
+
     /// Visible selected Local Files items, in grid order; a search or filter that hides an item also deselects it
     /// here. Empty on the Videos page, so nothing there reaches the file-based queue, Quick Look or Remove.
     public var selectedItems: [LibraryItem] { isPhotosPage ? [] : browser.selectedItems }

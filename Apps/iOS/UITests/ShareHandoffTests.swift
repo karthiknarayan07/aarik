@@ -16,7 +16,7 @@ final class ShareHandoffTests: AppTestCase {
         XCUIDevice.shared.press(.home)
         app.activate()
 
-        open("Local Files")
+        open("Files")
         XCTAssertTrue(
             tile(named: "handoff-fixture.mov").waitForExistence(timeout: 30), "the staged video wasn't picked up")
     }

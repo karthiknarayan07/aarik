@@ -12,11 +12,11 @@ final class BrowseAndQueueTests: AppTestCase {
         XCTAssertFalse(element(labelContaining: "clip-b").exists, "only the selected video is queued")
     }
 
-    /// The queue offers the sidebar badge and the grid keeps its other video untouched.
+    /// The queue shows the badge and the grid keeps its other video untouched.
     func testQueueingOneVideoLeavesTheOtherInPhotos() throws {
         launch(autoStart: false)
         queuePhotosFixture()
-        open("Videos")
+        open("Photos")
         XCTAssertTrue(tile(named: AppTestCase.secondPhotosFixture).waitForExistence(timeout: 15))
     }
 }

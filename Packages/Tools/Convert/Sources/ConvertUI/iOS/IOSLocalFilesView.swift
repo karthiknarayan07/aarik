@@ -10,6 +10,9 @@
     /// users pick videos to queue (outputs saved to Documents or a chosen folder; Replace disabled).
     struct IOSLocalFilesView: View {
         @Bindable var model: ConvertModel
+        @State private var opened: UUID?
+        @State private var isSelecting = false
+        @Namespace private var zoom
 
         var body: some View {
             @Bindable var browser = model.browser
@@ -27,10 +30,10 @@
                     content(browser: browser, sections: sections)
                 }
             }
-            .navigationTitle(model.selection?.title ?? "Local Files")
+            .navigationTitle(IOSPage.files.title)
             .navigationSubtitle(subtitle)
             .toolbar {
-                IOSGridToolbar(browser: browser, shareURLs: model.shareURLs)
+                IOSGridToolbar(browser: browser, shareURLs: model.shareURLs, isSelecting: $isSelecting)
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         model.isImporterPresented = true
@@ -44,6 +47,17 @@
                 shrunkIDs: { model.shrunkIDs(in: model.browser) }
             )
             .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
+            .sensoryFeedback(.selection, trigger: browser.selection)
+            .safeAreaInset(edge: .bottom) {
+                IOSSelectionBar(
+                    model: model, count: model.selectedItems.count, isSelecting: $isSelecting,
+                    clear: { browser.selection = [] })
+            }
+            .animation(.smooth, value: isSelecting)
+            .navigationDestination(item: $opened) { id in
+                IOSVideoDetailView(model: model, id: id)
+                    .navigationTransition(.zoom(sourceID: id, in: zoom))
+            }
         }
 
         @ViewBuilder
@@ -68,14 +82,21 @@
                 } else {
                     MediaGrid(
                         sections: sections, selection: $browser.selection, name: \.name,
-                        actions: MediaGridActions(open: model.openLocal, quickLook: model.toggleQuickLook)
+                        actions: MediaGridActions(open: { opened = $0.first }, quickLook: model.toggleQuickLook),
+                        opensOnTap: !isSelecting
                     ) { item, state in
                         LibraryTile(
                             item: item, state: state, thumbnails: model.thumbnailSource,
                             presetOverride: model.presetOverrides.shownOverride(
                                 for: item.id, default: model.preset)?.displayName
                         )
-                        .contextMenu { IOSTileMenu(model: model, item: item) }
+                        .matchedTransitionSource(id: item.id, in: zoom)
+                        .contextMenu {
+                            IOSTileMenu(model: model, item: item)
+                        } preview: {
+                            LibraryTile(item: item, state: MediaTileState(), thumbnails: model.thumbnailSource)
+                                .frame(width: 280, height: 190)
+                        }
                     }
                 }
             }
@@ -108,9 +129,17 @@
     struct IOSGridToolbar: ToolbarContent {
         @Bindable var browser: LibraryBrowser
         var shareURLs: [URL]?
+        @Binding var isSelecting: Bool
         @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
         var body: some ToolbarContent {
+            ToolbarItem(placement: .primaryAction) {
+                Button(isSelecting ? "Done" : "Select") {
+                    isSelecting.toggle()
+                    if !isSelecting { browser.selection = [] }
+                }
+                .accessibilityIdentifier("selectToggle")
+            }
             if horizontalSizeClass == .compact {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
