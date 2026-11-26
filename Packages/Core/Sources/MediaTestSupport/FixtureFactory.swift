@@ -7,7 +7,7 @@ import VideoToolbox
 
 public enum FixtureHDR: Sendable { case sdr, hlg }
 
-public struct ClipOptions: Sendable {
+public struct ClipOptions: Sendable, Hashable {
     public var width = 3840
     public var height = 2160
     public var fps = 30
@@ -59,7 +59,7 @@ public struct ClipOptions: Sendable {
 }
 
 /// A file-level metadata item in a given key space, with a UTF-8 string value.
-public struct FixtureMetadataItem: Sendable {
+public struct FixtureMetadataItem: Sendable, Hashable {
     public var keySpace: AVMetadataKeySpace
     public var key: String
     public var value: String
@@ -83,15 +83,24 @@ public enum FixtureFactory {
     public static let timedMetadataIdentifier = "mdta/com.example.fixture.timed"
     private static let sampleRate = 48_000
 
-    /// Writes a new clip (`fixture.mov`, or `.mp4` / `.m4v` per `options.fileType`) into a fresh temporary
-    /// directory and returns its URL.
+    /// Returns a new clip (`fixture.mov`, or `.mp4` / `.m4v` per `options.fileType`) in a fresh temporary directory
+    /// of its own, so a test may damage, rename or rewrite it. A clip is encoded once per process for each distinct
+    /// `options` (software HEVC encoding at 4K is what made the suites slow, above all on the iOS Simulator); every
+    /// further request with equal options is a copy of that master, with its Finder tags and extended attributes.
     public static func makeClip(_ options: ClipOptions = .init()) async throws -> URL {
         // Tests make many clips at once, beside the downscales they run. One clip at a time: with several, the
         // hardware encoder was seen to miss the requested bit rate by orders of magnitude, and the writer to stop
         // taking video for good (a clip takes a fraction of a second, so the queue stays short).
         await slots.acquire()
         do {
-            let clip = try await writeClip(options)
+            let master: URL
+            if let cached = await masters.master(for: options) {
+                master = cached
+            } else {
+                master = try await writeClip(options)
+                await masters.store(master, for: options)
+            }
+            let clip = try clone(master)
             await slots.release()
             return clip
         } catch {
@@ -100,10 +109,31 @@ public enum FixtureFactory {
         }
     }
 
+    /// Copies a master clip into a fresh directory (the copy keeps extended attributes, which hold Finder tags).
+    private static func clone(_ master: URL) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let copy = dir.appending(path: master.lastPathComponent)
+        do {
+            try FileManager.default.copyItem(at: master, to: copy)
+        } catch {
+            try? FileManager.default.removeItem(at: dir)
+            throw error
+        }
+        return copy
+    }
+
+    /// The first clip written for each set of options, never handed out: tests get copies. Lives for the process.
+    private actor MasterClips {
+        private var urls: [ClipOptions: URL] = [:]
+        func master(for options: ClipOptions) -> URL? { urls[options] }
+        func store(_ url: URL, for options: ClipOptions) { urls[options] = url }
+    }
+    private static let masters = MasterClips()
+
     /// One fixture at a time (concurrent writers were seen to stall). A test's time limit includes its wait in this
     /// queue, so tests that build fixtures carry 5 minutes, not 2: the limit is only there to catch a hang, and a
-    /// stalled fixture already fails by itself after 30 seconds. (Caching fixtures was the alternative; nearly every
-    /// test needs its own options, and many damage or rewrite the clip, so a cache would rarely hit.)
+    /// stalled fixture already fails by itself after 30 seconds. Identical options are encoded once (see `makeClip`).
     private static let slots = WorkSlots(count: 1)
 
     private static func writeClip(_ options: ClipOptions) async throws -> URL {

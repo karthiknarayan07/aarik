@@ -68,7 +68,9 @@ import Testing
         try await failsCleanly(clip)
     }
 
-    @Test(.timeLimit(.minutes(5))) func aDamagedMiddleNeverYieldsAKeptOutputThatLooksComplete() async throws {
+    // Full software-HEVC re-encode: too slow on the Simulator, whose encoder is not representative (a smoke encode stays).
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func aDamagedMiddleNeverYieldsAKeptOutputThatLooksComplete() async throws {
         let clip = try await FixtureFactory.makeClip(options { $0.seconds = 2 })
         let directory = clip.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -109,7 +111,9 @@ import Testing
         return times.sorted()
     }
 
-    @Test(.timeLimit(.minutes(5))) func variableFrameRateKeepsEveryFrameAndItsTiming() async throws {
+    // Full software-HEVC re-encode: too slow on the Simulator, whose encoder is not representative (a smoke encode stays).
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func variableFrameRateKeepsEveryFrameAndItsTiming() async throws {
         let source = try await FixtureFactory.makeClip(
             options {
                 $0.fps = 10
@@ -137,7 +141,9 @@ import Testing
         #expect(abs(outputDuration - sourceDuration) < 0.15, "\(outputDuration) vs \(sourceDuration)")
     }
 
-    @Test(.timeLimit(.minutes(5))) func variableFrameRateWithAFrameRateCapStillKeepsTheDuration() async throws {
+    // Full software-HEVC re-encode: too slow on the Simulator, whose encoder is not representative (a smoke encode stays).
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func variableFrameRateWithAFrameRateCapStillKeepsTheDuration() async throws {
         let source = try await FixtureFactory.makeClip(
             options {
                 $0.fps = 30

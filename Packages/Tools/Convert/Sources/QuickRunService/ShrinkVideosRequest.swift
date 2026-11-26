@@ -164,7 +164,7 @@ public struct ShrinkVideosRequest: Sendable, Equatable {
                 do { try location.setFolder(redirectedFolder) } catch { throw ShrinkVideosError.folderUnavailable }
                 overrides.saveLocation = location
             } else if destination == .nextToOriginal {
-                overrides.saveLocation = SaveLocation()
+                overrides.saveLocation = SaveLocation(choice: .nextToOriginal)
             }
         case .folder:
             guard let folder else { throw ShrinkVideosError.folderNeeded }

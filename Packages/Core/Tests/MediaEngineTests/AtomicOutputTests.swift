@@ -95,7 +95,10 @@ import Testing
         #expect(!names.contains { $0.contains(".partial-") })
     }
 
-    @Test(.timeLimit(.minutes(5))) func keepSourceResolution() async throws {
+    // Full software-HEVC re-encode: too slow on the Simulator, whose encoder is not representative (a smoke encode stays).
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative)) func keepSourceResolution()
+        async throws
+    {
         var options = ClipOptions()
         options.width = 1280
         options.height = 720

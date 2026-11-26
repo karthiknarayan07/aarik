@@ -68,7 +68,9 @@ import Testing
     /// light scaled to SDR white and cut off) puts reference white and peak at the same code; keeping the code values
     /// and only relabelling them 709 (washed out) leaves reference white at about 180. Tone mapping keeps the three
     /// apart and mid grey in the SDR mid-tones.
-    @Test(.timeLimit(.minutes(5))) func h264ToneMapsHLGInsteadOfClipping() async throws {
+    // Full software-HEVC re-encode: too slow on the Simulator, whose encoder is not representative (a smoke encode stays).
+    @Test(.timeLimit(.minutes(5)), .enabled(if: EncoderEnvironment.isRepresentative))
+    func h264ToneMapsHLGInsteadOfClipping() async throws {
         let source = try await FixtureFactory.makeClip(
             hlgClip {
                 $0.lumaStripes = [0.5, 0.75, 1.0]
