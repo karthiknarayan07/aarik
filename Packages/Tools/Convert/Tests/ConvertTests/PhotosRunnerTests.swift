@@ -1,10 +1,10 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import PhotosLibrary
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Converting a Photos video: fetch, plan, downscale in the work folder, save a verified new video, optionally
 /// queue the original for deletion. The library is a fake; the clip is real.
@@ -181,7 +181,7 @@ import Testing
 
     @Test(.timeLimit(.minutes(5))) func aCopyWithMetadataWarningsNeverQueuesTheOriginal() async throws {
         let rig = try await PhotosRig()
-        let core = DownscaleRunner(
+        let core = ConvertRunner(
             trash: { $0 },
             inspect: { url in
                 var inventory = try await MediaInspector().inventory(of: url)
@@ -230,7 +230,7 @@ import Testing
 
         let state = try await rig.runner().run(try rig.job()) { _ in }
 
-        #expect(state == .keptAsIs(reason: DownscalePlanner.spatialReason, code: .spatialVideo))
+        #expect(state == .keptAsIs(reason: ConvertPlanner.spatialReason, code: .spatialVideo))
         #expect(rig.store.inputRequests.isEmpty)
         #expect(rig.store.saves.isEmpty)
         #expect(rig.workContents.isEmpty)
@@ -350,7 +350,7 @@ import Testing
         var inventory = try await MediaInspector().inventory(of: rig.clip)
         inventory.items.append(
             MetadataItem(key: "track.9.kind", category: .video, displayName: "Track 9 kind", value: "auxv/disparity"))
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: PhotosRig.spec, predictedLost: [],
             photosDestination: .newAsset)
         let size = try #require(RunnerFixture.size(rig.clip))
@@ -374,7 +374,7 @@ import Testing
         var inventory = try await MediaInspector().inventory(of: rig.clip)
         inventory.items.append(
             MetadataItem(key: "track.9.kind", category: .video, displayName: "Track 9 kind", value: "auxv/disparity"))
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: PhotosRig.spec,
             predictedLost: ["Cinematic depth data"], photosDestination: .newAsset)
         let size = try #require(RunnerFixture.size(rig.clip))
@@ -397,7 +397,7 @@ import Testing
         rig.store.inputError = .downloadFailed("offline")
         let queue = JobQueue(
             store: JobStore(directory: rig.directory),
-            runners: [DownscaleTool.photosToolID: rig.runner()])
+            runners: [ConvertTool.photosToolID: rig.runner()])
         let job = try rig.job()
         await queue.enqueue([job])
         await Self.waitUntil(queue) { jobs in

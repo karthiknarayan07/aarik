@@ -1,5 +1,5 @@
-import AppUI
-import DownscaleVideo
+import SharedUI
+import Convert
 import Foundation
 import FoundationModels
 import LocalLibrary

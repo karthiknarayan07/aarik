@@ -1,6 +1,6 @@
-import AppCore
-import AppUI
-import DownscaleVideo
+import AarikCore
+import SharedUI
+import Convert
 import Foundation
 import Observation
 
@@ -109,7 +109,7 @@ public struct OutcomeExplainer: Sendable {
         names.isEmpty ? "none" : names.joined(separator: ", ")
     }
 
-    private static func settingsLines(_ settings: DownscaleJobSettings) -> [String] {
+    private static func settingsLines(_ settings: ConvertJobSettings) -> [String] {
         guard let custom = settings.custom else { return ["Preset: \(settings.preset.displayName)"] }
         var lines = ["Preset: Custom settings"]
         lines.append(
@@ -119,9 +119,9 @@ public struct OutcomeExplainer: Sendable {
         return lines
     }
 
-    private static func settings(of job: Job) -> DownscaleJobSettings? {
-        guard job.toolID == DownscaleTool.toolID || job.toolID == DownscaleTool.photosToolID else { return nil }
-        return try? JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+    private static func settings(of job: Job) -> ConvertJobSettings? {
+        guard job.toolID == ConvertTool.toolID || job.toolID == ConvertTool.photosToolID else { return nil }
+        return try? JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
     }
 
     // MARK: Fallback

@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 
 /// Persists the library as JSON (`library.json`) in a directory, with a security-scoped bookmark per file.

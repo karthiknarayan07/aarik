@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Suite struct GridInteractionTests {
     // Two rows of two tiles, 100 wide with 10 between: a/b on the first row, c/d on the second.

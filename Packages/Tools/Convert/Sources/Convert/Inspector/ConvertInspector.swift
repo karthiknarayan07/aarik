@@ -1,5 +1,5 @@
-import AppCore
-import AppUI
+import AarikCore
+import SharedUI
 import MediaEngine
 import SwiftUI
 
@@ -26,7 +26,7 @@ public struct InspectorSource: Sendable {
 ///
 /// `preset` is the selection's preset: the one its videos share, nil when they differ ("Mixed"). Choosing one
 /// applies to every selected video; the caller decides what that means (spec 8.2: a per-video override).
-public struct DownscaleInspector: View {
+public struct ConvertInspector: View {
     let sources: [InspectorSource]
     @Binding var preset: Preset?
     @Binding var advanced: AdvancedOptions
@@ -91,7 +91,7 @@ public struct DownscaleInspector: View {
         Section {
             AdvancedSettingsView(
                 options: $advanced, decision: decision, byteSize: single?.byteSize ?? 0,
-                locksFrameRate: sources.contains { DownscalePlanner.locksFrameRate($0.inventory) },
+                locksFrameRate: sources.contains { ConvertPlanner.locksFrameRate($0.inventory) },
                 isMultiple: sources.count > 1)
         }
         if let decision {

@@ -1,5 +1,5 @@
 import AVFoundation
-import AppCore
+import AarikCore
 import CoreMedia
 import CoreVideo
 import Foundation

@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Test func savingsShowTheAmountAndTheBarWhenThereIsSomethingToFree() {
     let summary = SavingsSummary(couldFree: 600_000_000, totalBytes: 1_000_000_000, availableCount: 3)

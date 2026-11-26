@@ -1,11 +1,11 @@
-import AppCore
+import AarikCore
 import CoreGraphics
 import Foundation
 import LocalLibrary
 import MediaEngine
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Groups of videos by quality, year and library, on made-up videos (no files, no Photos).
 @Suite struct SavingsAnalyzerTests {

@@ -5,7 +5,7 @@ import SwiftUI
 /// The window's content: the shell, with the sidebar's visibility the app model keeps for the View menu.
 private struct MainWindowContent: View {
     @Bindable var model: AppModel
-    let module: VideoShrinkerModule
+    let module: ConvertModule
 
     var body: some View {
         RootView(module: module, sidebarVisibility: $model.sidebarVisibility)
@@ -18,7 +18,7 @@ private struct MainWindowContent: View {
 final class MainWindowController {
     let window: NSWindow
 
-    init(model: AppModel, module: VideoShrinkerModule) {
+    init(model: AppModel, module: ConvertModule) {
         let hosting = NSHostingController(
             rootView: MainWindowContent(model: model, module: module).frame(minWidth: 900, minHeight: 600))
         // The window's size is its own (autosaved), not the content's ideal size.

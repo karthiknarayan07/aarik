@@ -1,21 +1,21 @@
-import AppCore
-import AppUI
-import DownscaleVideo
+import AarikCore
+import SharedUI
+import Convert
 import SwiftUI
 import UniformTypeIdentifiers
 
 /// The video tool as the shell hosts it: its sidebar, pages, toolbar, inspector, dialogs, drops and menu commands.
 @MainActor
-final class VideoShrinkerModule: ToolModule {
+final class ConvertModule: ToolModule {
     private let model: AppModel
 
     init(model: AppModel) {
         self.model = model
     }
 
-    var id: String { DownscaleTool.descriptor.id }
-    var title: String { DownscaleTool.descriptor.name }
-    var systemImage: String { DownscaleTool.descriptor.symbol }
+    var id: String { ConvertTool.descriptor.id }
+    var title: String { ConvertTool.descriptor.name }
+    var systemImage: String { ConvertTool.descriptor.symbol }
 
     var selection: VideoPage? {
         get { model.selection }

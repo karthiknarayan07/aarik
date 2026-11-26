@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import AppKit
 
 /// The "Stop converting and quit?" question, and the signals that skip it when the system is ending the session.

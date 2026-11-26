@@ -1,10 +1,10 @@
 import AVFoundation
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import MediaTestSupport
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Clips and jobs shared by the runner tests.
 enum RunnerFixture {
@@ -15,8 +15,8 @@ enum RunnerFixture {
     static let roomy = DiskSpaceCheck(provider: FakeDiskSpace(available: 100_000_000_000))
 
     /// The real runner (real Trash) on the roomy fake disk.
-    static func runner(originalsBackup: @escaping DownscaleRunner.BackupProvider = { nil }) -> DownscaleRunner {
-        DownscaleRunner(trash: DownscaleRunner.trashItem, originalsBackup: originalsBackup, diskSpace: roomy)
+    static func runner(originalsBackup: @escaping ConvertRunner.BackupProvider = { nil }) -> ConvertRunner {
+        ConvertRunner(trash: ConvertRunner.trashItem, originalsBackup: originalsBackup, diskSpace: roomy)
     }
 
     /// 2560x1440 so a 1080 short side really shrinks it; small and fast. Lives in its own temporary directory.
@@ -73,9 +73,9 @@ enum RunnerFixture {
         return try await renamed(FixtureFactory.makeClip(options), to: name)
     }
 
-    static func job(_ source: URL, _ settings: DownscaleJobSettings) throws -> Job {
+    static func job(_ source: URL, _ settings: ConvertJobSettings) throws -> Job {
         Job(
-            toolID: DownscaleTool.toolID, source: source, sourceBookmark: Data(),
+            toolID: ConvertTool.toolID, source: source, sourceBookmark: Data(),
             settings: try JSONEncoder().encode(settings))
     }
 

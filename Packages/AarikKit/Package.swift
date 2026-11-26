@@ -96,7 +96,7 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
-            name: "DownscaleVideoTests",
+            name: "ConvertTests",
             dependencies: ["DownscaleVideo", "LocalLibrary", "PhotosLibrary", "MediaTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

@@ -1,5 +1,5 @@
-import AppCore
-import DownscaleVideo
+import AarikCore
+import Convert
 import Foundation
 import MediaEngine
 import Testing
@@ -13,9 +13,9 @@ import Testing
     private func job(
         _ state: JobState, preset: Preset = .balanced, predicted: [String]? = ["Location"]
     ) -> Job {
-        let settings = DownscaleJobSettings(preset: preset, saveTo: .nextToOriginal, predictedLost: predicted)
+        let settings = ConvertJobSettings(preset: preset, saveTo: .nextToOriginal, predictedLost: predicted)
         return Job(
-            toolID: DownscaleTool.toolID, source: Self.source, sourceBookmark: Data(),
+            toolID: ConvertTool.toolID, source: Self.source, sourceBookmark: Data(),
             settings: (try? JSONEncoder().encode(settings)) ?? Data(), state: state)
     }
 
@@ -107,12 +107,12 @@ import Testing
     }
 
     @Test func customSettingsAreShownAsResolutionAndCodecLabels() {
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .high, saveTo: .nextToOriginal,
             custom: DownscaleSpec(
                 targetShortSide: 720, averageBitRate: 4_000_000, maxFrameRate: 30, codec: .h264Compatible))
         let job = Job(
-            toolID: DownscaleTool.toolID, source: Self.source, sourceBookmark: Data(),
+            toolID: ConvertTool.toolID, source: Self.source, sourceBookmark: Data(),
             settings: (try? JSONEncoder().encode(settings)) ?? Data(), state: .failed(reason: "x"))
         let prompt = OutcomeExplainer.prompt(job: job, outcome: nil, report: nil)
         for line in [

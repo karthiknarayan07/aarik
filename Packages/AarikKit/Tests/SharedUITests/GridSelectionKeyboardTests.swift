@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Suite struct GridSelectionKeyboardTests {
     // Two sections, three columns: a b c / d, then e f.

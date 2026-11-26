@@ -1,28 +1,28 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import MediaTestSupport
 import Synchronization
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 @Suite struct RunnerTests {
     private func makeSource(name: String = "x.mov") async throws -> URL {
         try await RunnerFixture.source(name: name)
     }
 
-    private func job(_ source: URL, _ settings: DownscaleJobSettings) throws -> Job {
+    private func job(_ source: URL, _ settings: ConvertJobSettings) throws -> Job {
         try RunnerFixture.job(source, settings)
     }
 
     private let spec = RunnerFixture.spec
 
     @Test func descriptorMatchesTheRuling() {
-        #expect(DownscaleTool.toolID == "downscale-video")
-        #expect(DownscaleTool.descriptor.name == "Downscale Video")
-        #expect(DownscaleTool.descriptor.symbol == "arrow.down.right.and.arrow.up.left")
-        #expect(DownscaleTool.descriptor.category == .video)
+        #expect(ConvertTool.toolID == "downscale-video")
+        #expect(ConvertTool.descriptor.name == "Downscale Video")
+        #expect(ConvertTool.descriptor.symbol == "arrow.down.right.and.arrow.up.left")
+        #expect(ConvertTool.descriptor.category == .video)
     }
 
     @Test(.timeLimit(.minutes(5))) func runnerNextToOriginalNamesAndReports() async throws {
@@ -30,7 +30,7 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let seen = Mutex(0.0)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         let state = try await RunnerFixture.runner().run(try job(source, settings)) { value in
             seen.withLock { $0 = max($0, value) }
@@ -57,7 +57,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let taken = directory.appending(path: "x (1080p).mov")
         try Data("mine".utf8).write(to: taken)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         let state = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
@@ -77,7 +77,7 @@ import Testing
         let other = directory.appending(path: ".y (1080p).mov.partial-\(UUID().uuidString)")
         try Data("a".utf8).write(to: stale)
         try Data("b".utf8).write(to: other)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         _ = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
@@ -92,7 +92,7 @@ import Testing
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let bookmark = try folder.bookmarkData()
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .folder(bookmark: bookmark), custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .folder(bookmark: bookmark), custom: spec)
 
         let state = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
@@ -109,7 +109,7 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let trashed = Mutex<URL?>(nil)
-        let runner = DownscaleRunner { url in
+        let runner = ConvertRunner { url in
             var result: NSURL?
             try FileManager.default.trashItem(at: url, resultingItemURL: &result)
             let resulting = (result as URL?) ?? url
@@ -117,7 +117,7 @@ import Testing
             return resulting
         }
         defer { trashed.withLock { $0 }.map { try? FileManager.default.removeItem(at: $0) } }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try job(source, settings)) { _ in }
 
@@ -144,12 +144,12 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let called = Mutex(false)
-        let runner = DownscaleRunner { url in
+        let runner = ConvertRunner { url in
             called.withLock { $0 = true }
             return url
         }
         // A target above the source short side makes the downscaler refuse: already small.
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .replace, custom: DownscaleSpec(targetShortSide: 2000, averageBitRate: 2_000_000)
         )
 
@@ -162,7 +162,7 @@ import Testing
 
     @Test func missingSourceFails() async throws {
         let missing = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).mov")
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal)
         do {
             _ = try await RunnerFixture.runner().run(try job(missing, settings)) { _ in }
             Issue.record("expected a throw")
@@ -180,11 +180,11 @@ import Testing
         }
         let file = directory.appending(path: "a.mov")
         try Data("x".utf8).write(to: file)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal)
         do {
             _ = try await RunnerFixture.runner().run(try job(file, settings)) { _ in }
             Issue.record("expected a throw")
-        } catch let error as DownscaleRunnerError {
+        } catch let error as ConvertRunnerError {
             #expect(error == .sourceUnavailable)
         }
     }
@@ -192,9 +192,9 @@ import Testing
     @Test func labelsFollowTheSpec() {
         func label(_ target: Int?, _ preset: Preset, custom: Bool) -> String {
             let spec = DownscaleSpec(targetShortSide: target)
-            let settings = DownscaleJobSettings(
+            let settings = ConvertJobSettings(
                 preset: preset, saveTo: .nextToOriginal, custom: custom ? spec : nil)
-            return DownscaleRunner.label(for: spec, settings: settings)
+            return ConvertRunner.label(for: spec, settings: settings)
         }
         #expect(label(1080, .balanced, custom: false) == "1080p")
         #expect(label(720, .balanced, custom: true) == "720p")
@@ -209,14 +209,14 @@ import Testing
         let predicted = MetadataReport()
         let ok = MetadataReport(
             changed: [MetadataChange(key: "video.dimensions", displayName: "d", from: "a", to: "b")])
-        #expect(DownscaleRunner.isVerified(ok, predicted: predicted, spec: spec))
+        #expect(ConvertRunner.isVerified(ok, predicted: predicted, spec: spec))
         let changed = MetadataReport(
             changed: [MetadataChange(key: "video.bitDepth", displayName: "d", from: "10", to: "8")])
-        #expect(!DownscaleRunner.isVerified(changed, predicted: predicted, spec: spec))
+        #expect(!ConvertRunner.isVerified(changed, predicted: predicted, spec: spec))
         let item = MetadataItem(key: "audio.0.format", category: .audio, displayName: "a", value: "aac ")
         let lost = MetadataReport(lost: [item])
-        #expect(!DownscaleRunner.isVerified(lost, predicted: predicted, spec: spec))
-        #expect(DownscaleRunner.isVerified(lost, predicted: lost, spec: spec))
+        #expect(!ConvertRunner.isVerified(lost, predicted: predicted, spec: spec))
+        #expect(ConvertRunner.isVerified(lost, predicted: lost, spec: spec))
     }
 
     @Test(.timeLimit(.minutes(5))) func replaceWithUnverifiedOutputNeverTrashes() async throws {
@@ -226,7 +226,7 @@ import Testing
         let called = Mutex(false)
         // The output reads back with a bit depth that differs from the 8-bit source, audio intact: only the
         // unexpected change makes it unverified.
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { url in
                 called.withLock { $0 = true }
                 return url
@@ -241,7 +241,7 @@ import Testing
                 return inventory
             },
             diskSpace: RunnerFixture.roomy)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try job(source, settings)) { _ in }
 
@@ -270,13 +270,13 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         struct Refused: Error {}
         let called = Mutex(false)
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { _ in
                 called.withLock { $0 = true }
                 throw Refused()
             },
             diskSpace: RunnerFixture.roomy)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try job(source, settings)) { _ in }
 
@@ -297,7 +297,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         // A 100 Mbps target estimates far above the source size.
         let custom = DownscaleSpec(targetShortSide: 1080, averageBitRate: 100_000_000)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
 
         let state = try await RunnerFixture.runner().run(try job(source, settings)) { _ in }
 
@@ -310,13 +310,13 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let called = Mutex(false)
         // Make the finished output look as big as the original.
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { url in
                 called.withLock { $0 = true }
                 return url
             },
-            sizeOf: { url in try DownscaleRunner.fileSize(url.lastPathComponent.hasPrefix("x (") ? source : url) })
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+            sizeOf: { url in try ConvertRunner.fileSize(url.lastPathComponent.hasPrefix("x (") ? source : url) })
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try job(source, settings)) { _ in }
 

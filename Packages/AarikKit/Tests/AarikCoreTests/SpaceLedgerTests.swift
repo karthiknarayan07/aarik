@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 /// Several jobs at once share one disk: what a running job has promised to write counts against the others.
 @Suite("Space reservations")

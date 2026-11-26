@@ -1,7 +1,7 @@
-import AppCore
+import AarikCore
 import AppKit
-import AppUI
-import DownscaleVideo
+import SharedUI
+import Convert
 import Foundation
 import LocalLibrary
 

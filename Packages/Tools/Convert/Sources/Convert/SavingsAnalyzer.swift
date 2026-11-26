@@ -1,5 +1,5 @@
-import AppCore
-import AppUI
+import AarikCore
+import SharedUI
 import Foundation
 import LocalLibrary
 import MediaEngine

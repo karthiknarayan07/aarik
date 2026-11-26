@@ -1,7 +1,7 @@
 import SwiftUI
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 @MainActor
 private final class FakeModule: ToolModule {

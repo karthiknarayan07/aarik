@@ -1,12 +1,12 @@
 import AVFoundation
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import MediaTestSupport
 import Synchronization
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// The output container follows the source, slo-mo keeps its frame rate, and a Replace never trashes an original
 /// that changed or a job that was cancelled.
@@ -26,8 +26,8 @@ import Testing
         inspect: @escaping @Sendable (URL) async throws -> MetadataInventory = {
             try await MediaInspector().inventory(of: $0)
         }
-    ) -> DownscaleRunner {
-        DownscaleRunner(
+    ) -> ConvertRunner {
+        ConvertRunner(
             trash: { url in
                 called.set()
                 let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
@@ -41,7 +41,7 @@ import Testing
         let source = try await RunnerFixture.source(name: "x.mp4", fileType: .mp4)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -59,7 +59,7 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let called = Flag()
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await trashingRunner(into: directory, called: called).run(
             try RunnerFixture.job(source, settings)
@@ -81,7 +81,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         #expect(try await OutputContainer.pathExtension(forSource: source) == "mov")
         let called = Flag()
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await trashingRunner(into: directory, called: called).run(
             try RunnerFixture.job(source, settings)
@@ -105,8 +105,8 @@ import Testing
         #expect(OutputContainer.fileType(for: URL(filePath: "/a/b.mov")) == .mov)
         let mp4 = URL(filePath: "/a/IMG_1.mp4")
         let mov = URL(filePath: "/a/IMG_1 (1080p).mov")
-        #expect(DownscaleRunner.replacementURL(for: mp4, output: mov).path == "/a/IMG_1.mov")
-        #expect(DownscaleRunner.replacementURL(for: mp4, output: URL(filePath: "/a/IMG_1 (1080p).mp4")) == mp4)
+        #expect(ConvertRunner.replacementURL(for: mp4, output: mov).path == "/a/IMG_1.mov")
+        #expect(ConvertRunner.replacementURL(for: mp4, output: URL(filePath: "/a/IMG_1 (1080p).mp4")) == mp4)
     }
 
     @Test(.timeLimit(.minutes(5))) func sloMoKeepsItsFrameRateWhateverTheCap() async throws {
@@ -119,7 +119,7 @@ import Testing
         let source = try await FixtureFactory.makeClip(options)
         defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
         let custom = DownscaleSpec(targetShortSide: 360, averageBitRate: 500_000, maxFrameRate: 30)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: custom)
 
         let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -144,7 +144,7 @@ import Testing
             try Data("someone else's file".utf8).write(to: source, options: .atomic)
             return try await MediaInspector().inventory(of: url)
         }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -171,7 +171,7 @@ import Testing
             try handle.close()
             return try await MediaInspector().inventory(of: url)
         }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -195,7 +195,7 @@ import Testing
             withUnsafeCurrentTask { $0?.cancel() }
             return try await MediaInspector().inventory(of: url)
         }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         await #expect(throws: CancellationError.self) {
             _ = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }

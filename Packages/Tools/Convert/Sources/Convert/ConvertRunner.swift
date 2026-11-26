@@ -1,8 +1,8 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 
-public enum DownscaleRunnerError: Error, LocalizedError, Equatable, OutcomeCoded {
+public enum ConvertRunnerError: Error, LocalizedError, Equatable, OutcomeCoded {
     case sourceUnavailable
     case outputFolderUnavailable
     case nameTaken
@@ -24,7 +24,7 @@ public enum DownscaleRunnerError: Error, LocalizedError, Equatable, OutcomeCoded
     }
 }
 
-public struct DownscaleRunner: JobRunner {
+public struct ConvertRunner: JobRunner {
     /// Moves a file to the Trash and returns where it went.
     public typealias Trasher = @Sendable (URL) throws -> URL
     /// Read when a Replace is about to trash an original: the folder to copy it to first, or nil for no copy.
@@ -52,7 +52,7 @@ public struct DownscaleRunner: JobRunner {
     init(
         trash: @escaping Trasher,
         inspect: @escaping Inspector = { try await MediaInspector().inventory(of: $0) },
-        sizeOf: @escaping Sizer = { try DownscaleRunner.fileSize($0) },
+        sizeOf: @escaping Sizer = { try ConvertRunner.fileSize($0) },
         originalsBackup: @escaping BackupProvider = { nil },
         diskSpace: DiskSpaceCheck = DiskSpaceCheck()
     ) {
@@ -70,7 +70,7 @@ public struct DownscaleRunner: JobRunner {
     }
 
     public func run(_ job: Job, progress: @escaping @Sendable (Double) -> Void) async throws -> JobState {
-        let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+        let settings = try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
         defer { diskSpace.release(owner: job.id) }
         let source = try Self.resolveSource(job)
         // What the original is now; a Replace goes ahead only if it is still the same file at the end.
@@ -140,7 +140,7 @@ public struct DownscaleRunner: JobRunner {
     /// Any way out that doesn't hand back the output has removed it. `source` is read in place, never changed.
     /// `nameAfter` is the file the output is named after, when that isn't `source` (a Photos video's own name).
     func convert(
-        source: URL, byteSize: Int64, inventory: MetadataInventory, settings: DownscaleJobSettings,
+        source: URL, byteSize: Int64, inventory: MetadataInventory, settings: ConvertJobSettings,
         nameAfter: URL? = nil, requireLossShown: Bool = false, reservingFor owner: UUID? = nil,
         outputFolder: () throws -> (url: URL, stop: () -> Void),
         progress: @escaping @Sendable (Double) -> Void
@@ -158,7 +158,7 @@ public struct DownscaleRunner: JobRunner {
         let spec: DownscaleSpec
         let predicted: MetadataReport
         let estimatedBytes: Int64
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             inventory: inventory, byteSize: byteSize, spec: requested,
             fallsBackToQuickTime: container.fallsBackToQuickTime)
         switch decision {
@@ -197,7 +197,7 @@ public struct DownscaleRunner: JobRunner {
                 source: source, nameAfter: nameAfter ?? source, spec: spec, label: label, directory: folder.url,
                 pathExtension: container.pathExtension, progress: progress)
         } catch DownscaleError.sourceAlreadySmall {
-            return .keptAsIs(DownscalePlanner.alreadySmallReason, .alreadySmall)
+            return .keptAsIs(ConvertPlanner.alreadySmallReason, .alreadySmall)
         }
 
         // From here the output exists and is ours: any way out that doesn't keep it removes it.
@@ -211,7 +211,7 @@ public struct DownscaleRunner: JobRunner {
             outputSize = try sizeOf(output)
             if outputSize >= byteSize * 9 / 10 {
                 try? FileManager.default.removeItem(at: output)
-                return .keptAsIs(DownscalePlanner.savesLittleReason, .savesLittle)
+                return .keptAsIs(ConvertPlanner.savesLittleReason, .savesLittle)
             }
             outputInventory = try await Signposts.interval(.verify) { try await inspect(output) }
             try Self.stopIfCancelled(removing: output)
@@ -262,7 +262,7 @@ public struct DownscaleRunner: JobRunner {
     /// The predicted losses that were not among the names shown when the job was added, as a sentence part, or
     /// nil when all were shown. HDR items count as shown when "HDR details" was.
     static func unshownLoss(
-        _ predicted: MetadataReport, inventory: MetadataInventory, settings: DownscaleJobSettings
+        _ predicted: MetadataReport, inventory: MetadataInventory, settings: ConvertJobSettings
     ) -> String? {
         let shown = Set(settings.predictedLost ?? [])
         let auxiliary = MetadataNames.auxiliaryTracks(in: inventory.items)
@@ -371,11 +371,11 @@ public struct DownscaleRunner: JobRunner {
                 continue
             }
         }
-        throw DownscaleRunnerError.nameTaken
+        throw ConvertRunnerError.nameTaken
     }
 
     /// "<N>p" for a real downscale; for keep-resolution, the preset's name, or "Compressed" for a custom spec.
-    static func label(for spec: DownscaleSpec, settings: DownscaleJobSettings) -> String {
+    static func label(for spec: DownscaleSpec, settings: ConvertJobSettings) -> String {
         if let target = spec.targetShortSide { return "\(target)p" }
         return settings.custom == nil ? settings.preset.displayName : "Compressed"
     }
@@ -444,7 +444,7 @@ public struct DownscaleRunner: JobRunner {
             }
         }
         guard FileManager.default.fileExists(atPath: candidate.path), !isInTrash(candidate) else {
-            throw DownscaleRunnerError.sourceUnavailable
+            throw ConvertRunnerError.sourceUnavailable
         }
         return candidate
     }
@@ -475,13 +475,13 @@ public struct DownscaleRunner: JobRunner {
             ?? (try? URL(
                 resolvingBookmarkData: bookmark, options: [.withoutMounting, .withoutUI], relativeTo: nil,
                 bookmarkDataIsStale: &stale))
-        guard let url else { throw DownscaleRunnerError.outputFolderUnavailable }
+        guard let url else { throw ConvertRunnerError.outputFolderUnavailable }
         let scoped = url.startAccessingSecurityScopedResource()
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue
         else {
             if scoped { url.stopAccessingSecurityScopedResource() }
-            throw DownscaleRunnerError.outputFolderUnavailable
+            throw ConvertRunnerError.outputFolderUnavailable
         }
         return (url, { if scoped { url.stopAccessingSecurityScopedResource() } })
     }

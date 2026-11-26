@@ -1,5 +1,5 @@
 import AVFoundation
-import AppCore
+import AarikCore
 import Foundation
 
 /// The container a downscale writes. It matches the source (spec 8.2): an MPEG-4 source stays MPEG-4 when that

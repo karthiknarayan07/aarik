@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 import LocalLibrary
 import MediaEngine

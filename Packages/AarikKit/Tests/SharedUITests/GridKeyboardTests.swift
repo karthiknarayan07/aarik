@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Suite struct GridKeyboardTests {
     private func resolve(

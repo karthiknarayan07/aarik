@@ -1,6 +1,6 @@
 import AppKit
-import AppUI
-import DownscaleVideo
+import SharedUI
+import Convert
 import LocalLibrary
 import QuickLook
 import SwiftUI

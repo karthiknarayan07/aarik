@@ -1,18 +1,18 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import Synchronization
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Keep a copy of originals: a Replace copies the original into the backup folder, checks the copy's size, and only
 /// then trashes the original. Any problem with the copy leaves the original where it is.
 @Suite struct OriginalsBackupTests {
-    private let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: RunnerFixture.spec)
+    private let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: RunnerFixture.spec)
 
     /// A stand-in for the Trash: moves the file into `<directory>/Trash` so tests never touch the real one.
-    private static func fakeTrash(in directory: URL) -> DownscaleRunner.Trasher {
+    private static func fakeTrash(in directory: URL) -> ConvertRunner.Trasher {
         { url in
             let trash = directory.appending(path: "Trash", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
@@ -37,7 +37,7 @@ import Testing
         let originalSize = try #require(RunnerFixture.size(source))
         let copyAtTrashTime = Mutex<Int64?>(nil)
         let trash = Self.fakeTrash(in: directory)
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { url in
                 // The copy is already complete when the original is about to go.
                 copyAtTrashTime.withLock { $0 = RunnerFixture.size(backup.appending(path: "clip.mov")) }
@@ -63,7 +63,7 @@ import Testing
         // An external drive that isn't connected.
         let backup = directory.appending(path: "Unplugged/Originals", directoryHint: .isDirectory)
         let called = Mutex(false)
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { url in
                 called.withLock { $0 = true }
                 return url
@@ -95,7 +95,7 @@ import Testing
         let existing = backup.appending(path: "clip.mov")
         try Data("an earlier backup".utf8).write(to: existing)
         let originalSize = try #require(RunnerFixture.size(source))
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: Self.fakeTrash(in: directory), originalsBackup: { OriginalsBackup(folder: backup) },
             diskSpace: RunnerFixture.roomy)
 
@@ -117,13 +117,13 @@ import Testing
         try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
         let called = Mutex(false)
         // Anything written in the backup folder reads back one byte long: a truncated copy.
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { url in
                 called.withLock { $0 = true }
                 return url
             },
             sizeOf: { url in
-                url.deletingLastPathComponent().lastPathComponent == "Originals" ? 1 : try DownscaleRunner.fileSize(url)
+                url.deletingLastPathComponent().lastPathComponent == "Originals" ? 1 : try ConvertRunner.fileSize(url)
             },
             originalsBackup: { OriginalsBackup(folder: backup) },
             diskSpace: RunnerFixture.roomy)
@@ -147,7 +147,7 @@ import Testing
         let backup = directory.appending(path: "Originals", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
         let runner = RunnerFixture.runner(originalsBackup: { OriginalsBackup(folder: backup) })
-        let nextTo = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: RunnerFixture.spec)
+        let nextTo = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: RunnerFixture.spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, nextTo)) { _ in }
 
@@ -167,7 +167,7 @@ import Testing
         let other = backup.appending(path: ".other.mov.partial-\(UUID().uuidString)")
         let lookalike = backup.appending(path: ".clip.mov 2.partial-\(UUID().uuidString)")
         for file in [stale, other, lookalike] { try Data("half".utf8).write(to: file) }
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: Self.fakeTrash(in: directory), originalsBackup: { OriginalsBackup(folder: backup) },
             diskSpace: RunnerFixture.roomy)
 

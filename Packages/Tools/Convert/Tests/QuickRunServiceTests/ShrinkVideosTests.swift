@@ -1,6 +1,6 @@
-import AppCore
+import AarikCore
 import CoreGraphics
-import DownscaleVideo
+import Convert
 import Foundation
 import LocalLibrary
 import MediaEngine
@@ -111,8 +111,8 @@ private enum Calendars {
             inventory: MetadataInventory())
     }
 
-    private func settings(of job: Job) throws -> DownscaleJobSettings {
-        try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+    private func settings(of job: Job) throws -> ConvertJobSettings {
+        try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
     }
 
     // MARK: - Parameters to overrides
@@ -381,7 +381,7 @@ private enum Calendars {
             return
         }
         let jobs = await harness.queue.jobs
-        #expect(jobs.map(\.toolID) == [DownscaleTool.photosToolID])
+        #expect(jobs.map(\.toolID) == [ConvertTool.photosToolID])
         #expect(jobs.compactMap { PhotoAssetURL.identifier(from: $0.source) } == ["A/L0/001"])
         let settings = try settings(of: try #require(jobs.first))
         #expect(settings.photosDestination == .newAsset)

@@ -1,13 +1,13 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import PhotosLibrary
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 @Suite struct PhotosJobFactoryTests {
-    private let base = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
+    private let base = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal)
 
     @Test func eachVideoGetsAPhotosJobWithItsOwnPresetAndName() throws {
         let jobs = PhotosJobFactory.makeJobs(
@@ -15,10 +15,10 @@ import Testing
             destination: .replace, lost: ["A/L0/001": ["Cinematic depth data"]])
 
         #expect(jobs.count == 2)
-        #expect(jobs.allSatisfy { $0.toolID == DownscaleTool.photosToolID && $0.sourceBookmark.isEmpty })
+        #expect(jobs.allSatisfy { $0.toolID == ConvertTool.photosToolID && $0.sourceBookmark.isEmpty })
         #expect(PhotoAssetURL.identifier(from: jobs[0].source) == "A/L0/001")
-        let first = try JSONDecoder().decode(DownscaleJobSettings.self, from: jobs[0].settings)
-        let second = try JSONDecoder().decode(DownscaleJobSettings.self, from: jobs[1].settings)
+        let first = try JSONDecoder().decode(ConvertJobSettings.self, from: jobs[0].settings)
+        let second = try JSONDecoder().decode(ConvertJobSettings.self, from: jobs[1].settings)
         #expect(first.preset == .smaller && second.preset == .high)
         #expect(first.photosDestination == .replace && second.photosDestination == .replace)
         #expect(first.photosFileName == "IMG_1.MOV")
@@ -29,14 +29,14 @@ import Testing
     @Test func noPredictionIsRecordedAsNone() throws {
         let jobs = PhotosJobFactory.makeJobs(
             for: [("A", "a.mov", .balanced)], settings: base, destination: .newAsset)
-        let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: jobs[0].settings)
+        let settings = try JSONDecoder().decode(ConvertJobSettings.self, from: jobs[0].settings)
         #expect(settings.predictedLost == nil)
         #expect(settings.photosDestination == .newAsset)
     }
 
     @Test func aSettingsFileWithoutPhotosFieldsStillDecodes() throws {
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace)
-        let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: JSONEncoder().encode(settings))
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace)
+        let decoded = try JSONDecoder().decode(ConvertJobSettings.self, from: JSONEncoder().encode(settings))
         #expect(decoded.photosDestination == nil && decoded.photosFileName == nil)
     }
 

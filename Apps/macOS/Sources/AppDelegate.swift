@@ -1,6 +1,6 @@
-import AppCore
+import AarikCore
 import AppKit
-import AppUI
+import SharedUI
 import PhotosLibrary
 import QuickRunService
 import UserNotifications
@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let model: AppModel
     let updater: Updater
     /// The one tool the window hosts; its menu commands ride on the scene (`MainApp`).
-    let module: VideoShrinkerModule
+    let module: ConvertModule
     private var isTerminating = false
     /// Clears Photos input left behind by a crash or quit. It starts as soon as launch begins, overlapping the
     /// window and menu construction; the queue waits for it.
@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     override init() {
         let model = AppModel.shared
         self.model = model
-        module = VideoShrinkerModule(model: model)
+        module = ConvertModule(model: model)
         updater = Updater(relaunchGate: model.relaunchGate)
         super.init()
         model.intentRunHandler = { [weak self] in _ = self?.intentRuns.receive([true]) }

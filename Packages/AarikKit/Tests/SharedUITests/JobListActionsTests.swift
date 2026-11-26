@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Suite struct JobListActionsTests {
     private let file = JobRowFacts(hasFile: true)

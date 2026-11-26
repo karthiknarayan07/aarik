@@ -1,12 +1,12 @@
 import AVFoundation
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import MediaTestSupport
 import Synchronization
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// An MPEG-4 source that has to be written as QuickTime: what that loses is predicted and shown before the run,
 /// anything more is never a silent loss, and the job says why its file has another name.
@@ -30,7 +30,7 @@ import Testing
     // MARK: - Prediction
 
     @Test func plannerPredictsWhatTheQuickTimeFallbackLoses() throws {
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             inventory: inventory, byteSize: byteSize, spec: spec, fallsBackToQuickTime: true)
         guard case .convert(_, _, let predicted) = decision else {
             Issue.record("expected convert, got \(decision)")
@@ -39,7 +39,7 @@ import Testing
         #expect(predicted.lost.map(\.key) == ["qt.uiso/loci"])
         #expect(!predicted.kept.contains { $0.key == "qt.uiso/loci" })
 
-        let same = DownscalePlanner.decide(inventory: inventory, byteSize: byteSize, spec: spec)
+        let same = ConvertPlanner.decide(inventory: inventory, byteSize: byteSize, spec: spec)
         guard case .convert(_, _, let samePredicted) = same else {
             Issue.record("expected convert, got \(same)")
             return
@@ -97,7 +97,7 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         // What the sheet showed before the job was added.
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: ["Location", "Creation date"])
 
         let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
@@ -133,7 +133,7 @@ import Testing
                 for: [(id: 1, source: (byteSize: size, inventory: old), preset: .balanced)], custom: spec,
                 quickTimeFallbacks: [1]
             ).first)
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: loss.lost,
             predictedLostKeys: loss.keys)
 
@@ -155,7 +155,7 @@ import Testing
             name: "x.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: predictedLost)
         let progressReported = Mutex(false)
 
@@ -176,7 +176,7 @@ import Testing
             name: "small.m4v", fileType: .mp4, timedMetadata: true, metadata: RunnerFixture.locationMetadata)
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: spec, predictedLost: [], predictedLostKeys: [])
 
         let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
@@ -191,7 +191,7 @@ import Testing
             MetadataItem(key: "qt.uiso/date", category: .date, displayName: "Creation date", value: "2026"),
         ])
         func shown(_ names: [String]?, keys: [String]? = nil) -> Bool {
-            DownscaleRunner.fallbackLossWasShown(inventory, predictedLost: names, predictedLostKeys: keys)
+            ConvertRunner.fallbackLossWasShown(inventory, predictedLost: names, predictedLostKeys: keys)
         }
         // Keys, when the job recorded them, decide.
         #expect(shown(nil, keys: ["qt.uiso/date", "qt.uiso/loci", "x"]))
@@ -204,7 +204,7 @@ import Testing
         #expect(!shown(nil))
         // Nothing to lose: nothing to have been shown.
         #expect(
-            DownscaleRunner.fallbackLossWasShown(
+            ConvertRunner.fallbackLossWasShown(
                 MetadataInventory(items: []), predictedLost: nil, predictedLostKeys: nil))
     }
 
@@ -214,7 +214,7 @@ import Testing
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         // The QuickTime output turns out to lack something nobody predicted.
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
             inspect: { url in
                 var inventory = try await MediaInspector().inventory(of: url)
@@ -224,7 +224,7 @@ import Testing
                 return inventory
             },
             diskSpace: RunnerFixture.roomy)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: destination, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: destination, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -239,14 +239,14 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let taken = directory.appending(path: "x.mov")
         try Data("someone else's file".utf8).write(to: taken)
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { url in
                 let trashed = directory.appending(path: "trashed-\(UUID().uuidString)")
                 try FileManager.default.moveItem(at: url, to: trashed)
                 return trashed
             },
             diskSpace: RunnerFixture.roomy)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -268,7 +268,7 @@ import Testing
     @Test(.timeLimit(.minutes(5))) func sameContainerRunHasNoNotes() async throws {
         let source = try await RunnerFixture.source()
         defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         let state = try await RunnerFixture.runner().run(try RunnerFixture.job(source, settings)) { _ in }
 
@@ -285,11 +285,11 @@ import Testing
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
             inspect: { _ in throw CocoaError(.fileReadCorruptFile) },
             diskSpace: RunnerFixture.roomy)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CocoaError.self) {
             _ = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
@@ -301,11 +301,11 @@ import Testing
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
             sizeOf: { _ in throw CocoaError(.fileReadUnknown) },
             diskSpace: RunnerFixture.roomy)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CocoaError.self) {
             _ = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
@@ -317,11 +317,11 @@ import Testing
         let source = try await RunnerFixture.source()
         let directory = source.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { _ in throw CocoaError(.fileWriteNoPermission) },
             inspect: { _ in throw CancellationError() },
             diskSpace: RunnerFixture.roomy)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
 
         await #expect(throws: CancellationError.self) {
             _ = try await runner.run(try RunnerFixture.job(source, settings)) { _ in }
@@ -339,9 +339,9 @@ import Testing
         // The file moved after it was added; its bookmark still finds it.
         let moved = directory.appending(path: "moved.mov")
         try FileManager.default.moveItem(at: original, to: moved)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: spec)
         let job = Job(
-            toolID: DownscaleTool.toolID, source: original, sourceBookmark: bookmark,
+            toolID: ConvertTool.toolID, source: original, sourceBookmark: bookmark,
             settings: try JSONEncoder().encode(settings))
 
         let state = try await RunnerFixture.runner().run(job) { _ in }

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 @Suite struct OutcomeCodeTests {
     private func outcome(

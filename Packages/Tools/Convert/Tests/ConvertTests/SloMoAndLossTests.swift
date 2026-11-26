@@ -1,9 +1,9 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Slo-mo keeps its frame rate (spec 8.1), and what a conversion would lose is known before it runs (spec 8.4).
 @Suite struct SloMoAndLossTests {
@@ -26,41 +26,41 @@ import Testing
 
     @Test func sloMoDropsTheFrameRateCap() throws {
         let capped = DownscaleSpec(targetShortSide: 1080, averageBitRate: 8_000_000, maxFrameRate: 30)
-        let decision = DownscalePlanner.decide(inventory: inventory(fps: "120.00"), byteSize: byteSize, spec: capped)
+        let decision = ConvertPlanner.decide(inventory: inventory(fps: "120.00"), byteSize: byteSize, spec: capped)
         guard case .convert(let spec, _, _) = decision else {
             Issue.record("expected convert, got \(decision)")
             return
         }
         #expect(spec.maxFrameRate == nil)
         #expect(spec.targetShortSide == 1080)
-        #expect(DownscalePlanner.locksFrameRate(inventory(fps: "120.00")))
-        #expect(DownscalePlanner.locksFrameRate(inventory(fps: "240.00")))
+        #expect(ConvertPlanner.locksFrameRate(inventory(fps: "120.00")))
+        #expect(ConvertPlanner.locksFrameRate(inventory(fps: "240.00")))
     }
 
     @Test func normalClipKeepsTheFrameRateCap() throws {
         let capped = DownscaleSpec(targetShortSide: 1080, averageBitRate: 8_000_000, maxFrameRate: 30)
-        let decision = DownscalePlanner.decide(inventory: inventory(fps: "60.00"), byteSize: byteSize, spec: capped)
+        let decision = ConvertPlanner.decide(inventory: inventory(fps: "60.00"), byteSize: byteSize, spec: capped)
         guard case .convert(let spec, _, _) = decision else {
             Issue.record("expected convert, got \(decision)")
             return
         }
         #expect(spec.maxFrameRate == 30)
-        #expect(!DownscalePlanner.locksFrameRate(inventory(fps: "60.00")))
-        #expect(!DownscalePlanner.locksFrameRate(MetadataInventory(items: [])))
+        #expect(!ConvertPlanner.locksFrameRate(inventory(fps: "60.00")))
+        #expect(!ConvertPlanner.locksFrameRate(MetadataInventory(items: [])))
     }
 
     @Test func verificationRejectsAFrameRateChangeOnSloMo() throws {
         let capped = DownscaleSpec(targetShortSide: 1080, averageBitRate: 8_000_000, maxFrameRate: 30)
-        let decision = DownscalePlanner.decide(inventory: inventory(fps: "120.00"), byteSize: byteSize, spec: capped)
+        let decision = ConvertPlanner.decide(inventory: inventory(fps: "120.00"), byteSize: byteSize, spec: capped)
         guard case .convert(let spec, _, let predicted) = decision else {
             Issue.record("expected convert, got \(decision)")
             return
         }
         let report = MetadataReport(
             changed: [MetadataChange(key: "video.frameRate", displayName: "Frame rate", from: "120.00", to: "30.00")])
-        #expect(!DownscaleRunner.isVerified(report, predicted: predicted, spec: spec))
+        #expect(!ConvertRunner.isVerified(report, predicted: predicted, spec: spec))
         // The cap as asked for would have let the change through; the planner's spec is the one that counts.
-        #expect(DownscaleRunner.isVerified(report, predicted: predicted, spec: capped))
+        #expect(ConvertRunner.isVerified(report, predicted: predicted, spec: capped))
     }
 
     @Test func cinematicLosesItsDepthDataAsOneReadableEntry() {
@@ -84,7 +84,7 @@ import Testing
         let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 8_000_000)
 
         #expect(
-            DownscaleRunner.warnings(report, predicted: MetadataReport(), spec: spec) == [
+            ConvertRunner.warnings(report, predicted: MetadataReport(), spec: spec) == [
                 "Cinematic depth data is lost", "Location is lost", "Bit depth changed from 8 to 10",
             ])
     }

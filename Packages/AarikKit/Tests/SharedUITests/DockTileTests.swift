@@ -1,8 +1,8 @@
-import AppCore
+import AarikCore
 import Foundation
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Suite struct DockTileTests {
     private func job(_ name: String, _ state: JobState) -> Job {

@@ -1,10 +1,10 @@
-import AppCore
+import AarikCore
 import Foundation
 import PhotosLibrary
 import Synchronization
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Holds the task a test cancels from inside a callback; a cancel asked for before the task is set happens as soon
 /// as it is.

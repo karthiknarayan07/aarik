@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 @Suite struct ImportDropGuardTests {
     private let temp = URL(filePath: "/private/var/folders/xx/T", directoryHint: .isDirectory)

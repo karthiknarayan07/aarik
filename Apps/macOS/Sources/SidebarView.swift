@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import SwiftUI
 
 /// The sidebar: draws whatever sections the hosted tool module lists, through `ToolSidebarModel`.

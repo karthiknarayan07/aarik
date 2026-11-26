@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 
@@ -20,7 +20,7 @@ public enum PhotosDestination: Codable, Sendable, Equatable {
 }
 
 /// The settings a Downscale Video job carries, encoded as JSON in `Job.settings`.
-public struct DownscaleJobSettings: Codable, Sendable, Equatable {
+public struct ConvertJobSettings: Codable, Sendable, Equatable {
     public var preset: Preset
     public var saveTo: SaveDestination
     /// When set, wins over `preset`.
@@ -52,7 +52,7 @@ public struct DownscaleJobSettings: Codable, Sendable, Equatable {
     }
 }
 
-public struct DownscaleTool: Tool {
+public struct ConvertTool: Tool {
     public static let toolID = "downscale-video"
     /// The same conversion on a video in the Photos library; its jobs have an `x-photos-asset:` source.
     public static let photosToolID = "downscale-video-photos"

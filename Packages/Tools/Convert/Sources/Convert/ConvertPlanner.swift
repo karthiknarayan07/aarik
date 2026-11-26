@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 
@@ -7,7 +7,7 @@ public enum PlanDecision: Sendable, Equatable {
     case keptAsIs(reason: String, code: OutcomeCode = .other)
 }
 
-public enum DownscalePlanner {
+public enum ConvertPlanner {
     static let spatialReason = "Spatial video isn't supported yet — it would lose one eye"
     static let alreadySmallReason = "Already small"
     static let savesLittleReason = "Would save less than 10%"

@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 import PhotosLibrary
 
@@ -9,7 +9,7 @@ public enum PhotosJobFactory {
     /// address with no bookmark; its file name travels in the settings, for the lists. `settings.saveTo` is not
     /// used for a Photos job; `destination` is.
     public static func makeJobs(
-        for videos: [(assetID: String, name: String, preset: Preset)], settings: DownscaleJobSettings,
+        for videos: [(assetID: String, name: String, preset: Preset)], settings: ConvertJobSettings,
         destination: PhotosDestination, lost: [String: [String]]? = nil, now: Date = Date()
     ) -> [Job] {
         videos.compactMap { video in
@@ -21,7 +21,7 @@ public enum PhotosJobFactory {
             settings.predictedLostKeys = nil
             guard let encoded = try? JSONEncoder().encode(settings) else { return nil }
             return Job(
-                toolID: DownscaleTool.photosToolID, source: PhotoAssetURL.url(for: video.assetID),
+                toolID: ConvertTool.photosToolID, source: PhotoAssetURL.url(for: video.assetID),
                 sourceBookmark: Data(), settings: encoded, createdAt: now)
         }
     }

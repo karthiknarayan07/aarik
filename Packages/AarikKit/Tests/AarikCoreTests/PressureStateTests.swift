@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 private let eightCores = CoreCounts(active: 8, performance: 4)
 

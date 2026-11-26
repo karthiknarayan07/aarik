@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Records which bodies ran inside the gate and how many were inside at once.
 private actor Occupancy {

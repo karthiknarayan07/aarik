@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 private func job(_ state: JobState) -> Job {
     Job(

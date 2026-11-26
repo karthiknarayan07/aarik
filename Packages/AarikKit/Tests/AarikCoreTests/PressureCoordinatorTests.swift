@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 @MainActor
 private final class FakeThermal: ThermalSource {

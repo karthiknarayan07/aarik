@@ -1,4 +1,4 @@
-import AppUI
+import SharedUI
 import SwiftUI
 
 /// Names what each video would lose, lets the user skip any of them, then converts the rest (spec 8.4).

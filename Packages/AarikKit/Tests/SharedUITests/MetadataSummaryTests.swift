@@ -1,7 +1,7 @@
-import AppCore
+import AarikCore
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 private func item(_ key: String, _ value: String = "1", name: String) -> MetadataItem {
     MetadataItem(key: key, category: .other, displayName: name, value: value)

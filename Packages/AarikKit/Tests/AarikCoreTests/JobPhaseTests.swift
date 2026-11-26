@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 // Phases a runner reports, outcome updates after a run, and jobs whose source is not a file.
 

@@ -1,5 +1,5 @@
-import AppUI
-import DownscaleVideo
+import SharedUI
+import Convert
 import LocalLibrary
 import SwiftUI
 
@@ -28,7 +28,7 @@ struct LibraryInspector: View {
                         ItemSummaryHeader(item: items[0], thumbnails: model.thumbnailSource)
                     }
                 }
-                DownscaleInspector(
+                ConvertInspector(
                     sources: items.map(model.inspectorSource(for:)), preset: $model.selectionPreset,
                     advanced: $model.advanced,
                     saveLocation: $model.saveLocation)

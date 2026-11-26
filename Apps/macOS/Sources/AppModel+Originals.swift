@@ -1,6 +1,6 @@
-import AppCore
-import AppUI
-import DownscaleVideo
+import AarikCore
+import SharedUI
+import Convert
 import Foundation
 import LocalLibrary
 import PhotosLibrary
@@ -77,11 +77,11 @@ extension AppModel {
             do {
                 let result = try await OriginalsDeleter.deleteAll(store: store, pending: pending)
                 // The jobs say it, and the grid follows by itself: Photos reports the library change.
-                update(result.moved.map(\.jobID)) { PhotosDownscaleRunner.markOriginalMoved(&$0) }
-                update(result.alreadyGone.map(\.jobID)) { PhotosDownscaleRunner.markOriginalGone(&$0) }
+                update(result.moved.map(\.jobID)) { PhotosConvertRunner.markOriginalMoved(&$0) }
+                update(result.alreadyGone.map(\.jobID)) { PhotosConvertRunner.markOriginalGone(&$0) }
                 for (entry, reason) in result.blocked {
                     let message = reason.message
-                    update([entry.jobID]) { PhotosDownscaleRunner.markOriginalKept(&$0, because: message) }
+                    update([entry.jobID]) { PhotosConvertRunner.markOriginalKept(&$0, because: message) }
                 }
                 let moved = result.moved.count
                 if !result.kept.isEmpty {

@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import MediaEngine
 
 extension AppModel {

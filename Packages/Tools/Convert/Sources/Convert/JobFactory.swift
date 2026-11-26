@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 
 /// The jobs made for a selection, and the files that couldn't get one.
@@ -14,7 +14,7 @@ public enum JobFactory {
     /// `losses`, each job also records what it is predicted to lose (`losses[url]`, none when absent) for the queue's
     /// badge. A file that can't be bookmarked is skipped and listed in `skipped`; the others still get jobs.
     public static func makeJobs(
-        for sources: [URL], settings: DownscaleJobSettings, losses: [URL: PredictedLoss<UUID>]? = nil,
+        for sources: [URL], settings: ConvertJobSettings, losses: [URL: PredictedLoss<UUID>]? = nil,
         now: Date = Date()
     ) -> JobBatch {
         makeJobs(
@@ -26,7 +26,7 @@ public enum JobFactory {
     ///
     /// Each loss carries the names for showing and the keys the runner checks against.
     public static func makeJobs(
-        for sources: [(url: URL, preset: Preset)], settings: DownscaleJobSettings,
+        for sources: [(url: URL, preset: Preset)], settings: ConvertJobSettings,
         losses: [URL: PredictedLoss<UUID>]? = nil, now: Date = Date()
     ) -> JobBatch {
         var batch = JobBatch(jobs: [], skipped: [])
@@ -45,7 +45,7 @@ public enum JobFactory {
             }
             batch.jobs.append(
                 Job(
-                    toolID: DownscaleTool.toolID, source: url, sourceBookmark: bookmark, settings: encoded,
+                    toolID: ConvertTool.toolID, source: url, sourceBookmark: bookmark, settings: encoded,
                     createdAt: now))
         }
         return batch

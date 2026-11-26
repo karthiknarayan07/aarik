@@ -1,7 +1,7 @@
-import AppCore
+import AarikCore
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 @testable import LocalLibrary
 
 @Suite struct VideoSidebarTests {
@@ -37,7 +37,7 @@ import Testing
     @Test func comingSoonToolsAreNotSelectable() {
         let tools = VideoSidebar.sections(state())[1].items
         #expect(tools.map(\.availability) == [.available, .comingSoon, .comingSoon])
-        #expect(tools.map(\.destination) == [.tool(DownscaleTool.descriptor.id), nil, nil])
+        #expect(tools.map(\.destination) == [.tool(ConvertTool.descriptor.id), nil, nil])
     }
 
     @Test func pagesShowTheLibraryOnlyForLocalFilesAndMediaTypes() {

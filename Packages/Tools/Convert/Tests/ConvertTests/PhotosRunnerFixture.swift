@@ -1,10 +1,10 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import PhotosLibrary
 import Synchronization
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// A fake Photos library holding one video whose bytes are a real clip, a work folder and a pending-deletions
 /// file, all in one temporary directory.
@@ -47,9 +47,9 @@ final class PhotosRig: Sendable {
 
     deinit { try? FileManager.default.removeItem(at: directory) }
 
-    func runner(core: DownscaleRunner = RunnerFixture.runner(), backup: Bool = false) -> PhotosDownscaleRunner {
+    func runner(core: ConvertRunner = RunnerFixture.runner(), backup: Bool = false) -> PhotosConvertRunner {
         let folder = self.backup
-        return PhotosDownscaleRunner(
+        return PhotosConvertRunner(
             store: store, workFolder: workFolder, pendingDeletions: pending, core: core,
             originalsBackup: { backup ? OriginalsBackup(folder: folder) : nil })
     }
@@ -57,11 +57,11 @@ final class PhotosRig: Sendable {
     func job(
         _ destination: PhotosDestination = .newAsset, id: String? = nil, predictedLost: [String]? = nil
     ) throws -> Job {
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .balanced, saveTo: .nextToOriginal, custom: Self.spec, predictedLost: predictedLost,
             photosDestination: destination, photosFileName: "IMG_0001.MOV")
         return Job(
-            toolID: DownscaleTool.photosToolID, source: PhotoAssetURL.url(for: id ?? asset.id), sourceBookmark: Data(),
+            toolID: ConvertTool.photosToolID, source: PhotoAssetURL.url(for: id ?? asset.id), sourceBookmark: Data(),
             settings: try JSONEncoder().encode(settings))
     }
 
@@ -82,7 +82,7 @@ final class RunLog: Sendable {
     var phases: [String] { state.withLock { $0.phases } }
     var progress: [Double] { state.withLock { $0.progress } }
 
-    func run(_ runner: PhotosDownscaleRunner, _ job: Job) async throws -> JobState {
+    func run(_ runner: PhotosConvertRunner, _ job: Job) async throws -> JobState {
         try await runner.run(
             job,
             progress: { value in self.state.withLock { $0.progress.append(value) } },

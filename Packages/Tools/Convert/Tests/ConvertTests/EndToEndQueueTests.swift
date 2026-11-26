@@ -1,8 +1,8 @@
-import AppCore
+import AarikCore
 import Foundation
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// The app's path without the UI: real jobs from `JobFactory`, the real queue and the real runner, on two
 /// generated clips. One converts, one is kept as is.
@@ -17,10 +17,10 @@ import Testing
             try? FileManager.default.removeItem(at: storeDirectory)
         }
         let queue = JobQueue(
-            store: JobStore(directory: storeDirectory), runners: [DownscaleTool.toolID: RunnerFixture.runner()])
+            store: JobStore(directory: storeDirectory), runners: [ConvertTool.toolID: RunnerFixture.runner()])
         // The generated clips are a second long, too short for a preset's estimate to promise a 10% saving, so the
         // jobs carry the runner tests' custom spec: a 1080p downscale. The 640x360 clip is already below it.
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: RunnerFixture.spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal, custom: RunnerFixture.spec)
         let jobs = JobFactory.makeJobs(for: [big, small], settings: settings).jobs
         var tracker = QueueRunTracker()
         #expect(tracker.observe(await queue.jobs) == nil)

@@ -1,6 +1,6 @@
-import AppCore
-import AppUI
-import DownscaleVideo
+import AarikCore
+import SharedUI
+import Convert
 import Foundation
 import MediaEngine
 import PhotosLibrary
@@ -63,7 +63,7 @@ public actor QuickRun {
         for file in accepted {
             let batch = JobFactory.makeJobs(
                 for: [(url: file.url, preset: preset)],
-                settings: DownscaleJobSettings(preset: preset, saveTo: destination, custom: file.custom),
+                settings: ConvertJobSettings(preset: preset, saveTo: destination, custom: file.custom),
                 losses: [:], now: now())
             jobs += batch.jobs
             unreadable += batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
@@ -104,7 +104,7 @@ public actor QuickRun {
         }
         let jobs = PhotosJobFactory.makeJobs(
             for: accepted.map { (assetID: $0.assetID, name: $0.name, preset: preset) },
-            settings: DownscaleJobSettings(preset: preset, saveTo: .nextToOriginal), destination: destination,
+            settings: ConvertJobSettings(preset: preset, saveTo: .nextToOriginal), destination: destination,
             lost: [:], now: now())
         // The saved Save to is for files; say so when it isn't what the copies got.
         var notes: [String] = []

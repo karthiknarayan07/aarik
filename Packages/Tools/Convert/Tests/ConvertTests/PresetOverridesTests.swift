@@ -1,9 +1,9 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// Spec 8.2: the header's preset is the default; the inspector overrides it per video.
 @Suite struct PresetOverridesTests {
@@ -127,13 +127,13 @@ import Testing
             try Data([UInt8(index)]).write(to: url)
             return url
         }
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace)
 
         let batch = JobFactory.makeJobs(
             for: [(url: urls[0], preset: .high), (url: urls[1], preset: .smaller)], settings: settings,
             losses: [urls[1]: PredictedLoss(id: UUID(), lost: ["Location"], keys: ["qt.uiso/loci"])])
 
-        let decoded = try batch.jobs.map { try JSONDecoder().decode(DownscaleJobSettings.self, from: $0.settings) }
+        let decoded = try batch.jobs.map { try JSONDecoder().decode(ConvertJobSettings.self, from: $0.settings) }
         #expect(batch.jobs.map(\.source) == urls)
         #expect(decoded.map(\.preset) == [.high, .smaller])
         #expect(decoded.map(\.saveTo) == [.replace, .replace])

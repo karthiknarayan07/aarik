@@ -1,6 +1,6 @@
-import AppCore
-import AppUI
-import DownscaleVideo
+import AarikCore
+import SharedUI
+import Convert
 import Foundation
 import LocalLibrary
 
@@ -16,7 +16,7 @@ struct LossReview {
     var entries: [Entry]
     /// Every video to add, lossy or not, in grid order.
     let items: [LibraryItem]
-    let settings: DownscaleJobSettings
+    let settings: ConvertJobSettings
     /// Each video's preset when it was added (the header's, or its own from the inspector).
     let presets: [UUID: Preset]
     /// What each lossy file loses, for the jobs' badges and the runner's check.
@@ -78,7 +78,7 @@ extension AppModel {
             replaceConsent.abandon()
             return
         }
-        let settings = DownscaleJobSettings(preset: preset, saveTo: destination, custom: advanced.spec)
+        let settings = ConvertJobSettings(preset: preset, saveTo: destination, custom: advanced.spec)
         let presets = Dictionary(uniqueKeysWithValues: selectedItems.map { ($0.id, effectivePreset(for: $0)) })
         let selected = Set(selectedItems.map(\.id))
         let wasAvailable = Set(queueableItems.map(\.id))
@@ -142,7 +142,7 @@ extension AppModel {
     /// Makes the jobs and adds them; says afterwards what was skipped (already queued, unreadable, or found
     /// missing just before).
     private func enqueue(
-        _ items: [LibraryItem], settings: DownscaleJobSettings, presets: [UUID: Preset],
+        _ items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset],
         losses: [URL: PredictedLoss<UUID>], missing: Int
     ) {
         replaceConsent.videosAdded()

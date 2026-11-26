@@ -1,5 +1,5 @@
-import AppCore
-import DownscaleVideo
+import AarikCore
+import Convert
 import Foundation
 
 /// The Settings window's stored values. The Settings views bind them with `@AppStorage`; the model and the runner
@@ -44,7 +44,7 @@ enum AppSettings {
     }
 
     /// The runner's backup provider, reading `defaults` from the queue's executor.
-    nonisolated static func originalsBackupProvider(_ defaults: UserDefaults) -> DownscaleRunner.BackupProvider {
+    nonisolated static func originalsBackupProvider(_ defaults: UserDefaults) -> ConvertRunner.BackupProvider {
         let shared = SharedDefaults(defaults)
         return { originalsBackup(shared.defaults) }
     }

@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Suite struct GridSelectionTests {
     // Two sections: a full row plus one (columns = 3), then a section of two.

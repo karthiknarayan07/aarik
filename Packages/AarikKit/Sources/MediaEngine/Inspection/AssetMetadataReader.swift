@@ -1,5 +1,5 @@
 import AVFoundation
-import AppCore
+import AarikCore
 import Foundation
 
 /// Reads every file-level metadata item (no allow-list) as `qt.` items, and track-level items the same way.

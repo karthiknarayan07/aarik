@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import SwiftUI
 
 /// How the Activity lists and the queue notification put results into words.

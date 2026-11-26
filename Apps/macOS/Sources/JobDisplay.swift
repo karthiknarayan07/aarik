@@ -1,8 +1,8 @@
-import AppCore
-import AppUI
+import AarikCore
+import SharedUI
 import AppKit
 import CoreGraphics
-import DownscaleVideo
+import Convert
 import LocalLibrary
 import SwiftUI
 
@@ -13,11 +13,11 @@ extension Job {
         return downscaleSettings?.photosFileName ?? "Video in Photos"
     }
 
-    var isPhotosJob: Bool { toolID == DownscaleTool.photosToolID }
+    var isPhotosJob: Bool { toolID == ConvertTool.photosToolID }
 
-    private var downscaleSettings: DownscaleJobSettings? {
-        guard toolID == DownscaleTool.toolID || isPhotosJob else { return nil }
-        return try? JSONDecoder().decode(DownscaleJobSettings.self, from: settings)
+    private var downscaleSettings: ConvertJobSettings? {
+        guard toolID == ConvertTool.toolID || isPhotosJob else { return nil }
+        return try? JSONDecoder().decode(ConvertJobSettings.self, from: settings)
     }
 
     /// "Balanced", "Custom"; nil for a job of another tool.

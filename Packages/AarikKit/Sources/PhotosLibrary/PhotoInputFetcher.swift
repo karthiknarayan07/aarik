@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 
 /// A Photos video fetched into the work folder, ready to convert.

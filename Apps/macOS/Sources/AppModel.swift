@@ -1,8 +1,8 @@
-import AppCore
+import AarikCore
 import AppKit
-import AppUI
+import SharedUI
 import Assistant
-import DownscaleVideo
+import Convert
 import Foundation
 import LocalLibrary
 import MediaEngine
@@ -164,12 +164,12 @@ final class AppModel {
         self.photoStore = photoStore
         // The runner asks for the backup folder at each Replace, so the setting applies without rebuilding the queue.
         let backupProvider = AppSettings.originalsBackupProvider(defaults)
-        let runner = DownscaleRunner(originalsBackup: backupProvider)
+        let runner = ConvertRunner(originalsBackup: backupProvider)
         let pendingDeletions = PendingDeletions(directory: directory)
         self.pendingDeletions = pendingDeletions
         self.pendingOriginals = pendingDeletions.all
         // Photos jobs fetch into the Work folder, which the launch sweep clears before the queue starts.
-        let photosRunner = PhotosDownscaleRunner(
+        let photosRunner = PhotosConvertRunner(
             store: photoStore, workFolder: .standard(), pendingDeletions: pendingDeletions,
             originalsBackup: backupProvider)
         // With auto-start off the queue is paused from the start, so no enqueue can slip in before a pause.
@@ -177,7 +177,7 @@ final class AppModel {
         self.isQueuePaused = !autoStart
         self.queue = JobQueue(
             store: JobStore(directory: directory),
-            runners: [DownscaleTool.toolID: runner, DownscaleTool.photosToolID: photosRunner],
+            runners: [ConvertTool.toolID: runner, ConvertTool.photosToolID: photosRunner],
             startPaused: !autoStart)
     }
 

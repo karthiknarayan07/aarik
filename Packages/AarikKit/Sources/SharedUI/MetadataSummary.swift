@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import SwiftUI
 
 /// What a conversion is expected to keep, change and lose.

@@ -1,10 +1,10 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import MediaTestSupport
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 @Suite struct PlannerTests {
     private func inventory(
@@ -59,14 +59,14 @@ import Testing
     @Test func smallLowBitrateSourceIsKeptAsIs() {
         // 720p30 balanced is ~4 Mbps; a 3 Mbps source is already below it.
         let source = inventory(size: "1280x720")
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 3), preset: .balanced)
         #expect(decision == .keptAsIs(reason: "Already small", code: .alreadySmall))
     }
 
     @Test func highBitrate1080pBalancedKeepsResolutionAndConverts() {
         let source = inventory(size: "1920x1080")
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 40), preset: .balanced)
         guard case .convert(let spec, _, _) = decision else {
             Issue.record("expected convert, got \(decision)")
@@ -78,7 +78,7 @@ import Testing
 
     @Test func unknownDurationIsKeptAsIs() {
         let source = inventory(size: "3840x2160", durationMs: 0)
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: 1_000_000, preset: .balanced)
         #expect(decision == .keptAsIs(reason: "Couldn't read the video's length", code: .lengthUnreadable))
     }
@@ -86,13 +86,13 @@ import Testing
     @Test func customSpecUsesTheSameRules() {
         let source = inventory(size: "2560x1440")
         let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 9_000_000)
-        let decision = DownscalePlanner.decide(inventory: source, byteSize: bytes(mbps: 10), spec: spec)
+        let decision = ConvertPlanner.decide(inventory: source, byteSize: bytes(mbps: 10), spec: spec)
         #expect(decision == .keptAsIs(reason: "Would save less than 10%", code: .savesLittle))
     }
 
     @Test func lowBitrateKeepResolutionIsKeptAsIs() {
         let source = inventory(size: "3840x2160")
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 5), preset: .high)
         #expect(decision == .keptAsIs(reason: "Already small", code: .alreadySmall))
     }
@@ -100,7 +100,7 @@ import Testing
     @Test func smallSavingIsKeptAsIs() {
         // 1440p at 10 Mbps: balanced 1080p is ~9 Mbps, saving under 10%.
         let source = inventory(size: "2560x1440")
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 10), preset: .balanced)
         #expect(decision == .keptAsIs(reason: "Would save less than 10%", code: .savesLittle))
     }
@@ -109,7 +109,7 @@ import Testing
         let stereo = MetadataItem(
             key: "hdr.stereo", category: .hdr, displayName: "Stereo views", value: "left+right")
         let source = inventory(size: "3840x2160", extra: [stereo])
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 60), preset: .balanced)
         #expect(
             decision
@@ -122,7 +122,7 @@ import Testing
         let meta = MetadataItem(
             key: "trackmeta.1.com.apple.quicktime.x", category: .track, displayName: "x", value: "1")
         let source = inventory(size: "3840x2160", extra: [aux, meta])
-        let decision = DownscalePlanner.decide(
+        let decision = ConvertPlanner.decide(
             source: URL(filePath: "/x.mov"), inventory: source, byteSize: bytes(mbps: 60), preset: .balanced)
         guard case .convert(_, _, let predicted) = decision else {
             Issue.record("expected convert, got \(decision)")

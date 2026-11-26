@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import CoreGraphics
 import Foundation
 import MediaEngine
@@ -27,7 +27,7 @@ public enum PhotosRunnerError: Error, LocalizedError, Equatable, OutcomeCoded {
 /// 1. Reads what Photos says about it now (a deleted video fails; spatial video is refused before any download).
 /// 2. Fetches the current version into the job's folder in the work folder: downloading from iCloud is its own
 ///    phase, with its own progress, and an edited video's rendering a second one.
-/// 3. Plans, downscales and checks it with the same code as a file (`DownscaleRunner.convert`).
+/// 3. Plans, downscales and checks it with the same code as a file (`ConvertRunner.convert`).
 /// 4. Saves the result: as a new video in Photos (checked by `PhotoSaver`), or as a file in a chosen folder.
 /// 5. For a Replace, after a verified save: copies the original to the originals folder when that is on, then
 ///    records the original as pending deletion. Nothing is deleted here; the app deletes all pending originals in
@@ -35,29 +35,29 @@ public enum PhotosRunnerError: Error, LocalizedError, Equatable, OutcomeCoded {
 ///
 /// The job's folder is removed on every way out, so nothing of the download or the converted file stays behind.
 /// The Photos library only ever gains the one new video.
-public struct PhotosDownscaleRunner: JobRunner {
+public struct PhotosConvertRunner: JobRunner {
     private let store: any PhotoStore
     private let workFolder: WorkFolder
     private let pendingDeletions: PendingDeletions
-    private let originalsBackup: DownscaleRunner.BackupProvider
-    private let core: DownscaleRunner
+    private let originalsBackup: ConvertRunner.BackupProvider
+    private let core: ConvertRunner
     /// One fetch from Photos at a time, however many jobs run (shared by every job this runner runs).
     private let downloads = DownloadGate()
 
     /// `originalsBackup` is asked at the moment of each Replace, as for files.
     public init(
         store: any PhotoStore, workFolder: WorkFolder, pendingDeletions: PendingDeletions,
-        originalsBackup: @escaping DownscaleRunner.BackupProvider = { nil }
+        originalsBackup: @escaping ConvertRunner.BackupProvider = { nil }
     ) {
         self.init(
-            store: store, workFolder: workFolder, pendingDeletions: pendingDeletions, core: DownscaleRunner(),
+            store: store, workFolder: workFolder, pendingDeletions: pendingDeletions, core: ConvertRunner(),
             originalsBackup: originalsBackup)
     }
 
     /// `core` is a seam for tests (an output that looks unfaithful).
     init(
-        store: any PhotoStore, workFolder: WorkFolder, pendingDeletions: PendingDeletions, core: DownscaleRunner,
-        originalsBackup: @escaping DownscaleRunner.BackupProvider = { nil }
+        store: any PhotoStore, workFolder: WorkFolder, pendingDeletions: PendingDeletions, core: ConvertRunner,
+        originalsBackup: @escaping ConvertRunner.BackupProvider = { nil }
     ) {
         self.store = store
         self.workFolder = workFolder
@@ -129,7 +129,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     private func perform(
         _ job: Job, progress: @escaping @Sendable (Double) -> Void, phase: @escaping @Sendable (String?) -> Void
     ) async throws -> JobState {
-        let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+        let settings = try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
         guard let id = PhotoAssetURL.identifier(from: job.source) else { throw PhotosRunnerError.notAPhotosJob }
         defer { core.diskSpace.release(owner: job.id) }
         let destination = settings.photosDestination ?? .newAsset
@@ -152,7 +152,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         // What Photos has now: gone, or spatial, ends the job before anything is downloaded.
         let queued = try await fetcher.asset(id: id)
         if queued.subtypes.contains(.spatial) {
-            return .keptAsIs(reason: DownscalePlanner.spatialReason, code: .spatialVideo)
+            return .keptAsIs(reason: ConvertPlanner.spatialReason, code: .spatialVideo)
         }
 
         // Nothing is written, not even the job's folder, unless every volume involved has room.
@@ -177,11 +177,11 @@ public struct PhotosDownscaleRunner: JobRunner {
             requireLossShown: true, reservingFor: job.id,
             outputFolder: {
                 if case .folder(let bookmark) = destination {
-                    return try DownscaleRunner.outputFolder(for: .folder(bookmark: bookmark), source: input.url)
+                    return try ConvertRunner.outputFolder(for: .folder(bookmark: bookmark), source: input.url)
                 }
                 return (jobFolder, {})
             }, progress: progress)
-        let converted: DownscaleRunner.Conversion
+        let converted: ConvertRunner.Conversion
         switch result {
         case .keptAsIs(let reason, let code): return .keptAsIs(reason: reason, code: code)
         case .converted(let value): converted = value
@@ -239,7 +239,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     // MARK: - Saving
 
     private func saveToPhotos(
-        _ job: Job, id: String, input: FetchedInput, current: PhotoAsset, converted: DownscaleRunner.Conversion,
+        _ job: Job, id: String, input: FetchedInput, current: PhotoAsset, converted: ConvertRunner.Conversion,
         replace: Bool, jobFolder: URL, fetcher: PhotoInputFetcher, progress: @escaping @Sendable (Double) -> Void,
         phase: @escaping @Sendable (String?) -> Void
     ) async throws -> JobState {
@@ -326,7 +326,7 @@ public struct PhotosDownscaleRunner: JobRunner {
     ) async throws {
         if !outcome.warnings.isEmpty {
             outcome.addWarning(
-                Self.keptBecause(DownscaleRunner.unverifiedCopyReason), code: .originalKeptNotVerified)
+                Self.keptBecause(ConvertRunner.unverifiedCopyReason), code: .originalKeptNotVerified)
         } else if let problem = try await prepareReplace(
             job, id: id, input: input, jobFolder: jobFolder, fetcher: fetcher, phase: phase)
         {
@@ -433,9 +433,9 @@ public struct PhotosDownscaleRunner: JobRunner {
     /// backup, the original (and, for an edited video, the original's own download in the Work volume too). Each
     /// volume also keeps `DiskSpaceCheck.margin` free. The converted copy's size is the planner's estimate for what
     /// Photos reports about the video; the exact estimate is checked again once the video is read
-    /// (`DownscaleRunner.convert`). Skipped when Photos doesn't say how big the video is.
+    /// (`ConvertRunner.convert`). Skipped when Photos doesn't say how big the video is.
     private func checkFreeSpaceBeforeDownload(
-        _ asset: PhotoAsset, settings: DownscaleJobSettings, destination: PhotosDestination, jobID: UUID
+        _ asset: PhotoAsset, settings: ConvertJobSettings, destination: PhotosDestination, jobID: UUID
     ) throws {
         guard let size = asset.originalByteSize, size > 0 else { return }
         let profile = SourceProfile(
@@ -448,7 +448,7 @@ public struct PhotosDownscaleRunner: JobRunner {
         var needs = [SpaceNeed(url: work, bytes: size)]
         if case .folder(let bookmark) = destination {
             // An unusable folder is reported when the output is about to be written.
-            if let folder = try? DownscaleRunner.outputFolder(for: .folder(bookmark: bookmark), source: work) {
+            if let folder = try? ConvertRunner.outputFolder(for: .folder(bookmark: bookmark), source: work) {
                 needs.append(SpaceNeed(url: folder.url, bytes: output))
                 folder.stop()
             }

@@ -1,6 +1,6 @@
 import Foundation
 import MediaEngine
-import AppCore
+import AarikCore
 
 /// How hard to shrink a video.
 ///
@@ -97,7 +97,7 @@ struct SourceProfile {
     var shortSide: Int { min(width, height) }
 
     /// 100 fps or more (an unknown rate counts as 30, so not slo-mo).
-    var isSloMo: Bool { frameRate >= DownscalePlanner.sloMoFrameRate }
+    var isSloMo: Bool { frameRate >= ConvertPlanner.sloMoFrameRate }
 
     /// 1080 for a source taller than that; nil (keep the resolution) when the source is already 1080 or smaller,
     /// so the 1080 presets still compress it, at the bit rate formula for the source's own size.

@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 
@@ -29,7 +29,7 @@ enum OriginalsBackupError: Error, Equatable {
     }
 }
 
-extension DownscaleRunner {
+extension ConvertRunner {
     /// Copies `source` into `folder` under its own name (`<name> 2.<ext>` and so on when taken) and checks that the
     /// copy is `byteSize` bytes. The copy is written to a hidden partial file and appears under its final name only
     /// through an exclusive rename, so nothing is ever overwritten and a finished name always holds a whole copy.

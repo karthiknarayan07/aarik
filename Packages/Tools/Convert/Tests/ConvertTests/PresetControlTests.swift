@@ -1,6 +1,6 @@
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// The inspector's preset control: a real Mixed state, and no preset choice while custom settings apply to all.
 @Suite struct PresetControlTests {

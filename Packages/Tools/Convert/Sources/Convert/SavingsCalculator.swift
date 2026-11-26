@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 
@@ -28,13 +28,13 @@ public enum SavingsCalculator {
     public typealias Source = (byteSize: Int64, inventory: MetadataInventory)
 
     /// The planner's decision for a preset, or for `custom` when given. `fallsBackToQuickTime`: see
-    /// `DownscalePlanner.decide(inventory:byteSize:spec:fallsBackToQuickTime:)`.
+    /// `ConvertPlanner.decide(inventory:byteSize:spec:fallsBackToQuickTime:)`.
     public static func decision(
         byteSize: Int64, inventory: MetadataInventory, preset: Preset, custom: DownscaleSpec? = nil,
         fallsBackToQuickTime: Bool = false
     ) -> PlanDecision {
         let source = SourceProfile(inventory: inventory, byteSize: byteSize)
-        return DownscalePlanner.decide(
+        return ConvertPlanner.decide(
             source: source, inventory: inventory, spec: custom ?? preset.spec(for: source),
             fallsBackToQuickTime: fallsBackToQuickTime)
     }

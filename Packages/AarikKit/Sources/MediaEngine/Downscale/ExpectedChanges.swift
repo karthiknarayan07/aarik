@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import CoreMedia
 
 /// The metadata changes a downscale is expected to make. Anything else that changed means the output is not a

@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 @Suite struct LaunchArgumentsTests {
     @Test func readsTheValueAfterTheFlag() {

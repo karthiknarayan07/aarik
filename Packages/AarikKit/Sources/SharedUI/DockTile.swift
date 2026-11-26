@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 
 /// What the Dock icon shows: a bar for the running conversion and a badge for the videos still waiting.

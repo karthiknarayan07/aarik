@@ -1,5 +1,5 @@
-import AppCore
-import AppUI
+import AarikCore
+import SharedUI
 import Assistant
 import LocalLibrary
 import SwiftUI

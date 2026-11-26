@@ -8,7 +8,7 @@ import Testing
 
 /// How the engine behaves on input that isn't a tidy constant-rate clip: damaged files and variable frame rate.
 /// (Cancellation mid-encode is `VideoDownscalerTests.cancelRemovesPartialOutput`; a full disk is
-/// `DiskSpacePreflightTests` in DownscaleVideoTests, where the free-space rule lives.)
+/// `DiskSpacePreflightTests` in ConvertTests, where the free-space rule lives.)
 @Suite struct EngineRobustnessTests {
     private let spec = DownscaleSpec(targetShortSide: 360, averageBitRate: 2_000_000)
 

@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import CoreGraphics
 import Foundation
 import LocalLibrary
@@ -6,7 +6,7 @@ import MediaEngine
 import PhotosLibrary
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// The Overview's totals and "could free" at the current preset, on made-up videos (no files, no Photos).
 @Suite struct OverviewSummaryTests {

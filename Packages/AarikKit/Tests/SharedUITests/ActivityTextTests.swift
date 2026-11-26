@@ -1,8 +1,8 @@
-import AppCore
+import AarikCore
 import Foundation
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 private func outcome(before: Int64, after: Int64) -> JobOutcome {
     JobOutcome(

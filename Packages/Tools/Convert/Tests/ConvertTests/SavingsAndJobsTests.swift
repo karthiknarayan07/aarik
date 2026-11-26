@@ -1,9 +1,9 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 @Suite struct SavingsAndJobsTests {
     private func inventory(size: String, durationMs: Int = 60_000, extra: [MetadataItem] = []) -> MetadataInventory {
@@ -70,7 +70,7 @@ import Testing
             try Data([UInt8(index)]).write(to: url)
             return url
         }
-        let settings = DownscaleJobSettings(preset: .smaller, saveTo: .nextToOriginal)
+        let settings = ConvertJobSettings(preset: .smaller, saveTo: .nextToOriginal)
 
         let batch = JobFactory.makeJobs(for: urls, settings: settings)
         let jobs = batch.jobs
@@ -80,9 +80,9 @@ import Testing
         #expect(jobs.map(\.source) == urls)
         #expect(Set(jobs.map(\.id)).count == 3)
         for job in jobs {
-            #expect(job.toolID == DownscaleTool.toolID)
+            #expect(job.toolID == ConvertTool.toolID)
             #expect(job.state == .queued)
-            let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+            let decoded = try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
             #expect(decoded == settings)
             var stale = false
             let resolved = try URL(
@@ -97,11 +97,11 @@ import Testing
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appending(path: "clip.mov")
         try Data([1]).write(to: url)
-        let settings = DownscaleJobSettings(
+        let settings = ConvertJobSettings(
             preset: .high, saveTo: .replace, custom: DownscaleSpec(targetShortSide: 720, averageBitRate: 3_000_000))
 
         let jobs = JobFactory.makeJobs(for: [url], settings: settings).jobs
-        let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: try #require(jobs.first).settings)
+        let decoded = try JSONDecoder().decode(ConvertJobSettings.self, from: try #require(jobs.first).settings)
         #expect(decoded == settings)
     }
 
@@ -114,7 +114,7 @@ import Testing
         let missing = folder.appending(path: "missing.mov")
 
         let batch = JobFactory.makeJobs(
-            for: [missing, present], settings: DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal))
+            for: [missing, present], settings: ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal))
 
         #expect(batch.jobs.map(\.source) == [present])
         #expect(batch.skipped == [missing])
@@ -128,24 +128,24 @@ import Testing
         let clean = folder.appending(path: "b.mov")
         try Data([1]).write(to: lossy)
         try Data([2]).write(to: clean)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal)
 
         let jobs = JobFactory.makeJobs(
             for: [lossy, clean], settings: settings,
             losses: [lossy: PredictedLoss(id: UUID(), lost: ["Cinematic depth data"], keys: ["x"])]
         ).jobs
-        let decoded = try jobs.map { try JSONDecoder().decode(DownscaleJobSettings.self, from: $0.settings) }
+        let decoded = try jobs.map { try JSONDecoder().decode(ConvertJobSettings.self, from: $0.settings) }
 
         #expect(decoded.map(\.predictedLost) == [["Cinematic depth data"], []])
         // Without a loss check the prediction is unknown, as for jobs saved before it existed.
         let unknown = try #require(JobFactory.makeJobs(for: [clean], settings: settings).jobs.first)
-        #expect(try JSONDecoder().decode(DownscaleJobSettings.self, from: unknown.settings).predictedLost == nil)
+        #expect(try JSONDecoder().decode(ConvertJobSettings.self, from: unknown.settings).predictedLost == nil)
     }
 
     @Test func settingsSavedBeforePredictedLossDecode() throws {
         let old = #"{"preset":"balanced","saveTo":{"nextToOriginal":{}}}"#
-        let decoded = try JSONDecoder().decode(DownscaleJobSettings.self, from: Data(old.utf8))
-        #expect(decoded == DownscaleJobSettings(preset: .balanced, saveTo: .nextToOriginal))
+        let decoded = try JSONDecoder().decode(ConvertJobSettings.self, from: Data(old.utf8))
+        #expect(decoded == ConvertJobSettings(preset: .balanced, saveTo: .nextToOriginal))
     }
 
     @Test func advancedOptionsBuildACustomSpecOnlyWhenOn() {

@@ -1,11 +1,11 @@
-import AppCore
+import AarikCore
 import CoreGraphics
 import Foundation
 import PhotosLibrary
 import Synchronization
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// A store that forwards to a fake and calls `onAsset` at each `asset(id:)`, so a test can cancel the run at a
 /// chosen moment inside the Replace steps.
@@ -46,7 +46,7 @@ private struct WatchingStore: PhotoStore {
 
     /// Runs the job with `runner` and cancels it when `trigger` says so; returns the error, if any.
     private func runCancelling(
-        _ runner: PhotosDownscaleRunner, _ job: Job,
+        _ runner: PhotosConvertRunner, _ job: Job,
         when trigger: @escaping @Sendable (_ phase: String, _ progress: Double?) -> Bool
     ) async -> (any Error)? {
         let cancel = CancelSwitch()
@@ -190,7 +190,7 @@ private struct WatchingStore: PhotoStore {
             let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
             if !files.isEmpty { cancel.cancel() }
         }
-        let runner = PhotosDownscaleRunner(
+        let runner = PhotosConvertRunner(
             store: store, workFolder: rig.workFolder, pendingDeletions: rig.pending, core: RunnerFixture.runner(),
             originalsBackup: { OriginalsBackup(folder: folder) })
         let task = Task<JobState, any Error> { try await runner.run(job) { _ in } }
@@ -234,15 +234,15 @@ private struct WatchingStore: PhotoStore {
             replacedOriginal: false,
             notes: ["Saved to Photos as a new video", "Original will move to Recently Deleted"])
 
-        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalChanged.message)
-        PhotosDownscaleRunner.markOriginalKept(&outcome, because: PendingBlock.originalChanged.message)
+        PhotosConvertRunner.markOriginalKept(&outcome, because: PendingBlock.originalChanged.message)
+        PhotosConvertRunner.markOriginalKept(&outcome, because: PendingBlock.originalChanged.message)
 
         #expect(outcome.warnings == ["Kept the original because it changed after shrinking"])
         #expect(outcome.warningCodes == [.originalKeptOtherReason])
         #expect(!outcome.notes.contains("Original will move to Recently Deleted"))
         #expect(!outcome.replacedOriginal)
 
-        PhotosDownscaleRunner.markOriginalMoved(&outcome)
+        PhotosConvertRunner.markOriginalMoved(&outcome)
         #expect(outcome.warnings.isEmpty)
         #expect(outcome.replacedOriginal)
     }
@@ -252,7 +252,7 @@ private struct WatchingStore: PhotoStore {
             output: PhotoAssetURL.url(for: "new-1"), bytesBefore: 100, bytesAfter: 40, report: MetadataReport(),
             replacedOriginal: false, notes: ["Original will move to Recently Deleted"])
 
-        PhotosDownscaleRunner.markOriginalGone(&outcome)
+        PhotosConvertRunner.markOriginalGone(&outcome)
 
         #expect(outcome.notes == ["Original no longer in Photos"])
         #expect(outcome.noteCodes == [.originalGone])
@@ -266,8 +266,8 @@ private struct WatchingStore: PhotoStore {
             notes: ["Saved to Photos as a new video", "Original will move to Recently Deleted"],
             noteCodes: [.savedToPhotos, .originalInRecentlyDeleted])
 
-        PhotosDownscaleRunner.markOriginalMoved(&outcome)
-        PhotosDownscaleRunner.markOriginalMoved(&outcome)
+        PhotosConvertRunner.markOriginalMoved(&outcome)
+        PhotosConvertRunner.markOriginalMoved(&outcome)
 
         #expect(outcome.replacedOriginal)
         #expect(outcome.notes == ["Saved to Photos as a new video", "Original moved to Recently Deleted"])

@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 private func item(
     _ key: String, _ value: String, _ category: MetadataCategory = .other

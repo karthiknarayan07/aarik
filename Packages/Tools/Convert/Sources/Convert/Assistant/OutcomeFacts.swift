@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import Foundation
 
 /// The sentence the model reads for each reason code. The runners write reasons, warnings and notes as plain text

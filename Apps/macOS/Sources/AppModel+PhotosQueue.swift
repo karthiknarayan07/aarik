@@ -1,6 +1,6 @@
-import AppCore
-import AppUI
-import DownscaleVideo
+import AarikCore
+import SharedUI
+import Convert
 import Foundation
 import LocalLibrary
 import PhotosLibrary
@@ -74,7 +74,7 @@ extension AppModel {
     func addPhotosSelectionToQueue() {
         guard let destination = photosSaveLocation.destination else { return }
         // The Advanced options are not offered for Photos videos yet, so a hidden custom spec never applies.
-        let settings = DownscaleJobSettings(preset: preset, saveTo: .nextToOriginal)
+        let settings = ConvertJobSettings(preset: preset, saveTo: .nextToOriginal)
         let items = selectedPhotoItems
         let presets = Dictionary(uniqueKeysWithValues: items.map { ($0.id, effectivePreset(for: $0)) })
         var lost: [String: [String]] = [:]
@@ -107,7 +107,7 @@ extension AppModel {
     }
 
     func enqueuePhotos(
-        _ items: [LibraryItem], settings: DownscaleJobSettings, presets: [UUID: Preset], batch: PhotosBatch
+        _ items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset], batch: PhotosBatch
     ) {
         replaceConsent.videosAdded()
         let jobs = PhotosJobFactory.makeJobs(

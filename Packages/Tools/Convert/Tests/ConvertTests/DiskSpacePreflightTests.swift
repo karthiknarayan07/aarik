@@ -1,11 +1,11 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import PhotosLibrary
 import Synchronization
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 /// The free-space rule before a job writes anything: the estimated output, plus the download for a Photos video,
 /// plus 1 GB, on every volume involved. All with a fake disk; the real one is never asked.
@@ -20,14 +20,14 @@ import Testing
     }
 
     private func runner(
-        _ diskSpace: DiskSpaceCheck, backup: URL? = nil, trash: @escaping DownscaleRunner.Trasher = { $0 }
-    ) -> DownscaleRunner {
-        DownscaleRunner(
+        _ diskSpace: DiskSpaceCheck, backup: URL? = nil, trash: @escaping ConvertRunner.Trasher = { $0 }
+    ) -> ConvertRunner {
+        ConvertRunner(
             trash: trash, originalsBackup: { backup.map { OriginalsBackup(folder: $0) } }, diskSpace: diskSpace)
     }
 
-    private func settings(_ saveTo: SaveDestination = .nextToOriginal) -> DownscaleJobSettings {
-        DownscaleJobSettings(preset: .balanced, saveTo: saveTo, custom: Self.spec)
+    private func settings(_ saveTo: SaveDestination = .nextToOriginal) -> ConvertJobSettings {
+        ConvertJobSettings(preset: .balanced, saveTo: saveTo, custom: Self.spec)
     }
 
     private func names(in directory: URL) throws -> [String] {
@@ -143,7 +143,7 @@ import Testing
     // MARK: - Photos
 
     private func photosRunner(_ rig: PhotosRig, _ diskSpace: DiskSpaceCheck, backup: Bool = false)
-        -> PhotosDownscaleRunner
+        -> PhotosConvertRunner
     {
         rig.runner(core: runner(diskSpace), backup: backup)
     }
@@ -182,7 +182,7 @@ import Testing
     @Test(.timeLimit(.minutes(5))) func thePhotosLibraryVolumeIsCheckedBeforeTheDownload() async throws {
         let rig = try await PhotosRig(audio: false)
         let disk = FakeDiskSpace(available: 100 * Self.gb)
-        disk.setVolume(at: PhotosDownscaleRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
+        disk.setVolume(at: PhotosConvertRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
 
         do {
             _ = try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job()) { _ in }
@@ -203,7 +203,7 @@ import Testing
                 isLocallyAvailable: false)
         ]
         let disk = FakeDiskSpace(available: 100 * Self.gb)
-        disk.setVolume(at: PhotosDownscaleRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
+        disk.setVolume(at: PhotosConvertRunner.photosLibraryLocation, name: "Library Disk", available: 300_000_000)
 
         await #expect(throws: NotEnoughSpaceError.self) {
             try await photosRunner(rig, DiskSpaceCheck(provider: disk)).run(try rig.job()) { _ in }

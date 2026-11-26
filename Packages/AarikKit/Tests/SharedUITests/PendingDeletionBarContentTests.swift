@@ -1,6 +1,6 @@
 import Testing
 
-@testable import AppUI
+@testable import SharedUI
 
 @Suite struct PendingDeletionBarContentTests {
     @Test func readySaysHowManyAndWhenICloudSpaceIsFreed() {

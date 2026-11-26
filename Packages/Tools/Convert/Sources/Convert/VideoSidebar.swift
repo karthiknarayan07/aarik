@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import LocalLibrary
 
 /// The pages of the video tool: what its sidebar selects.
@@ -69,7 +69,7 @@ public struct VideoSidebarState: Sendable, Equatable {
 
 /// The video tool's sidebar: Library, Media types (only the types present), Tools and Activity.
 public enum VideoSidebar {
-    public static let tools: [ToolDescriptor] = [DownscaleTool.descriptor]
+    public static let tools: [ToolDescriptor] = [ConvertTool.descriptor]
 
     /// Shown disabled with a "Soon" label until they ship.
     public static let comingSoon: [ToolDescriptor] = [

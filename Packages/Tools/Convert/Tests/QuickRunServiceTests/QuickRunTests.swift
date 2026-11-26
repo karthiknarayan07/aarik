@@ -1,5 +1,5 @@
-import AppCore
-import DownscaleVideo
+import AarikCore
+import Convert
 import Foundation
 import Testing
 
@@ -27,8 +27,8 @@ import Testing
         }
     }
 
-    private func settings(of job: Job) throws -> DownscaleJobSettings {
-        try JSONDecoder().decode(DownscaleJobSettings.self, from: job.settings)
+    private func settings(of job: Job) throws -> ConvertJobSettings {
+        try JSONDecoder().decode(ConvertJobSettings.self, from: job.settings)
     }
 
     @Test func aFileThatWouldLoseMetadataIsSkippedNotQueued() async throws {

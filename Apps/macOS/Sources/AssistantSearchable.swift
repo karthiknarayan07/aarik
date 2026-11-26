@@ -1,5 +1,5 @@
 import Assistant
-import AppCore
+import AarikCore
 import Foundation
 import LocalLibrary
 import SwiftUI

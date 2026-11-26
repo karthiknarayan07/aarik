@@ -1,10 +1,10 @@
-import AppCore
+import AarikCore
 import Foundation
 import MediaEngine
 import MediaTestSupport
 import Testing
 
-@testable import DownscaleVideo
+@testable import Convert
 
 @Suite struct H264PlannerTests {
     private func item(_ key: String, _ value: String) -> MetadataItem {
@@ -25,7 +25,7 @@ import Testing
 
     private func predicted(_ inventory: MetadataInventory, codec: VideoCodec) throws -> MetadataReport {
         let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 16_000_000, codec: codec)
-        let decision = DownscalePlanner.decide(inventory: inventory, byteSize: 600_000_000, spec: spec)
+        let decision = ConvertPlanner.decide(inventory: inventory, byteSize: 600_000_000, spec: spec)
         guard case .convert(_, _, let report) = decision else {
             Issue.record("expected convert, got \(decision)")
             throw CancellationError()
@@ -86,7 +86,7 @@ import Testing
         let json = Data(
             #"{"preset":"balanced","saveTo":{"nextToOriginal":{}},"custom":{"targetShortSide":720,"averageBitRate":5000000}}"#
                 .utf8)
-        let settings = try JSONDecoder().decode(DownscaleJobSettings.self, from: json)
+        let settings = try JSONDecoder().decode(ConvertJobSettings.self, from: json)
         #expect(settings.custom?.codec == .hevcKeepHDR)
     }
 
@@ -102,7 +102,7 @@ import Testing
         let directory = clip.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
         let trash = directory.appending(path: "Trash", directoryHint: .isDirectory)
-        let runner = DownscaleRunner(
+        let runner = ConvertRunner(
             trash: { url in
                 try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
                 let destination = trash.appending(path: url.lastPathComponent)
@@ -112,7 +112,7 @@ import Testing
             diskSpace: RunnerFixture.roomy)
         // The synthetic HLG clip compresses to about 1.1 Mbps, so the H.264 output needs a lower rate to save over 10%.
         let spec = DownscaleSpec(targetShortSide: 1080, averageBitRate: 300_000, codec: .h264Compatible)
-        let settings = DownscaleJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
+        let settings = ConvertJobSettings(preset: .balanced, saveTo: .replace, custom: spec)
 
         let state = try await runner.run(try RunnerFixture.job(clip, settings)) { _ in }
 
@@ -143,7 +143,7 @@ import Testing
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try Data("inside".utf8).write(to: folder.appending(path: "keep.txt"))
 
-        DownscaleRunner.removeStalePartials(of: directory.appending(path: "clip.mov"))
+        ConvertRunner.removeStalePartials(of: directory.appending(path: "clip.mov"))
 
         #expect(!FileManager.default.fileExists(atPath: real.path))
         #expect(FileManager.default.fileExists(atPath: lookalike.path))

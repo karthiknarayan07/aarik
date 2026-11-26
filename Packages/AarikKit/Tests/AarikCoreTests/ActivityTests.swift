@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import AppCore
+@testable import AarikCore
 
 private func job(_ name: String, _ state: JobState, tool: String = "fake", directory: String = "/tmp") -> Job {
     Job(

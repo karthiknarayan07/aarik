@@ -1,4 +1,4 @@
-import AppCore
+import AarikCore
 import CryptoKit
 import Foundation
 import LocalLibrary
