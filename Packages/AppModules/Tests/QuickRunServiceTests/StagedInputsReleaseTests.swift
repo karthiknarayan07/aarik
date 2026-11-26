@@ -53,6 +53,27 @@ import Testing
         #expect(!exists(removed.deletingLastPathComponent()))
     }
 
+    @Test func aUUIDNamedSymbolicLinkIsNeverFollowed() throws {
+        let directory = try makeDirectory()
+        let elsewhere = try makeDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            try? FileManager.default.removeItem(at: elsewhere)
+        }
+        let precious = elsewhere.appending(path: "precious.mov")
+        try Data("p".utf8).write(to: precious)
+        let link = directory.appending(path: UUID().uuidString)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: elsewhere)
+        let staged = StagedInputs(directory: directory)
+
+        staged.sweep(keeping: [URL]())
+        #expect(exists(precious))
+        #expect(exists(elsewhere))
+
+        staged.remove(link.appending(path: "precious.mov"))
+        #expect(exists(precious))
+    }
+
     @Test func aFailedJobKeepsItsCopyForRetryUntilItIsRemoved() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

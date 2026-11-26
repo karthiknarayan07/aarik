@@ -31,7 +31,7 @@ public struct StagedInputs: Sendable {
     /// Removes the copy itself, then its folder if that is now empty. Anything else in the folder (a file the app
     /// didn't stage) is left, and so is the folder. A file not made here is left alone.
     public func remove(_ url: URL) {
-        guard let folder = folder(of: url) else { return }
+        guard let folder = folder(of: url), !Self.isSymbolicLink(folder) else { return }
         let file = folder.appending(path: url.lastPathComponent)
         try? FileManager.default.removeItem(at: file)
         removeIfEmpty(folder)
@@ -46,6 +46,10 @@ public struct StagedInputs: Sendable {
             (try? FileManager.default.contentsOfDirectory(
                 at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
         for child in children where UUID(uuidString: child.lastPathComponent) != nil {
+            if Self.isSymbolicLink(child) {
+                Self.log.notice("Skipped a symbolic link in the staging folder")
+                continue
+            }
             guard !kept.contains(child.resolvingSymlinksInPath().path) else { continue }
             let contents =
                 (try? FileManager.default.contentsOfDirectory(at: child, includingPropertiesForKeys: nil)) ?? []
@@ -83,6 +87,11 @@ public struct StagedInputs: Sendable {
 
     private static let log = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "app", category: "staging")
+
+    /// Whether `url` itself is a symbolic link (not what it points to).
+    private static func isSymbolicLink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) ?? false
+    }
 
     private static func isRegularFile(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
