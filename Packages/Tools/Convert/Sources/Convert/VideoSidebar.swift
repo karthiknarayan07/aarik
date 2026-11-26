@@ -12,6 +12,8 @@ public enum VideoPage: Hashable, Sendable {
     case completed
     case keptAsIs
     case failed
+    /// The assistant chat (shown only while Apple Intelligence is available).
+    case ask
 
     /// Local Files and the media-type filters share the grid.
     public var showsLibrary: Bool {
@@ -32,6 +34,7 @@ public enum VideoPage: Hashable, Sendable {
         case .completed: "Completed"
         case .keptAsIs: "Kept as Is"
         case .failed: "Failed"
+        case .ask: "Ask"
         }
     }
 
@@ -46,6 +49,7 @@ public enum VideoPage: Hashable, Sendable {
         case .completed: "checkmark.circle"
         case .keptAsIs: "equal.circle"
         case .failed: "exclamationmark.triangle"
+        case .ask: "sparkles"
         }
     }
 
@@ -61,6 +65,7 @@ public enum VideoPage: Hashable, Sendable {
         case .completed: .green
         case .keptAsIs: .gray
         case .failed: .red
+        case .ask: .purple
         }
     }
 }
@@ -73,8 +78,14 @@ public struct VideoSidebarState: Sendable, Equatable {
     /// How many Local Files items carry each badge.
     public var badgeCounts: [MediaBadge: Int]
     public var activity: ActivitySummary
+    /// Whether the Ask page is listed: only while the on-device model can be asked.
+    public var showsAsk: Bool
 
-    public init(photosCount: Int?, localCount: Int, badgeCounts: [MediaBadge: Int], activity: ActivitySummary) {
+    public init(
+        photosCount: Int?, localCount: Int, badgeCounts: [MediaBadge: Int], activity: ActivitySummary,
+        showsAsk: Bool = false
+    ) {
+        self.showsAsk = showsAsk
         self.photosCount = photosCount
         self.localCount = localCount
         self.badgeCounts = badgeCounts
@@ -124,6 +135,10 @@ public enum VideoSidebar {
                     item(.keptAsIs, count: activity.keptAsIs),
                     item(.failed, count: activity.failed),
                 ]))
+        // Last, so ⌘1 to ⌘7 keep their pages whether or not Ask is listed.
+        if state.showsAsk {
+            sections.append(ToolSidebarSection(title: "Assistant", items: [item(.ask)]))
+        }
         return sections
     }
 

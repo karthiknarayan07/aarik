@@ -33,6 +33,8 @@ extension VideoPage {
             EmptyState(
                 "Nothing Kept as Is", systemImage: systemImage,
                 message: "Videos that wouldn't get meaningfully smaller are listed here with the reason.")
+        case .ask:
+            EmptyState("Ask", systemImage: systemImage, message: "Ask about your videos, on this Mac.")
         case .failed:
             EmptyState(
                 "No Failures", systemImage: systemImage,

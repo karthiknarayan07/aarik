@@ -48,7 +48,7 @@ public enum IOSPage: String, CaseIterable, Hashable, Sendable, Identifiable {
         case .localFiles, .mediaType: self = .files
         case .queue: self = .queue
         case .completed, .keptAsIs, .failed: self = .completed
-        case .tool, nil: return nil
+        case .tool, .ask, nil: return nil
         }
     }
 }

@@ -31,7 +31,7 @@
                 VideoSidebarState(
                     photosCount: model.photos.hasLoaded ? model.photos.items.count : nil,
                     localCount: model.library.items.count, badgeCounts: model.library.badgeCounts,
-                    activity: model.activity))
+                    activity: model.activity, showsAsk: model.isAskAvailable))
         }
 
         @ViewBuilder public func detail(for destination: VideoPage?) -> some View {
@@ -59,6 +59,15 @@
                 .disabled(!model.canAddSelectionToQueue)
                 .help("Add the selected videos to the queue (⌘⏎)")
             }
+            if model.isAskAvailable {
+                // On every page (disabled away from Ask), so switching pages never changes the toolbar. ⌘N belongs
+                // to File → New Chat.
+                ToolbarItem(placement: .primaryAction) {
+                    Button("New Chat", systemImage: "square.and.pencil") { model.startNewChat() }
+                        .disabled(destination != .ask)
+                        .help("Start a new chat (⌘N)")
+                }
+            }
             ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItem(placement: .primaryAction) {
                 InspectorToggle(isPresented: Bindable(model).isInspectorPresented)
@@ -72,6 +81,8 @@
             Group {
                 if destination?.showsLibrary == true || destination == .photosVideos {
                     LibraryInspector(model: model)
+                } else if destination == .ask {
+                    MacChatHistoryView(chat: model.services.assistantChat)
                 } else {
                     EmptyState(
                         "No Selection", systemImage: "sidebar.trailing",
@@ -133,6 +144,7 @@
                 case .keptAsIs: KeptAsIsView(model: model)
                 case .failed: FailedView(model: model)
                 case .overview: OverviewView(model: model)
+                case .ask: MacAskView(chat: model.services.assistantChat)
                 case .some(let page):
                     page.emptyState
                         .navigationTitle(page.title)
