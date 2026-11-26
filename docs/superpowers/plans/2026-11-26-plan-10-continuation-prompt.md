@@ -17,11 +17,11 @@ You are continuing work on Aarik. Your working directory is `/Users/karthiknaray
 ## Where things stand (2026-11-26)
 - **Merged and pushed** to `plan-2-app-shell`:
   - **Base**: Task 1 (iOS skeleton), Tasks 2+3 (`Apps/` layout, `App.xcworkspace`, `Packages/Core`, `Packages/Tools/Convert`, Convert rename), `scripts/verify.sh` + CI iOS job, Task 3b (`Tool`, `AppServices`, `ConvertModel`, `ConvertMacScene`, `ConvertIOSScene` stub, `MacShell`), Task 4 (`.iOS(.v26)`, `Platform` seams & iOS/fake adapters, Low Power Mode 1-slot rule, `#if os(macOS)` on `Photos.sqlite` fps).
-  - Both `App` (macOS) and `App-iOS` build cleanly; `lint` and `hygiene` (`brand-neutral`, `stale paths`) pass.
-- **In-flight or recently completed branches** (check `git log` on `plan-2-app-shell` first to see if Tasks 5, 6, 10 finished merging before quota paused):
-  - `plan-10/task-5`: Convert video compression (`.compress(CompressPreset)`).
-  - `plan-10/task-6`: iOS app shell & library (`NavigationSplitView`, Photos, Files -> Documents, Queue/Settings, Apple Intelligence).
-  - `plan-10/task-10`: iOS Replace originals (`OriginalsDeleter` + `IOSPendingDeletionBar`).
+  - **Phase 3 (completed & merged)**:
+    - **Task 5**: Convert video compression (`.compress(CompressPreset)`, ADR 0005 Accepted, Mac "Compress…" UI, `ShrinkVideosIntent` `mode`, compression perf test).
+    - **Task 6**: iOS app shell & library (`NavigationSplitView` adaptive across iPhone/iPad/Duo, Photos browser, Files -> Documents, Queue/Completed/Inspector/Settings, Apple Intelligence).
+    - **Task 10**: iOS Replace originals (`IOSPendingDeletionBar`, foreground-only batch Recently Deleted flow, `ConvertModelOriginalsTests`).
+  - Note: after merging Tasks 5+6+10, verify `App` (macOS) + `App-iOS` + `Convert` `-warnings-as-errors` build and run `swift test` on `Core`/`Convert`.
 - **Paused with WIP commits saved on branches** (no active worktrees; resume in fresh `share`/`worktree` checkouts of each branch, max 3 parallel):
   - `plan-10/task-7` (`ca2ecfd`): iOS background running (`BGContinuedProcessingTask`) & Live Activity — code written, needs `plan-2-app-shell` merge + verification (`AppCoreTests` + `App-iOS` build).
   - `plan-10/task-8` (`24c8ad1`): iOS Share extension & foreground App Intent (`StagedInputs`) — code + tests written, `lint`/`hygiene` passed, needs `plan-2-app-shell` merge + `AppCoreTests` + `App-iOS` build.
@@ -36,10 +36,9 @@ You are continuing work on Aarik. Your working directory is `/Users/karthiknaray
   - `Karthik’s iPhone` (`00008120-00145D840AFBC01E`) uses Personal Team `95J795334T` (no App Group entitlement allowed on free teams). For local device preview installs, build with `DEVELOPMENT_TEAM=95J795334T CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" CODE_SIGN_ENTITLEMENTS=""`. Also `Config/iOS.xcconfig` currently sets `CODE_SIGN_STYLE = Manual` / `DEVELOPMENT_TEAM =` *after* `#include? "Signing.local.xcconfig"`, so move `#include? "Signing.local.xcconfig"` below the defaults if fixing local override ergonomics.
 
 ## Next steps (strictly max 3 parallel subagents)
-1. Check `git log -n 10 --oneline` on `plan-2-app-shell` and `git branch` for `plan-10/task-*` to see which of Tasks 5, 6, 10 still need finishing/merging; finish and merge them first (push after every merge).
-2. Resume paused branches in batches of **at most 3**: e.g. Batch A = `plan-10/task-7`, `plan-10/task-8`, `plan-10/task-9` (each merges `plan-2-app-shell`, verifies fast targeted tests + `App-iOS` build + `lint`/`hygiene`, commits). Merge & push each.
-3. Next batch (<=3): `plan-10/task-12` (merge `plan-2-app-shell` including Task 5 compression copy, verify Mac tests/build) + **Test speed optimization** (`FixtureFactory` cache + Simulator test fast-track). Merge & push.
-4. Run **Task 11** (iOS UI tests & performance baseline) and **Task 13** (Release checklist in `docs/RELEASING.md`), then pass `scripts/verify.sh --repeat 2` twice green and push `plan-2-app-shell`.
+1. Resume paused branches in batches of **at most 3**: Batch A = `plan-10/task-7`, `plan-10/task-8`, `plan-10/task-9` (each merges `plan-2-app-shell`, wires into `IOSShell`/`ConvertIOSScene` if needed, verifies fast targeted tests + `App-iOS` build + `lint`/`hygiene`, commits). Merge & push each.
+2. Batch B (<=3): `plan-10/task-12` (merge `plan-2-app-shell`, verify Mac tests/build) + **Test speed optimization** (`FixtureFactory` cache + Simulator test fast-track). Merge & push.
+3. Run **Task 11** (iOS UI tests & performance baseline) and **Task 13** (Release checklist in `docs/RELEASING.md`), then pass `scripts/verify.sh --repeat 2` twice green and push `plan-2-app-shell`.
 
 ## Rules that carry over
 - Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

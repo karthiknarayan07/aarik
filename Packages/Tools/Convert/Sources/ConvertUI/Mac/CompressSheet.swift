@@ -1,4 +1,5 @@
 #if os(macOS)
+    import AppCore
     import AppUI
     import Convert
     import LocalLibrary
@@ -31,6 +32,7 @@
             }
             switch model.saveLocation.choice {
             case .nextToOriginal: return "Next to Original"
+            case .documents: return AppInfo.displayName
             case .replace: return "Replace Original"
             case .folder: return model.saveLocation.folder?.lastPathComponent ?? "Folder"
             }
