@@ -53,7 +53,9 @@ import Testing
         for kind in JobListKind.allCases {
             for command in JobListActions.contextMenu(kind: kind, rows: [file, running]) {
                 let words = command.title.split(separator: " ")
-                #expect(words.allSatisfy { $0.first?.isUppercase == true || ["in", "from"].contains($0) }, "\(command.title)")
+                #expect(
+                    words.allSatisfy { $0.first?.isUppercase == true || ["in", "from"].contains($0) },
+                    "\(command.title)")
             }
         }
     }
