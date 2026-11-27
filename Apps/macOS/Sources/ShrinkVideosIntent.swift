@@ -20,7 +20,7 @@ struct ShrinkVideosIntent: AppIntent {
         searchKeywords: ["shrink", "compress", "smaller", "downscale", "1080p", "4K", "video"])
     static let supportedModes: IntentModes = .background
 
-    @Parameter(title: "Videos", description: "The videos to shrink.", supportedContentTypes: [.movie])
+    @Parameter(title: "Media", description: "The videos or images to shrink.", supportedContentTypes: [.movie, .image])
     var files: [IntentFile]?
 
     @Parameter(

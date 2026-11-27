@@ -29,7 +29,7 @@ final class StatusItemDropView: NSView {
     /// (no extension) from its content type, a few lookups at most.
     private func accepts(_ sender: any NSDraggingInfo) -> Bool {
         verdicts.verdict(forSession: sender.draggingSequenceNumber) {
-            MovieDropFilter.mightContainMovie(MovieDropFilter.fileURLs(on: sender.draggingPasteboard))
+            MovieDropFilter.mightContainMedia(MovieDropFilter.fileURLs(on: sender.draggingPasteboard))
         }
     }
 

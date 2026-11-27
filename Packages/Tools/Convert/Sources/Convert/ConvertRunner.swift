@@ -33,11 +33,11 @@ public struct ConvertRunner: JobRunner {
     typealias Inspector = @Sendable (URL) async throws -> MetadataInventory
 
     static let maxNamingAttempts = 3
-    private let trash: Trasher
+    let trash: Trasher
     private let inspect: Inspector
     let sizeOf: Sizer
-    private let originalsBackup: BackupProvider
-    private let documentsDirectory: @Sendable () -> URL
+    let originalsBackup: BackupProvider
+    let documentsDirectory: @Sendable () -> URL
     /// The free-space rule, checked before anything is written (see `STABILITY.md`).
     let diskSpace: DiskSpaceCheck
 
@@ -296,7 +296,7 @@ public struct ConvertRunner: JobRunner {
     /// output's extension, when the container changed) if that is still free. The original must still be the
     /// file the conversion read. Returns where the output ends up, the warning saying why the original was kept
     /// when it was, and a note when the output couldn't take the original's name.
-    private func replace(_ source: URL, identity: FileIdentity, with output: URL)
+    func replace(_ source: URL, identity: FileIdentity, with output: URL)
         -> (url: URL, warning: OutcomeLine?, note: OutcomeLine?)
     {
         let changed = OutcomeLine(Self.originalChanged, .originalChangedDuringConversion)
@@ -354,7 +354,7 @@ public struct ConvertRunner: JobRunner {
     }
 
     /// Throws `CancellationError` when the task was cancelled, after removing `output` (the runner's own file).
-    private static func stopIfCancelled(removing output: URL) throws {
+    static func stopIfCancelled(removing output: URL) throws {
         guard Task.isCancelled else { return }
         try? FileManager.default.removeItem(at: output)
         throw CancellationError()

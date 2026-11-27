@@ -51,11 +51,12 @@ public struct OverviewSummary: Sendable, Equatable {
     /// (`init`, `SavingsAnalyzer`). A video kept as is maps to 0.
     public static func estimates(
         photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
-        custom: DownscaleSpec? = nil
+        custom: DownscaleSpec? = nil, imageSpec: ImageSpec = ImageSpec()
     ) -> [UUID: Int64] {
         var result: [UUID: Int64] = [:]
         for item in photos + files where item.isAvailable {
-            result[item.id] = couldFree(item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+            result[item.id] = couldFree(
+                item, preset: overrides.preset(for: item.id, default: preset), custom: custom, imageSpec: imageSpec)
         }
         return result
     }
@@ -64,7 +65,8 @@ public struct OverviewSummary: Sendable, Equatable {
     /// `completed` are the outcomes of finished jobs. `estimates` (from `estimates(...)`) saves estimating again.
     public init(
         photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
-        custom: DownscaleSpec? = nil, completed: [JobOutcome] = [], estimates: [UUID: Int64]? = nil
+        custom: DownscaleSpec? = nil, completed: [JobOutcome] = [], estimates: [UUID: Int64]? = nil,
+        imageSpec: ImageSpec = ImageSpec()
     ) {
         var videos = Totals()
         var localFiles = Totals()
@@ -77,7 +79,9 @@ public struct OverviewSummary: Sendable, Equatable {
                 guard item.isAvailable else { continue }
                 let free =
                     estimates?[item.id]
-                    ?? Self.couldFree(item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+                    ?? Self.couldFree(
+                        item, preset: overrides.preset(for: item.id, default: preset), custom: custom,
+                        imageSpec: imageSpec)
                 totals.couldFree += free
                 if free > 0 {
                     entries.append(
@@ -95,8 +99,18 @@ public struct OverviewSummary: Sendable, Equatable {
         self.savedBytes = completed.reduce(0) { $0 + $1.savedBytes }
     }
 
-    /// What converting one video would free at `preset`.
-    static func couldFree(_ item: LibraryItem, preset: Preset, custom: DownscaleSpec?) -> Int64 {
+    /// What converting one video or image would free at `preset` / `imageSpec`.
+    static func couldFree(
+        _ item: LibraryItem, preset: Preset, custom: DownscaleSpec?, imageSpec: ImageSpec = ImageSpec()
+    ) -> Int64 {
+        if item.isImage {
+            guard item.pixelSize.width > 0, item.pixelSize.height > 0,
+                case .convert(_, _, _, let estimate, _) = ImagePlanner.decide(
+                    byteSize: item.byteSize, pixelSize: item.pixelSize, sourceUTI: item.imageSourceUTI,
+                    inventory: item.inventory, spec: imageSpec, isLivePhoto: item.badges.contains(.livePhoto))
+            else { return 0 }
+            return max(0, item.byteSize - estimate)
+        }
         let source = estimationSource(for: item)
         guard
             case .convert(_, let estimate, _) = SavingsCalculator.decision(

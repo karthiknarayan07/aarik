@@ -17,7 +17,8 @@ extension MacShell {
     private func quickRunSettings() -> QuickRunSettings {
         QuickRunSettings(
             preset: convert.preset, saveLocation: AppSettings.defaultSaveLocation(services.defaults),
-            startsQueue: services.settings.autoStartQueue)
+            startsQueue: services.settings.autoStartQueue,
+            imageOptions: AppSettings.defaultImageOptions(services.defaults))
     }
 
     /// Converts `urls` in the background: no questions, no window. Skipped files and the result come in one
@@ -48,13 +49,13 @@ extension MacShell {
     func runFromMenuBar(_ urls: [URL]) {
         let entry = menuBarRuns.begin(files: urls.count)
         Task {
-            let split = await Task.detached(priority: .userInitiated) { MovieDropFilter.partition(urls) }.value
-            menuBarRuns.checked(entry, movies: split.movies.count, rejected: split.others.count, now: Date())
-            guard !split.movies.isEmpty else {
+            let split = await Task.detached(priority: .userInitiated) { MovieDropFilter.partitionMedia(urls) }.value
+            menuBarRuns.checked(entry, movies: split.media.count, rejected: split.others.count, now: Date())
+            guard !split.media.isEmpty else {
                 expireMenuBarNotice()
                 return
             }
-            runQuickly(split.movies, origin: .statusItem, statusEntry: entry)
+            runQuickly(split.media, origin: .statusItem, statusEntry: entry)
         }
     }
 

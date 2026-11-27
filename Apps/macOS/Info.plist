@@ -16,6 +16,7 @@
 				<string>com.apple.quicktime-movie</string>
 				<string>public.mpeg-4</string>
 				<string>com.apple.m4v-video</string>
+				<string>public.image</string>
 			</array>
 		</dict>
 	</array>
@@ -25,7 +26,7 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Shrink Videos</string>
+				<string>Shrink Media</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>shrinkVideos</string>
@@ -34,6 +35,7 @@
 			<key>NSSendFileTypes</key>
 			<array>
 				<string>public.movie</string>
+				<string>public.image</string>
 			</array>
 			<key>NSRequiredContext</key>
 			<dict/>

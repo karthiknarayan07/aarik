@@ -56,11 +56,17 @@ public struct QuickRunSettings: Sendable, Equatable {
     public var saveLocation: SaveLocation
     /// Whether adding jobs also starts the queue (the Settings auto-start choice).
     public var startsQueue: Bool
+    /// Saved image defaults used when a quick run receives image files.
+    public var imageOptions: ImageAdvancedOptions
 
-    public init(preset: Preset, saveLocation: SaveLocation, startsQueue: Bool = true) {
+    public init(
+        preset: Preset, saveLocation: SaveLocation, startsQueue: Bool = true,
+        imageOptions: ImageAdvancedOptions = ImageAdvancedOptions()
+    ) {
         self.preset = preset
         self.saveLocation = saveLocation
         self.startsQueue = startsQueue
+        self.imageOptions = imageOptions
     }
 }
 
@@ -145,14 +151,16 @@ public struct QuickRunNotice: Sendable, Equatable {
     }
 }
 
-/// A video's size and metadata, as the planner needs them.
+/// A video or image's size and metadata, as the planner needs them.
 public struct QuickRunSource: Sendable, Equatable {
     public let byteSize: Int64
     public let inventory: MetadataInventory
+    public let isImage: Bool
 
-    public init(byteSize: Int64, inventory: MetadataInventory) {
+    public init(byteSize: Int64, inventory: MetadataInventory, isImage: Bool = false) {
         self.byteSize = byteSize
         self.inventory = inventory
+        self.isImage = isImage
     }
 }
 

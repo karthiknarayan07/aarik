@@ -102,7 +102,7 @@ import Testing
     @Test func unknownValuesAreDroppedWithANoteAndTheRestSurvives() async {
         let (result, _) = await translate(
             LibraryQuery(
-                mediaType: "Portrait", resolutions: ["8K", "4K"], codecs: ["AV1"], dynamicRanges: ["HLG"]))
+                mediaType: "360", resolutions: ["8K", "4K"], codecs: ["AV1"], dynamicRanges: ["HLG"]))
         #expect(result.filters.mediaType == nil)
         #expect(result.filters.quality.qualities == QualityBucket.allUHD)
         #expect(result.filters.quality.codecs.isEmpty)

@@ -53,6 +53,49 @@
             }
         }
 
+        /// A guess from the file name alone, with no disk access: whether this looks like a video or image.
+        public static func looksLikeMedia(_ url: URL) -> Bool {
+            guard url.isFileURL, !url.hasDirectoryPath,
+                let type = UTType(filenameExtension: url.pathExtension)
+            else { return false }
+            return type.conforms(to: .movie) || type.conforms(to: .image)
+        }
+
+        /// Whether any of `urls` looks like a supported video or image (see `looksLikeMedia`).
+        public static func mightContainMedia(
+            _ urls: [URL], maxLookups: Int = 20, contentType: (URL) -> UTType? = diskContentType
+        ) -> Bool {
+            var lookups = 0
+            for url in urls {
+                if looksLikeMedia(url) { return true }
+                guard url.isFileURL, !url.hasDirectoryPath, UTType(filenameExtension: url.pathExtension) == nil,
+                    lookups < maxLookups
+                else { continue }
+                lookups += 1
+                if let type = contentType(url), type.conforms(to: .movie) || type.conforms(to: .image) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        /// Whether a drag whose items advertise these type identifiers might hold a video or image.
+        public static func providersMightHoldMedia(_ typeIdentifiers: [[String]]) -> Bool {
+            typeIdentifiers.contains { identifiers in
+                let types = identifiers.compactMap { UTType($0) }
+                if types.contains(where: { $0.conforms(to: .movie) || $0.conforms(to: .image) }) { return true }
+                let uninformative: [UTType] = [.fileURL, .url, .item, .data, .content]
+                return types.allSatisfy { type in type.isDynamic || uninformative.contains(type) }
+            }
+        }
+
+        /// Splits `urls` into supported videos/images and everything else (folders, packages, unreadable files, other types).
+        public static func partitionMedia(_ urls: [URL]) -> (media: [URL], others: [URL]) {
+            let media = media(in: urls)
+            let kept = Set(media.map(\.absoluteString))
+            return (media, urls.filter { !kept.contains($0.absoluteString) })
+        }
+
         /// Splits `urls` into the movies and everything else (folders, packages, unreadable files, other types). Reads
         /// the disk, so call it off the main thread.
         public static func partition(_ urls: [URL]) -> (movies: [URL], others: [URL]) {

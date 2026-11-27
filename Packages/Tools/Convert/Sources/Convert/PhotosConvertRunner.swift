@@ -36,13 +36,13 @@ public enum PhotosRunnerError: Error, LocalizedError, Equatable, OutcomeCoded {
 /// The job's folder is removed on every way out, so nothing of the download or the converted file stays behind.
 /// The Photos library only ever gains the one new video.
 public struct PhotosConvertRunner: JobRunner {
-    private let store: any PhotoStore
-    private let workFolder: WorkFolder
-    private let pendingDeletions: PendingDeletions
-    private let originalsBackup: ConvertRunner.BackupProvider
-    private let core: ConvertRunner
+    let store: any PhotoStore
+    let workFolder: WorkFolder
+    let pendingDeletions: PendingDeletions
+    let originalsBackup: ConvertRunner.BackupProvider
+    let core: ConvertRunner
     /// One fetch from Photos at a time, however many jobs run (shared by every job this runner runs).
-    private let downloads = DownloadGate()
+    let downloads: DownloadGate
 
     /// `originalsBackup` is asked at the moment of each Replace, as for files.
     public init(
@@ -51,19 +51,20 @@ public struct PhotosConvertRunner: JobRunner {
     ) {
         self.init(
             store: store, workFolder: workFolder, pendingDeletions: pendingDeletions, core: ConvertRunner(),
-            originalsBackup: originalsBackup)
+            originalsBackup: originalsBackup, downloads: DownloadGate())
     }
 
     /// `core` is a seam for tests (an output that looks unfaithful).
     init(
         store: any PhotoStore, workFolder: WorkFolder, pendingDeletions: PendingDeletions, core: ConvertRunner,
-        originalsBackup: @escaping ConvertRunner.BackupProvider = { nil }
+        originalsBackup: @escaping ConvertRunner.BackupProvider = { nil }, downloads: DownloadGate = DownloadGate()
     ) {
         self.store = store
         self.workFolder = workFolder
         self.pendingDeletions = pendingDeletions
         self.core = core
         self.originalsBackup = originalsBackup
+        self.downloads = downloads
     }
 
     static let downloadingPhase = "Downloading from iCloud…"
@@ -151,6 +152,11 @@ public struct PhotosConvertRunner: JobRunner {
 
         // What Photos has now: gone, or spatial, ends the job before anything is downloaded.
         let queued = try await fetcher.asset(id: id)
+        if queued.mediaKind == .image || settings.imageSpec != nil || job.toolID == ConvertTool.imagePhotosToolID {
+            return try await performImageJob(
+                job, id: id, asset: queued, settings: settings, destination: destination, fetcher: fetcher,
+                progress: progress, phase: phase)
+        }
         if queued.subtypes.contains(.spatial) {
             return .keptAsIs(reason: ConvertPlanner.spatialReason, code: .spatialVideo)
         }
@@ -207,7 +213,7 @@ public struct PhotosConvertRunner: JobRunner {
 
     /// Fetches the current version, reporting the download (or the copy of a video that is on this Mac) and the
     /// rendering of an edit as phases of their own.
-    private func fetchInput(
+    func fetchInput(
         id: String, asset: PhotoAsset, into folder: URL, fetcher: PhotoInputFetcher,
         progress: @escaping @Sendable (Double) -> Void, phase: @escaping @Sendable (String?) -> Void
     ) async throws -> FetchedInput {
@@ -319,7 +325,7 @@ public struct PhotosConvertRunner: JobRunner {
 
     /// The Replace steps after the new video is saved and checked: adds to `outcome` the note that the original will
     /// move to Recently Deleted, or the warning saying why it was kept.
-    private func finishReplace(
+    func finishReplace(
         _ job: Job, id: String, outcome: inout JobOutcome, input: FetchedInput?, jobFolder: URL,
         fetcher: PhotoInputFetcher, phase: @escaping @Sendable (String?) -> Void
     ) async throws {

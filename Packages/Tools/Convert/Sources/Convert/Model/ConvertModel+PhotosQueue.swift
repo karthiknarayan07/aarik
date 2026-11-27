@@ -77,24 +77,43 @@ extension ConvertModel {
 
     public var addPhotosToQueueTitle: String {
         let items = selectedPhotoItems
+        if !items.isEmpty, items.allSatisfy(\.isImage) {
+            if items.count == 1 { return "Add to queue · \(imageAdvanced.resolution.title)" }
+            return "Add \(items.count) to queue"
+        }
         return QueueButtonTitle.title(
             count: items.count, preset: items.first.map(effectivePreset(for:)) ?? preset, isCustom: false)
     }
 
-    /// Adds the selected Photos videos. Nothing is downloaded now: each video is fetched when its turn comes.
-    /// Videos Photos says will lose something (Cinematic depth data) are listed for the user first.
+    /// Adds the selected Photos videos and images. Nothing is downloaded now: each item is fetched when its turn comes.
+    /// Items Photos says will lose something (Cinematic depth, RAW data, Live Photo motion) are listed first.
     public func addPhotosSelectionToQueue(kind: ConvertJobKind = .shrink) {
         guard let destination = photosSaveLocation.destination else { return }
         let settings = ConvertJobSettings(
             kind: kind, preset: preset, saveTo: .nextToOriginal, custom: kind == .shrink ? advanced.spec : nil)
+        let imgSpec = imageAdvanced.spec
+        let imageSettings = ConvertJobSettings(
+            kind: .shrink, preset: preset, saveTo: .nextToOriginal, imageSpec: imgSpec)
         let items = selectedPhotoItems
         let presets = Dictionary(uniqueKeysWithValues: items.map { ($0.id, effectivePreset(for: $0)) })
         var lost: [String: [String]] = [:]
         for item in items {
             guard let identifier = item.photosIdentifier else { continue }
-            lost[identifier] = PhotosLossCheck.lostNames(
-                isCinematic: item.badges.contains(.cinematic),
-                isHDR: item.badges.contains(.hdr) || item.badges.contains(.dolbyVision), custom: settings.custom)
+            if item.isImage {
+                lost[identifier] = ImageLossCheck.photosLostNames(
+                    isRAW: item.badges.contains(.raw),
+                    hasDepth: item.badges.contains(.portrait),
+                    hasHDR: item.badges.contains(.hdr),
+                    isLivePhoto: item.badges.contains(.livePhoto),
+                    hasAlpha: item.badges.contains(.transparent),
+                    isAnimated: item.badges.contains(.animated),
+                    sourceUTI: item.imageSourceUTI,
+                    spec: imgSpec)
+            } else {
+                lost[identifier] = PhotosLossCheck.lostNames(
+                    isCinematic: item.badges.contains(.cinematic),
+                    isHDR: item.badges.contains(.hdr) || item.badges.contains(.dolbyVision), custom: settings.custom)
+            }
         }
         let batch = PhotosBatch(destination: destination, lost: lost)
         let losing = items.compactMap { item -> LossReview.Entry? in
@@ -103,11 +122,15 @@ extension ConvertModel {
             }
             return .init(id: item.id, name: item.name, lost: names)
         }
+        let hasImages = items.contains(where: \.isImage)
         if losing.isEmpty {
-            enqueuePhotos(items, settings: settings, presets: presets, batch: batch)
+            enqueuePhotos(
+                items, settings: settings, imageSettings: hasImages ? imageSettings : nil, presets: presets,
+                batch: batch)
         } else {
             lossReview = LossReview(
-                entries: losing, items: items, settings: settings, presets: presets, losses: [:], missing: 0,
+                entries: losing, items: items, settings: settings,
+                imageSettings: hasImages ? imageSettings : nil, presets: presets, losses: [:], missing: 0,
                 photos: batch)
         }
     }
@@ -125,26 +148,40 @@ extension ConvertModel {
     }
 
     public func enqueuePhotos(
-        _ items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset], batch: PhotosBatch
+        _ items: [LibraryItem], settings: ConvertJobSettings, imageSettings: ConvertJobSettings? = nil,
+        presets: [UUID: Preset], batch: PhotosBatch
     ) {
         replaceConsent.videosAdded()
-        let savings = estimatedSavings(for: items, settings: settings, presets: presets)
-        let jobs = PhotosJobFactory.makeJobs(
-            for: items.compactMap { item in
-                item.photosIdentifier.map {
-                    (assetID: $0, name: item.name, preset: presets[item.id] ?? settings.preset)
-                }
-            }, settings: settings, destination: batch.destination, lost: batch.lost,
-            savings: Dictionary(
-                items.compactMap { item in
-                    item.photosIdentifier.flatMap { id in savings[item.id].map { (id, $0) } }
-                }, uniquingKeysWith: { first, _ in first }))
+        let effectiveImageSettings =
+            imageSettings
+            ?? ConvertJobSettings(
+                kind: .shrink, preset: settings.preset, saveTo: .nextToOriginal, imageSpec: imageAdvanced.spec)
+        let savings = estimatedSavings(
+            for: items, settings: settings, imageSpec: effectiveImageSettings.imageSpec ?? imageAdvanced.spec,
+            presets: presets)
+        let videoItems = items.filter { !$0.isImage }
+        let imageItems = items.filter(\.isImage)
+        func jobs(for subset: [LibraryItem], using itemSettings: ConvertJobSettings) -> [Job] {
+            guard !subset.isEmpty else { return [] }
+            return PhotosJobFactory.makeJobs(
+                for: subset.compactMap { item in
+                    item.photosIdentifier.map {
+                        (assetID: $0, name: item.name, preset: presets[item.id] ?? itemSettings.preset)
+                    }
+                },
+                settings: itemSettings, destination: batch.destination, lost: batch.lost,
+                savings: Dictionary(
+                    subset.compactMap { item in
+                        item.photosIdentifier.flatMap { id in savings[item.id].map { (id, $0) } }
+                    }, uniquingKeysWith: { first, _ in first }))
+        }
+        let combinedJobs = jobs(for: videoItems, using: settings) + jobs(for: imageItems, using: effectiveImageSettings)
         let start = takeStartsQueue()
         if start { isQueuePaused = false }
         services.send { [weak self] queue in
-            let added = await queue.enqueue(jobs)
+            let added = await queue.enqueue(combinedJobs)
             if start { await queue.resume() }
-            let alreadyQueued = jobs.count - added.count
+            let alreadyQueued = combinedJobs.count - added.count
             await MainActor.run {
                 self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: 0, missing: 0)
             }

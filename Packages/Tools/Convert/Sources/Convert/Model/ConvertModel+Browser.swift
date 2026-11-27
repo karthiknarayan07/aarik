@@ -36,8 +36,8 @@ extension ConvertModel {
         }
         guard OpenLimit.allows(urls.count) else {
             alert = AppAlert(
-                title: "Too Many Videos to Open",
-                message: "Select up to \(OpenLimit.maximum) videos to open them at once.")
+                title: "Too Many Items to Open",
+                message: "Select up to \(OpenLimit.maximum) items to open them at once.")
             return
         }
         host.open(urls)

@@ -18,7 +18,7 @@ struct ShrinkVideosIntent: AppIntent {
         searchKeywords: ["shrink", "compress", "smaller", "downscale", "1080p", "4K", "video"])
     static let supportedModes: IntentModes = .foreground
 
-    @Parameter(title: "Videos", description: "The videos to shrink.", supportedContentTypes: [.movie])
+    @Parameter(title: "Media", description: "The videos or images to shrink.", supportedContentTypes: [.movie, .image])
     var files: [IntentFile]?
 
     @Parameter(
@@ -91,7 +91,7 @@ struct ShrinkVideosIntent: AppIntent {
         var skippedNonVideos = 0
 
         for file in given {
-            if let type = file.type, !type.conforms(to: .movie) {
+            if let type = file.type, !(type.conforms(to: .movie) || type.conforms(to: .image)) {
                 skippedNonVideos += 1
                 continue
             }
@@ -163,7 +163,7 @@ struct ShrinkVideosIntent: AppIntent {
                     failed += 1
                     continue
                 }
-                if !hasExplicitMovieType, !StagedInputs.isVideoFile(url) {
+                if !hasExplicitMovieType, !StagedInputs.isMediaFile(url) {
                     skippedNonVideos += 1
                     continue
                 }

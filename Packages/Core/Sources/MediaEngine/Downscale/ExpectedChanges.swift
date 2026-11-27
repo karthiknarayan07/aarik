@@ -59,6 +59,7 @@ public enum ExpectedChanges {
             switch change.key {
             case "img.dimensions": false
             case "img.uti": !formatMayChange
+            case "img.xmp": false
             case "img.apple.contentID": false
             default: true
             }

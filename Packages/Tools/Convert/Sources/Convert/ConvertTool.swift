@@ -31,6 +31,8 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
     public var saveTo: SaveDestination
     /// When set (for `.shrink`), wins over `preset`.
     public var custom: DownscaleSpec?
+    /// Image conversion settings when this job operates on an image (`convert-image` / `convert-image-photos`).
+    public var imageSpec: ImageSpec?
     /// What the planner predicted, when the job was added, that converting loses (display names, as shown);
     /// empty for nothing. Nil for jobs saved before this was recorded.
     public var predictedLost: [String]?
@@ -48,7 +50,7 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
 
     public init(
         kind: ConvertJobKind = .shrink, preset: Preset = .balanced, saveTo: SaveDestination,
-        custom: DownscaleSpec? = nil, predictedLost: [String]? = nil,
+        custom: DownscaleSpec? = nil, imageSpec: ImageSpec? = nil, predictedLost: [String]? = nil,
         predictedLostKeys: [String]? = nil, photosDestination: PhotosDestination? = nil,
         photosFileName: String? = nil, estimatedSavedBytes: Int64? = nil
     ) {
@@ -56,6 +58,7 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
         self.preset = preset
         self.saveTo = saveTo
         self.custom = custom
+        self.imageSpec = imageSpec
         self.predictedLost = predictedLost
         self.predictedLostKeys = predictedLostKeys
         self.photosDestination = photosDestination
@@ -63,13 +66,16 @@ public struct ConvertJobSettings: Codable, Sendable, Equatable {
         self.estimatedSavedBytes = estimatedSavedBytes
     }
 
-    /// Jobs saved before `kind` existed have no `kind` key; they decode as `.shrink`.
+    public var isImage: Bool { imageSpec != nil }
+
+    /// Jobs saved before `kind` or `imageSpec` existed decode cleanly with safe defaults.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         kind = try container.decodeIfPresent(ConvertJobKind.self, forKey: .kind) ?? .shrink
         preset = try container.decode(Preset.self, forKey: .preset)
         saveTo = try container.decode(SaveDestination.self, forKey: .saveTo)
         custom = try container.decodeIfPresent(DownscaleSpec.self, forKey: .custom)
+        imageSpec = try container.decodeIfPresent(ImageSpec.self, forKey: .imageSpec)
         predictedLost = try container.decodeIfPresent([String].self, forKey: .predictedLost)
         predictedLostKeys = try container.decodeIfPresent([String].self, forKey: .predictedLostKeys)
         photosDestination = try container.decodeIfPresent(PhotosDestination.self, forKey: .photosDestination)
@@ -95,6 +101,10 @@ public struct ConvertTool: Tool {
     public static let toolID = "downscale-video"
     /// The same conversion on a video in the Photos library; its jobs have an `x-photos-asset:` source.
     public static let photosToolID = "downscale-video-photos"
+    /// Image conversion on a file.
+    public static let imageToolID = "convert-image"
+    /// Image / Live Photo conversion on an asset in the Photos library.
+    public static let imagePhotosToolID = "convert-image-photos"
 
     /// The user-facing name. The ids above are what is stored, so renaming this changes no saved job.
     public static let title = "Convert"
@@ -106,15 +116,30 @@ public struct ConvertTool: Tool {
     public var title: String { Self.title }
     public var systemImage: String { Self.systemImage }
     public var platforms: ToolPlatforms { [.macOS, .iOS] }
-    public var jobKinds: [JobKind] { [Self.fileKind, Self.photosKind] }
+    public var jobKinds: [JobKind] { [Self.fileKind, Self.photosKind, Self.imageFileKind, Self.imagePhotosKind] }
 
     public static let fileKind = JobKind(rawValue: toolID)
     public static let photosKind = JobKind(rawValue: photosToolID)
+    public static let imageFileKind = JobKind(rawValue: imageToolID)
+    public static let imagePhotosKind = JobKind(rawValue: imagePhotosToolID)
+
+    public static func isImageJob(_ toolID: String) -> Bool {
+        toolID == imageToolID || toolID == imagePhotosToolID
+    }
+
+    public static func isPhotosJob(_ toolID: String) -> Bool {
+        toolID == photosToolID || toolID == imagePhotosToolID
+    }
+
+    public static func isConvertJob(_ toolID: String) -> Bool {
+        toolID == toolID || toolID == photosToolID || isImageJob(toolID)
+    }
 
     private let photoStore: any PhotoStore
     private let workFolder: WorkFolder
     private let pendingDeletions: PendingDeletions
     private let originalsBackup: ConvertRunner.BackupProvider
+    private let downloadGate = DownloadGate()
 
     /// `originalsBackup` is asked at each Replace, so a setting changed in Settings applies to the next one.
     public init(
@@ -127,14 +152,14 @@ public struct ConvertTool: Tool {
         self.originalsBackup = originalsBackup
     }
 
-    /// Video: a movie file, or a video in the Photos library.
+    /// Videos and images, from files or the Photos library.
     public func accepts(_ input: MediaInput) -> Bool {
         switch input {
         case .file(let url):
-            guard url.isFileURL else { return false }
-            return UTType(filenameExtension: url.pathExtension)?.conforms(to: .movie) ?? false
-        case .photosAsset(_, let isVideo):
-            return isVideo
+            guard url.isFileURL, let type = UTType(filenameExtension: url.pathExtension) else { return false }
+            return type.conforms(to: .movie) || type.conforms(to: .image)
+        case .photosAsset:
+            return true
         }
     }
 
@@ -142,11 +167,13 @@ public struct ConvertTool: Tool {
         switch kind {
         case Self.fileKind:
             ConvertRunner(originalsBackup: originalsBackup)
-        case Self.photosKind:
-            // Photos jobs fetch into the Work folder, which the launch sweep clears before the queue starts.
+        case Self.imageFileKind:
+            ImageConvertRunner(originalsBackup: originalsBackup)
+        case Self.photosKind, Self.imagePhotosKind:
+            // Photos video and image jobs share one download gate so iCloud transfers never collide.
             PhotosConvertRunner(
                 store: photoStore, workFolder: workFolder, pendingDeletions: pendingDeletions,
-                originalsBackup: originalsBackup)
+                core: ConvertRunner(), originalsBackup: originalsBackup, downloads: downloadGate)
         default:
             nil
         }

@@ -94,7 +94,9 @@ enum PromptMetadataNames {
     static func name(key: String, displayName: String, auxiliaryTracks: Set<Int>) -> String {
         let plain = MetadataNames.plainName(key: key, displayName: displayName, auxiliaryTracks: auxiliaryTracks)
         if key.hasPrefix("fs.xattr.") { return "Extended attribute" }
-        if key.hasPrefix("video.") || key.hasPrefix("hdr.") || key == "fs.tags" || key == "fs.creationDate" {
+        if key.hasPrefix("video.") || key.hasPrefix("hdr.") || key.hasPrefix("img.") || key == "fs.tags"
+            || key == "fs.creationDate"
+        {
             return plain
         }
         if key.hasPrefix("timed.") { return plain }

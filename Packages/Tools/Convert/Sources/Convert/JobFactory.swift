@@ -57,9 +57,10 @@ public enum JobFactory {
                 batch.skipped.append(url)
                 continue
             }
+            let toolID = settings.isImage ? ConvertTool.imageToolID : ConvertTool.toolID
             batch.jobs.append(
                 Job(
-                    toolID: ConvertTool.toolID, source: url, sourceBookmark: bookmark, settings: encoded,
+                    toolID: toolID, source: url, sourceBookmark: bookmark, settings: encoded,
                     createdAt: now))
         }
         return batch

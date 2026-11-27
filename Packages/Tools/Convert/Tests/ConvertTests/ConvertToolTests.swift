@@ -17,7 +17,10 @@ import Testing
         let tool = makeTool()
         #expect(tool.title == "Convert")
         #expect(tool.id == "downscale-video")
-        #expect(tool.jobKinds.map(\.toolID) == ["downscale-video", "downscale-video-photos"])
+        #expect(
+            tool.jobKinds.map(\.toolID) == [
+                "downscale-video", "downscale-video-photos", "convert-image", "convert-image-photos",
+            ])
         #expect(tool.platforms == [.macOS, .iOS])
     }
 
@@ -25,17 +28,19 @@ import Testing
         let tool = makeTool()
         #expect(tool.runner(for: ConvertTool.fileKind) is ConvertRunner)
         #expect(tool.runner(for: ConvertTool.photosKind) is PhotosConvertRunner)
+        #expect(tool.runner(for: ConvertTool.imageFileKind) is ImageConvertRunner)
+        #expect(tool.runner(for: ConvertTool.imagePhotosKind) is PhotosConvertRunner)
         #expect(tool.runner(for: "other-tool") == nil)
     }
 
-    @Test func itAcceptsMoviesAndPhotosVideosOnly() {
+    @Test func itAcceptsMoviesAndImagesAcrossLocalFilesAndPhotos() {
         let tool = makeTool()
         #expect(tool.accepts(.file(URL(filePath: "/tmp/clip.mov"))))
         #expect(tool.accepts(.file(URL(filePath: "/tmp/clip.MP4"))))
-        #expect(!tool.accepts(.file(URL(filePath: "/tmp/photo.heic"))))
+        #expect(tool.accepts(.file(URL(filePath: "/tmp/photo.heic"))))
         #expect(!tool.accepts(.file(URL(filePath: "/tmp/notes.txt"))))
         #expect(!tool.accepts(.file(URL(string: "https://example.com/clip.mov")!)))
         #expect(tool.accepts(.photosAsset(identifier: "id", isVideo: true)))
-        #expect(!tool.accepts(.photosAsset(identifier: "id", isVideo: false)))
+        #expect(tool.accepts(.photosAsset(identifier: "id", isVideo: false)))
     }
 }

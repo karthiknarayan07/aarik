@@ -22,8 +22,9 @@ public enum PhotosJobFactory {
             settings.predictedLostKeys = nil
             settings.estimatedSavedBytes = savings[video.assetID]
             guard let encoded = try? JSONEncoder().encode(settings) else { return nil }
+            let toolID = settings.isImage ? ConvertTool.imagePhotosToolID : ConvertTool.photosToolID
             return Job(
-                toolID: ConvertTool.photosToolID, source: PhotoAssetURL.url(for: video.assetID),
+                toolID: toolID, source: PhotoAssetURL.url(for: video.assetID),
                 sourceBookmark: Data(), settings: encoded, createdAt: now)
         }
     }

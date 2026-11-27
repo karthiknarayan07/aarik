@@ -136,8 +136,9 @@ final class ConvertAssistantContext {
     /// files are called, so words about size and kind are dropped, and what is left must all appear in the name.
     static func nameWords(_ text: String?) -> [String] {
         let generic: Set<String> = [
-            "video", "videos", "movie", "movies", "clip", "clips", "file", "files", "biggest", "largest", "big",
-            "large", "my", "all", "the", "and", "of", "in", "on", "photos", "library",
+            "video", "videos", "movie", "movies", "clip", "clips", "image", "images", "photo", "photos", "picture",
+            "pictures", "file", "files", "biggest", "largest", "big", "large", "my", "all", "the", "and", "of", "in",
+            "on", "library",
         ]
         return (text ?? "").lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
             .filter { !generic.contains($0) }
@@ -155,12 +156,13 @@ final class ConvertAssistantContext {
         let photos = model.photos.items
         let files = model.library.items
         let shrunk = model.shrunkIDs(in: model.browser)
+        let imgSpec = model.imageAdvanced.spec
         let buckets = SavingsAnalyzer.buckets(
             photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-            custom: model.advanced.spec, shrunk: shrunk)
+            custom: model.advanced.spec, shrunk: shrunk, imageSpec: imgSpec)
         let undated = SavingsAnalyzer.undatedCount(
             photos: photos, files: files, preset: model.preset, overrides: model.presetOverrides,
-            custom: model.advanced.spec, shrunk: shrunk)
+            custom: model.advanced.spec, shrunk: shrunk, imageSpec: imgSpec)
         // The same groups the queue action reads, so "Convert" later acts on what was just described.
         model.assistant.smartPicks.update(
             buckets: buckets, undatedCount: undated,

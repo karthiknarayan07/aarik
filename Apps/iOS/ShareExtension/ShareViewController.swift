@@ -64,33 +64,35 @@ final class ShareStagingModel {
         }
         stagedStore = store
 
-        var videoProviders: [NSItemProvider] = []
-        var skippedNonVideos = 0
+        var mediaProviders: [(provider: NSItemProvider, typeIdentifier: String)] = []
+        var skippedNonMedia = 0
         for item in items {
             for provider in item.attachments ?? [] {
                 if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
-                    videoProviders.append(provider)
+                    mediaProviders.append((provider, UTType.movie.identifier))
+                } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                    mediaProviders.append((provider, UTType.image.identifier))
                 } else {
-                    skippedNonVideos += 1
+                    skippedNonMedia += 1
                 }
             }
         }
 
-        guard !videoProviders.isEmpty else {
-            phase = .empty(skippedNonVideos: skippedNonVideos)
+        guard !mediaProviders.isEmpty else {
+            phase = .empty(skippedNonVideos: skippedNonMedia)
             return
         }
 
-        let total = videoProviders.count
+        let total = mediaProviders.count
         var failed = 0
         phase = .staging(completed: 0, total: total)
 
-        for (index, provider) in videoProviders.enumerated() {
+        for (index, entry) in mediaProviders.enumerated() {
             if Task.isCancelled {
                 cleanupStagedCopies()
                 return
             }
-            if let url = await stageProvider(provider, into: store) {
+            if let url = await stageProvider(entry.provider, typeIdentifier: entry.typeIdentifier, into: store) {
                 stagedURLs.append(url)
             } else {
                 failed += 1
@@ -106,16 +108,16 @@ final class ShareStagingModel {
         currentFileProgress = nil
 
         if stagedURLs.isEmpty {
-            if skippedNonVideos > 0, failed == 0 {
-                phase = .empty(skippedNonVideos: skippedNonVideos)
+            if skippedNonMedia > 0, failed == 0 {
+                phase = .empty(skippedNonVideos: skippedNonMedia)
             } else {
-                phase = .failed("The selected videos couldn't be copied.")
+                phase = .failed("The selected files couldn't be copied.")
             }
             return
         }
 
-        await postReadyNotification(stagedCount: stagedURLs.count, skippedNonVideos: skippedNonVideos)
-        phase = .ready(staged: stagedURLs.count, skippedNonVideos: skippedNonVideos, failed: failed)
+        await postReadyNotification(stagedCount: stagedURLs.count, skippedNonVideos: skippedNonMedia)
+        phase = .ready(staged: stagedURLs.count, skippedNonVideos: skippedNonMedia, failed: failed)
     }
 
     func cleanupStagedCopies() {
@@ -124,10 +126,12 @@ final class ShareStagingModel {
         stagedURLs.removeAll()
     }
 
-    private func stageProvider(_ provider: NSItemProvider, into store: StagedInputs) async -> URL? {
+    private func stageProvider(
+        _ provider: NSItemProvider, typeIdentifier: String, into store: StagedInputs
+    ) async -> URL? {
         let suggestedName = provider.suggestedName
         return await withCheckedContinuation { continuation in
-            let progress = provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, _ in
+            let progress = provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, _ in
                 guard let url else {
                     continuation.resume(returning: nil)
                     return
@@ -159,13 +163,13 @@ final class ShareStagingModel {
         guard granted else { return }
 
         let appName = AppInfo.displayName
-        let videoLabel = stagedCount == 1 ? "1 Video" : "\(stagedCount) Videos"
+        let itemLabel = stagedCount == 1 ? "1 Item" : "\(stagedCount) Items"
         let content = UNMutableNotificationContent()
-        content.title = "Open \(appName) to Convert \(videoLabel)"
+        content.title = "Open \(appName) to Convert \(itemLabel)"
         if skippedNonVideos > 0 {
             let skippedLabel =
                 skippedNonVideos == 1
-                ? "1 non-video item was skipped." : "\(skippedNonVideos) non-video items were skipped."
+                ? "1 unsupported item was skipped." : "\(skippedNonVideos) unsupported items were skipped."
             content.body = skippedLabel
         } else {
             content.body = "Tap to open \(appName) and convert."
@@ -199,7 +203,7 @@ struct ShareView: View {
                             ProgressView()
                         }
                         Text(
-                            total > 1 ? "Preparing Video \(min(completed + 1, total)) of \(total)…" : "Preparing Video…"
+                            total > 1 ? "Preparing File \(min(completed + 1, total)) of \(total)…" : "Preparing File…"
                         )
                         .font(.headline)
                         Text("Copying to \(appName)…")
@@ -215,13 +219,13 @@ struct ShareView: View {
                     )
                 case .empty(let skippedNonVideos):
                     ContentUnavailableView(
-                        "No Videos Found",
-                        systemImage: "film.stack",
+                        "No Supported Files",
+                        systemImage: "photo.on.rectangle.angled",
                         description: Text(emptyDescription(skipped: skippedNonVideos))
                     )
                 case .failed(let message):
                     ContentUnavailableView(
-                        "Couldn't Add Videos",
+                        "Couldn't Add Files",
                         systemImage: "exclamationmark.triangle",
                         description: Text(message)
                     )
@@ -245,13 +249,14 @@ struct ShareView: View {
     }
 
     private func readyDescription(staged: Int, skipped: Int, failed: Int) -> String {
-        let videoLabel = staged == 1 ? "1 video" : "\(staged) videos"
-        var parts = ["Open \(appName) to convert \(videoLabel)."]
+        let itemLabel = staged == 1 ? "1 file" : "\(staged) files"
+        var parts = ["Open \(appName) to convert \(itemLabel)."]
         if skipped > 0 {
-            parts.append(skipped == 1 ? "1 non-video item was skipped." : "\(skipped) non-video items were skipped.")
+            parts.append(
+                skipped == 1 ? "1 unsupported item was skipped." : "\(skipped) unsupported items were skipped.")
         }
         if failed > 0 {
-            parts.append(failed == 1 ? "1 video couldn't be copied." : "\(failed) videos couldn't be copied.")
+            parts.append(failed == 1 ? "1 file couldn't be copied." : "\(failed) files couldn't be copied.")
         }
         return parts.joined(separator: " ")
     }
@@ -259,9 +264,9 @@ struct ShareView: View {
     private func emptyDescription(skipped: Int) -> String {
         if skipped > 0 {
             return skipped == 1
-                ? "Skipped 1 non-video item. Only videos can be converted."
-                : "Skipped \(skipped) non-video items. Only videos can be converted."
+                ? "Skipped 1 unsupported item. Only videos and images can be converted."
+                : "Skipped \(skipped) unsupported items. Only videos and images can be converted."
         }
-        return "No videos were shared."
+        return "No supported files were shared."
     }
 }

@@ -82,6 +82,12 @@ public struct StagedInputs: Sendable {
         UTType(typeIdentifier)?.conforms(to: .movie) ?? false
     }
 
+    /// Whether `typeIdentifier` conforms to `public.movie` or `public.image`.
+    public static func isMediaType(_ typeIdentifier: String) -> Bool {
+        guard let uti = UTType(typeIdentifier) else { return false }
+        return uti.conforms(to: .movie) || uti.conforms(to: .image)
+    }
+
     /// Whether `url` is a regular, non-symlink file whose type conforms to `public.movie`.
     public static func isVideoFile(_ url: URL) -> Bool {
         guard !isSymbolicLink(url), isRegularFile(url) else { return false }
@@ -89,6 +95,16 @@ public struct StagedInputs: Sendable {
         if values?.isDirectory == true || values?.isPackage == true { return false }
         if let type = values?.contentType { return type.conforms(to: .movie) }
         return UTType(filenameExtension: url.pathExtension)?.conforms(to: .movie) ?? false
+    }
+
+    /// Whether `url` is a regular, non-symlink file whose type conforms to `public.movie` or `public.image`.
+    public static func isMediaFile(_ url: URL) -> Bool {
+        guard !isSymbolicLink(url), isRegularFile(url) else { return false }
+        let values = try? url.resourceValues(forKeys: [.contentTypeKey, .isDirectoryKey, .isPackageKey])
+        if values?.isDirectory == true || values?.isPackage == true { return false }
+        if let type = values?.contentType { return type.conforms(to: .movie) || type.conforms(to: .image) }
+        guard let extType = UTType(filenameExtension: url.pathExtension) else { return false }
+        return extType.conforms(to: .movie) || extType.conforms(to: .image)
     }
 
     /// Writes `data` to a new folder as `name` (its last path component only, so a name can't climb out) and

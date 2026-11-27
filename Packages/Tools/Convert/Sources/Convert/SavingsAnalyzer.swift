@@ -84,7 +84,8 @@ public enum SavingsAnalyzer {
     /// that already have a finished conversion don't count).
     public static func undatedCount(
         photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
-        custom: DownscaleSpec? = nil, shrunk: Set<UUID> = [], estimates: [UUID: Int64]? = nil
+        custom: DownscaleSpec? = nil, shrunk: Set<UUID> = [], estimates: [UUID: Int64]? = nil,
+        imageSpec: ImageSpec = ImageSpec()
     ) -> Int {
         var count = 0
         for (library, items) in [(OverviewSummary.Library.photos, photos), (.localFiles, files)] {
@@ -93,7 +94,8 @@ public enum SavingsAnalyzer {
                 let free =
                     estimates?[item.id]
                     ?? OverviewSummary.couldFree(
-                        item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+                        item, preset: overrides.preset(for: item.id, default: preset), custom: custom,
+                        imageSpec: imageSpec)
                 if free > 0 { count += 1 }
             }
         }
@@ -106,7 +108,7 @@ public enum SavingsAnalyzer {
     public static func buckets(
         photos: [LibraryItem], files: [LibraryItem], preset: Preset, overrides: PresetOverrides<UUID> = .init(),
         custom: DownscaleSpec? = nil, shrunk: Set<UUID> = [], calendar: Calendar = .current,
-        estimates: [UUID: Int64]? = nil
+        estimates: [UUID: Int64]? = nil, imageSpec: ImageSpec = ImageSpec()
     ) -> [SavingsBucket] {
         var tallies: [Key: Tally] = [:]
         for (library, items) in [(OverviewSummary.Library.photos, photos), (.localFiles, files)] {
@@ -124,7 +126,8 @@ public enum SavingsAnalyzer {
                     tally.couldFree +=
                         estimates?[item.id]
                         ?? OverviewSummary.couldFree(
-                            item, preset: overrides.preset(for: item.id, default: preset), custom: custom)
+                            item, preset: overrides.preset(for: item.id, default: preset), custom: custom,
+                            imageSpec: imageSpec)
                 }
                 tallies[key] = tally
             }

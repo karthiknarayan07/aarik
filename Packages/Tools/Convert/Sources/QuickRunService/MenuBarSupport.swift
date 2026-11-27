@@ -13,6 +13,18 @@
             return contentType?.conforms(to: .movie) ?? false
         }
 
+        /// Whether something with this type counts as an image to convert.
+        public static func isImage(contentType: UTType?, isDirectory: Bool, isPackage: Bool) -> Bool {
+            guard !isDirectory, !isPackage else { return false }
+            return contentType?.conforms(to: .image) ?? false
+        }
+
+        /// Whether something with this type counts as a supported video or image to convert.
+        public static func isMedia(contentType: UTType?, isDirectory: Bool, isPackage: Bool) -> Bool {
+            isMovie(contentType: contentType, isDirectory: isDirectory, isPackage: isPackage)
+                || isImage(contentType: contentType, isDirectory: isDirectory, isPackage: isPackage)
+        }
+
         /// The file URLs among `urls` that are movies, in order. A file that can't be read isn't a movie.
         public static func movies(in urls: [URL]) -> [URL] {
             urls.filter { url in
@@ -25,12 +37,32 @@
             }
         }
 
+        /// The file URLs among `urls` that are supported videos or images, in order.
+        public static func media(in urls: [URL]) -> [URL] {
+            urls.filter { url in
+                guard url.isFileURL,
+                    let values = try? url.resourceValues(forKeys: [.contentTypeKey, .isDirectoryKey, .isPackageKey])
+                else { return false }
+                return isMedia(
+                    contentType: values.contentType, isDirectory: values.isDirectory ?? false,
+                    isPackage: values.isPackage ?? false)
+            }
+        }
+
         /// The movies on a drag or Services pasteboard (file URLs only).
         public static func movies(on pasteboard: NSPasteboard) -> [URL] {
             let urls =
                 pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
                 ?? []
             return movies(in: urls)
+        }
+
+        /// The videos or images on a drag or Services pasteboard (file URLs only).
+        public static func media(on pasteboard: NSPasteboard) -> [URL] {
+            let urls =
+                pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+                ?? []
+            return media(in: urls)
         }
     }
 

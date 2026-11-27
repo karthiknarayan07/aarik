@@ -27,7 +27,10 @@ private func makeModel(directory: URL, defaults: UserDefaults? = nil) -> Convert
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = makeModel(directory: directory)
-        #expect(model.services.queue.registeredToolIDs == [ConvertTool.toolID, ConvertTool.photosToolID])
+        #expect(
+            model.services.queue.registeredToolIDs == [
+                ConvertTool.toolID, ConvertTool.photosToolID, ConvertTool.imageToolID, ConvertTool.imagePhotosToolID,
+            ])
     }
 
     @Test func presetAndInspectorStatePersistToServicesDefaults() throws {

@@ -2,6 +2,7 @@ import AppCore
 import AppUI
 import Foundation
 import LocalLibrary
+import MediaEngine
 
 /// Videos that would lose metadata, each with what it loses and whether the user chose to skip it.
 public struct LossReview: Identifiable {
@@ -14,17 +15,34 @@ public struct LossReview: Identifiable {
     }
 
     public var entries: [Entry]
-    /// Every video to add, lossy or not, in grid order.
+    /// Every video or image to add, lossy or not, in grid order.
     public let items: [LibraryItem]
     public let settings: ConvertJobSettings
+    /// Optional image settings when a batch includes image files or Photos images.
+    public let imageSettings: ConvertJobSettings?
     /// Each video's preset when it was added (the header's, or its own from the inspector).
     public let presets: [UUID: Preset]
     /// What each lossy file loses, for the jobs' badges and the runner's check.
     public let losses: [URL: PredictedLoss<UUID>]
-    /// Selected videos found missing just before they would have been added.
+    /// Selected files found missing just before they would have been added.
     public let missing: Int
-    /// Set for Photos videos: where their copies go and what each is predicted to lose.
+    /// Set for Photos items: where their copies go and what each is predicted to lose.
     public var photos: PhotosBatch?
+
+    public init(
+        entries: [Entry], items: [LibraryItem], settings: ConvertJobSettings,
+        imageSettings: ConvertJobSettings? = nil, presets: [UUID: Preset], losses: [URL: PredictedLoss<UUID>],
+        missing: Int, photos: PhotosBatch? = nil
+    ) {
+        self.entries = entries
+        self.items = items
+        self.settings = settings
+        self.imageSettings = imageSettings
+        self.presets = presets
+        self.losses = losses
+        self.missing = missing
+        self.photos = photos
+    }
 }
 
 /// What a batch of Photos videos is added with.
@@ -54,6 +72,10 @@ extension ConvertModel {
 
     public var addToQueueTitle: String {
         let items = queueableItems
+        if !items.isEmpty, items.allSatisfy(\.isImage) {
+            if items.count == 1 { return "Add to queue · \(imageAdvanced.resolution.title)" }
+            return "Add \(items.count) to queue"
+        }
         return QueueButtonTitle.title(
             count: items.count, preset: items.first.map(effectivePreset(for:)) ?? preset,
             isCustom: advanced.isEnabled)
@@ -112,6 +134,9 @@ extension ConvertModel {
         }
         let custom = kind == .shrink ? advanced.spec : nil
         let settings = ConvertJobSettings(kind: kind, preset: preset, saveTo: destination, custom: custom)
+        let imgSpec = imageAdvanced.spec
+        let imageSettings = ConvertJobSettings(
+            kind: .shrink, preset: preset, saveTo: destination, imageSpec: imgSpec)
         let presets = Dictionary(uniqueKeysWithValues: selectedItems.map { ($0.id, effectivePreset(for: $0)) })
         let selected = Set(selectedItems.map(\.id))
         let wasAvailable = Set(queueableItems.map(\.id))
@@ -124,29 +149,47 @@ extension ConvertModel {
                 showAddNotice(alreadyQueued: 0, unreadable: 0, missing: missing)
                 return
             }
-            let fallbacks = await LossCheck.quickTimeFallbacks(
-                among: items.compactMap { item in item.fileURL.map { (id: item.id, url: $0) } })
-            let losses = LossCheck.losses(
-                for: items.map { (id: $0.id, source: $0.savingsSource, preset: presets[$0.id] ?? settings.preset) },
+            let videoItems = items.filter { !$0.isImage }
+            let imageItems = items.filter(\.isImage)
+            let fallbacks =
+                videoItems.isEmpty
+                ? Set<UUID>()
+                : await LossCheck.quickTimeFallbacks(
+                    among: videoItems.compactMap { item in item.fileURL.map { (id: item.id, url: $0) } })
+            let videoLosses = LossCheck.losses(
+                for: videoItems.map {
+                    (id: $0.id, source: $0.savingsSource, preset: presets[$0.id] ?? settings.preset)
+                },
                 kind: kind, custom: settings.custom, quickTimeFallbacks: fallbacks)
+            let imageLosses = ImageLossCheck.losses(
+                for: imageItems.map {
+                    (
+                        id: $0.id, sourceUTI: $0.imageSourceUTI, byteSize: $0.byteSize, pixelSize: $0.pixelSize,
+                        inventory: $0.inventory, isLivePhoto: $0.badges.contains(.livePhoto)
+                    )
+                }, spec: imgSpec)
+            let losses = videoLosses + imageLosses
             let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
             let lostByURL = Dictionary(
                 uniqueKeysWithValues: losses.compactMap { loss in
                     byID[loss.id].flatMap { $0.fileURL }.map { ($0, loss) }
                 })
             if losses.isEmpty {
-                enqueue(items, settings: settings, presets: presets, losses: lostByURL, missing: missing)
+                enqueue(
+                    items, settings: settings, imageSettings: imageItems.isEmpty ? nil : imageSettings,
+                    presets: presets, losses: lostByURL, missing: missing)
             } else {
                 lossReview = LossReview(
                     entries: losses.compactMap { loss in
                         byID[loss.id].map { .init(id: loss.id, name: $0.name, lost: loss.lost) }
                     },
-                    items: items, settings: settings, presets: presets, losses: lostByURL, missing: missing)
+                    items: items, settings: settings, imageSettings: imageItems.isEmpty ? nil : imageSettings,
+                    presets: presets, losses: lostByURL, missing: missing)
             }
         }
     }
 
-    /// Convert anyway: adds every reviewed video except the ones marked to skip.
+    /// Convert anyway: adds every reviewed item except the ones marked to skip.
     public func confirmLossReview() {
         guard let review = lossReview else { return }
         lossReview = nil
@@ -154,14 +197,16 @@ extension ConvertModel {
         let items = review.items.filter { !skipped.contains($0.id) }
         if let photos = review.photos {
             if !items.isEmpty {
-                enqueuePhotos(items, settings: review.settings, presets: review.presets, batch: photos)
+                enqueuePhotos(
+                    items, settings: review.settings, imageSettings: review.imageSettings, presets: review.presets,
+                    batch: photos)
             }
         } else if items.isEmpty {
             replaceConsent.abandon()
         } else {
             enqueue(
-                items, settings: review.settings, presets: review.presets, losses: review.losses,
-                missing: review.missing)
+                items, settings: review.settings, imageSettings: review.imageSettings, presets: review.presets,
+                losses: review.losses, missing: review.missing)
         }
     }
 
@@ -176,29 +221,48 @@ extension ConvertModel {
     /// Makes the jobs and adds them; says afterwards what was skipped (already queued, unreadable, or found
     /// missing just before).
     private func enqueue(
-        _ items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset],
-        losses: [URL: PredictedLoss<UUID>], missing: Int
+        _ items: [LibraryItem], settings: ConvertJobSettings, imageSettings: ConvertJobSettings? = nil,
+        presets: [UUID: Preset], losses: [URL: PredictedLoss<UUID>], missing: Int
     ) {
         replaceConsent.videosAdded()
-        let savings = estimatedSavings(for: items, settings: settings, presets: presets)
-        let batch = JobFactory.makeJobs(
-            for: items.compactMap { item in
-                item.fileURL.map {
-                    (url: $0, preset: presets[item.id] ?? settings.preset, bookmark: library.bookmark(for: item.id))
-                }
-            }, settings: settings,
-            losses: losses,
-            savings: Dictionary(
-                items.compactMap { item in item.fileURL.flatMap { url in savings[item.id].map { (url, $0) } } },
-                uniquingKeysWith: { first, _ in first }))
+        let effectiveImageSettings =
+            imageSettings
+            ?? ConvertJobSettings(
+                kind: .shrink, preset: settings.preset, saveTo: settings.saveTo, imageSpec: imageAdvanced.spec)
+        let savings = estimatedSavings(
+            for: items, settings: settings, imageSpec: effectiveImageSettings.imageSpec ?? imageAdvanced.spec,
+            presets: presets)
+        let videoItems = items.filter { !$0.isImage }
+        let imageItems = items.filter(\.isImage)
+        func batch(for subset: [LibraryItem], using itemSettings: ConvertJobSettings) -> JobBatch {
+            guard !subset.isEmpty else { return JobBatch(jobs: [], skipped: []) }
+            return JobFactory.makeJobs(
+                for: subset.compactMap { item in
+                    item.fileURL.map {
+                        (
+                            url: $0, preset: presets[item.id] ?? itemSettings.preset,
+                            bookmark: library.bookmark(for: item.id)
+                        )
+                    }
+                },
+                settings: itemSettings,
+                losses: losses,
+                savings: Dictionary(
+                    subset.compactMap { item in item.fileURL.flatMap { url in savings[item.id].map { (url, $0) } } },
+                    uniquingKeysWith: { first, _ in first }))
+        }
+        let videoBatch = batch(for: videoItems, using: settings)
+        let imageBatch = batch(for: imageItems, using: effectiveImageSettings)
+        let combinedJobs = videoBatch.jobs + imageBatch.jobs
+        let combinedSkipped = videoBatch.skipped + imageBatch.skipped
         let start = takeStartsQueue()
         if start { isQueuePaused = false }
         services.send { [weak self] queue in
-            let added = await queue.enqueue(batch.jobs)
+            let added = await queue.enqueue(combinedJobs)
             if start { await queue.resume() }
-            let alreadyQueued = batch.jobs.count - added.count
+            let alreadyQueued = combinedJobs.count - added.count
             await MainActor.run {
-                self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: batch.skipped.count, missing: missing)
+                self?.showAddNotice(alreadyQueued: alreadyQueued, unreadable: combinedSkipped.count, missing: missing)
             }
         }
         host.requestNotificationAuthorization()
@@ -211,13 +275,20 @@ extension ConvertModel {
         return addStartsQueue ?? services.settings.autoStartQueue
     }
 
-    /// What converting each video would save with its preset, by library item id; videos that would be kept as
-    /// they are have none.
+    /// What converting each video or image would save with its settings, by library item id; items that would be
+    /// kept as they are have none.
     func estimatedSavings(
-        for items: [LibraryItem], settings: ConvertJobSettings, presets: [UUID: Preset]
+        for items: [LibraryItem], settings: ConvertJobSettings, imageSpec: ImageSpec? = nil, presets: [UUID: Preset]
     ) -> [UUID: Int64] {
         var result: [UUID: Int64] = [:]
+        let resolvedImageSpec = imageSpec ?? settings.imageSpec ?? imageAdvanced.spec
         for item in items {
+            if item.isImage {
+                let freed = OverviewSummary.couldFree(
+                    item, preset: settings.preset, custom: nil, imageSpec: resolvedImageSpec)
+                if freed > 0 { result[item.id] = freed }
+                continue
+            }
             let freed: Int64
             switch settings.kind {
             case .shrink:
@@ -236,6 +307,6 @@ extension ConvertModel {
         guard
             let notice = ActivityText.addNotice(alreadyQueued: alreadyQueued, unreadable: unreadable, missing: missing)
         else { return }
-        alert = AppAlert(title: "Some Videos Weren't Added", message: notice)
+        alert = AppAlert(title: "Some Items Weren't Added", message: notice)
     }
 }

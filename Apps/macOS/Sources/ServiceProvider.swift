@@ -15,11 +15,11 @@ final class ServiceProvider: NSObject {
     @objc func shrinkVideos(
         _ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>
     ) {
-        let movies = MovieDropFilter.movies(on: pasteboard)
-        guard !movies.isEmpty else {
-            error.pointee = "No videos were selected." as NSString
+        let media = MovieDropFilter.media(on: pasteboard)
+        guard !media.isEmpty else {
+            error.pointee = "No supported videos or images were selected." as NSString
             return
         }
-        receive(movies)
+        receive(media)
     }
 }

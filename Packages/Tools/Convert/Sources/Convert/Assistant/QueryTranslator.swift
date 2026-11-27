@@ -55,7 +55,8 @@ struct LibraryQuery: Sendable, Equatable {
 
     @Guide(
         description:
-            "Empty unless the request asks for one kind of video: exactly one of Cinematic, Slo-mo, Spatial or Edited.")
+            "Empty unless the request asks for one kind of media: one of Cinematic, Slo-mo, Spatial, Edited, Live Photo, Portrait, RAW, Animated or Transparent."
+    )
     var mediaType: String
 
     @Guide(description: "True only when the request says the videos are not yet shrunk, converted or compressed.")
@@ -247,6 +248,11 @@ public struct QueryTranslator: Sendable {
     private static let mediaTypes: [String: MediaBadge] = [
         "cinematic": .cinematic, "slomo": .sloMo, "slowmotion": .sloMo, "slowmo": .sloMo, "spatial": .spatial,
         "edited": .edited, "hdr": .hdr, "dolbyvision": .dolbyVision, "4k": .k4, "sdr": .sdr,
+        "livephoto": .livePhoto, "livephotos": .livePhoto, "live": .livePhoto,
+        "portrait": .portrait, "depth": .portrait,
+        "raw": .raw, "proraw": .raw, "dng": .raw,
+        "animated": .animated, "gif": .animated, "apng": .animated,
+        "transparent": .transparent, "transparency": .transparent, "alpha": .transparent,
     ]
 
     private static func mediaBadge(_ name: String) -> MediaBadge? {

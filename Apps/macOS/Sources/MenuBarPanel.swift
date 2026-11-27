@@ -132,10 +132,10 @@ struct MenuBarPanel: View {
     private func chooseVideos() {
         close()
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.movie]
+        panel.allowedContentTypes = [.movie, .image]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.message = "Choose videos to convert."
+        panel.message = "Choose videos or images to convert."
         panel.prompt = "Convert"
         NSApp.activate()
         panel.begin { response in
@@ -146,15 +146,15 @@ struct MenuBarPanel: View {
     }
 }
 
-/// The popover's drop target. Like the status icon it refuses a drag that names a type other than a movie (a folder,
-/// an image), judged from the types the drag advertises, so no file is read while the pointer moves. The files
-/// themselves are checked before the run starts.
+/// The popover's drop target. It refuses a drag that names a type other than a movie or image (a folder, a document),
+/// judged from the types the drag advertises, so no file is read while the pointer moves. The files themselves are
+/// checked before the run starts.
 private struct PopoverDropDelegate: DropDelegate {
     let shell: MacShell
     @Binding var isTargeted: Bool
 
     func validateDrop(info: DropInfo) -> Bool {
-        MovieDropFilter.providersMightHoldMovie(
+        MovieDropFilter.providersMightHoldMedia(
             info.itemProviders(for: [.fileURL]).map(\.registeredTypeIdentifiers))
     }
 

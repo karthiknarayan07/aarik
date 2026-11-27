@@ -12,6 +12,11 @@ public enum AppSettings {
         public static let defaultKeepOriginalBitRate = "downscale.defaultKeepOriginalBitRate"
         public static let defaultFrameRate = "downscale.defaultFrameRate"
         public static let defaultCodec = "downscale.defaultCodec"
+        public static let defaultImageResolution = "image.defaultResolution"
+        public static let defaultImageFormat = "image.defaultFormat"
+        public static let defaultImageQualityPercent = "image.defaultQualityPercent"
+        public static let defaultImageLossless = "image.defaultLossless"
+        public static let defaultLivePhotoMode = "image.defaultLivePhotoMode"
         public static let compressPreset = "compress.preset"
         public static let autoStartQueue = SettingsStore.Keys.autoStartQueue
         /// `SpeedSetting` raw value: quiet, balanced or fastest.
@@ -79,6 +84,33 @@ public enum AppSettings {
             options.bitRateMbps = storedMbps
         }
         options.keepOriginalBitRate = defaults.bool(forKey: Keys.defaultKeepOriginalBitRate)
+        return options
+    }
+
+    /// The image conversion options new selections start with.
+    public static func defaultImageOptions(_ defaults: UserDefaults) -> ImageAdvancedOptions {
+        var options = ImageAdvancedOptions()
+        if let raw = defaults.string(forKey: Keys.defaultImageResolution),
+            let res = ImageAdvancedOptions.Resolution(rawValue: raw)
+        {
+            options.resolution = res
+        }
+        if let raw = defaults.string(forKey: Keys.defaultImageFormat),
+            let fmt = ImageOutputFormat(rawValue: raw)
+        {
+            options.format = fmt
+        }
+        if let stored = defaults.object(forKey: Keys.defaultImageQualityPercent) as? Double,
+            stored >= ImageAdvancedOptions.minimumQualityPercent
+        {
+            options.qualityPercent = min(ImageAdvancedOptions.maximumQualityPercent, stored)
+        }
+        options.isLossless = defaults.bool(forKey: Keys.defaultImageLossless)
+        if let raw = defaults.string(forKey: Keys.defaultLivePhotoMode),
+            let mode = LivePhotoMode(rawValue: raw)
+        {
+            options.livePhotoMode = mode
+        }
         return options
     }
 

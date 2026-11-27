@@ -4,6 +4,7 @@ import Convert
 import Foundation
 import MediaEngine
 import PhotosLibrary
+import UniformTypeIdentifiers
 
 /// Converts files in the background with the saved defaults, without asking anything or showing a window.
 ///
@@ -58,13 +59,21 @@ public actor QuickRun {
         let (destination, notes) = Self.destination(for: overrides?.saveLocation ?? saved.saveLocation)
 
         let unique = Self.unique(urls)
-        let (accepted, skippedByPlan) = await plan(unique, kind: kind, preset: preset, codec: overrides?.codec)
+        let imageSpec = saved.imageOptions.spec
+        let (accepted, skippedByPlan) = await plan(
+            unique, kind: kind, preset: preset, codec: overrides?.codec, imageSpec: imageSpec)
         var jobs: [Job] = []
         var unreadable: [QuickRunSkip] = []
         for file in accepted {
+            let jobSettings =
+                if let imgSpec = file.imageSpec {
+                    ConvertJobSettings(kind: .shrink, preset: preset, saveTo: destination, imageSpec: imgSpec)
+                } else {
+                    ConvertJobSettings(kind: kind, preset: preset, saveTo: destination, custom: file.custom)
+                }
             let batch = JobFactory.makeJobs(
                 for: [(url: file.url, preset: preset)],
-                settings: ConvertJobSettings(kind: kind, preset: preset, saveTo: destination, custom: file.custom),
+                settings: jobSettings,
                 losses: [:], now: now())
             jobs += batch.jobs
             unreadable += batch.skipped.map { QuickRunSkip(url: $0, reason: Self.unreadable) }
@@ -249,30 +258,66 @@ public actor QuickRun {
 
     static let unreadable = "Couldn't be read as a video"
 
-    /// A file to convert, with the custom spec its format needs (nil: the preset's own).
+    /// A file to convert, with the custom spec its format needs (nil: the preset's own), or `imageSpec` for images.
     struct Accepted {
         let url: URL
         let custom: DownscaleSpec?
+        let imageSpec: ImageSpec?
     }
 
     /// Splits `urls` into the ones to convert and the ones to skip, with the reason. With H.264 asked for, each
     /// file's spec is its preset's with the codec changed, so an HDR clip is judged by what H.264 drops.
-    private func plan(_ urls: [URL], kind: ConvertJobKind, preset: Preset, codec: VideoCodec?) async -> (
+    private func plan(
+        _ urls: [URL], kind: ConvertJobKind, preset: Preset, codec: VideoCodec?, imageSpec: ImageSpec = ImageSpec()
+    ) async -> (
         [Accepted], [QuickRunSkip]
     ) {
-        var sources: [(id: URL, source: SavingsCalculator.Source)] = []
+        var sources: [(id: URL, source: QuickRunSource)] = []
         var skipped: [QuickRunSkip] = []
         for url in urls {
             if let source = await inspector.inspect(url) {
-                sources.append((url, (source.byteSize, source.inventory)))
+                sources.append((url, source))
             } else {
                 skipped.append(QuickRunSkip(url: url, reason: Self.unreadable))
             }
         }
-        let fallbacks = await LossCheck.quickTimeFallbacks(among: sources.map { (id: $0.id, url: $0.id) })
+        let videoURLs = sources.filter { !$0.source.isImage }.map { (id: $0.id, url: $0.id) }
+        let fallbacks = videoURLs.isEmpty ? Set<URL>() : await LossCheck.quickTimeFallbacks(among: videoURLs)
         var accepted: [Accepted] = []
         for (url, source) in sources {
-            let custom = kind == .shrink ? Self.customSpec(for: source, preset: preset, codec: codec) : nil
+            if source.isImage {
+                let pixelSize = Self.imagePixelSize(from: source.inventory)
+                let sourceUTI =
+                    source.inventory["img.uti"]?.value
+                    ?? UTType(filenameExtension: url.pathExtension)?.identifier
+                    ?? UTType.jpeg.identifier
+                let decision = ImagePlanner.decide(
+                    byteSize: source.byteSize, pixelSize: pixelSize, sourceUTI: sourceUTI,
+                    inventory: source.inventory, spec: imageSpec)
+                switch decision {
+                case .keptAsIs(let reason, _):
+                    skipped.append(QuickRunSkip(url: url, reason: reason))
+                case .convert:
+                    let loss = ImageLossCheck.losses(
+                        for: [
+                            (
+                                id: url, sourceUTI: sourceUTI, byteSize: source.byteSize, pixelSize: pixelSize,
+                                inventory: source.inventory, isLivePhoto: false
+                            )
+                        ],
+                        spec: imageSpec
+                    ).first
+                    if let loss {
+                        skipped.append(
+                            QuickRunSkip(url: url, reason: "Would lose " + loss.lost.joined(separator: ", ")))
+                    } else {
+                        accepted.append(Accepted(url: url, custom: nil, imageSpec: imageSpec))
+                    }
+                }
+                continue
+            }
+            let calcSource: SavingsCalculator.Source = (source.byteSize, source.inventory)
+            let custom = kind == .shrink ? Self.customSpec(for: calcSource, preset: preset, codec: codec) : nil
             let decision = SavingsCalculator.decision(
                 byteSize: source.byteSize, inventory: source.inventory, kind: kind, preset: preset, custom: custom,
                 fallsBackToQuickTime: fallbacks.contains(url))
@@ -281,17 +326,24 @@ public actor QuickRun {
                 skipped.append(QuickRunSkip(url: url, reason: reason))
             case .convert:
                 let loss = LossCheck.losses(
-                    for: [(id: url, source: source)], preset: preset, kind: kind, custom: custom,
+                    for: [(id: url, source: calcSource)], preset: preset, kind: kind, custom: custom,
                     quickTimeFallbacks: fallbacks.intersection([url])
                 ).first
                 if let loss {
                     skipped.append(QuickRunSkip(url: url, reason: "Would lose " + loss.lost.joined(separator: ", ")))
                 } else {
-                    accepted.append(Accepted(url: url, custom: custom))
+                    accepted.append(Accepted(url: url, custom: custom, imageSpec: nil))
                 }
             }
         }
         return (accepted, skipped)
+    }
+
+    private static func imagePixelSize(from inventory: MetadataInventory) -> CGSize {
+        guard let raw = inventory["img.dimensions"]?.value else { return .zero }
+        let parts = raw.split(whereSeparator: { $0 == "x" || $0 == "×" || $0 == " " })
+        guard parts.count >= 2, let w = Double(parts[0]), let h = Double(parts[1]) else { return .zero }
+        return CGSize(width: w, height: h)
     }
 
     /// The preset's spec for this file with the codec changed and the bit rate raised the way the Advanced Format
@@ -365,15 +417,23 @@ public actor QuickRun {
     }
 }
 
-/// Reads real files with the metadata inspector.
+/// Reads real video and image files with the metadata inspectors.
 public struct MediaQuickRunInspector: QuickRunInspecting {
     public init() {}
 
     public func inspect(_ url: URL) async -> QuickRunSource? {
-        guard let inventory = try? await MediaInspector().inventory(of: url),
+        if let inventory = try? await MediaInspector().inventory(of: url),
             inventory["video.dimensions"] != nil,
             let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
-        else { return nil }
-        return QuickRunSource(byteSize: Int64(size), inventory: inventory)
+        {
+            return QuickRunSource(byteSize: Int64(size), inventory: inventory, isImage: false)
+        }
+        if (try? ImageInspector().inspect(url: url)) != nil,
+            let inventory = try? ImageInspector().inventory(of: url),
+            let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        {
+            return QuickRunSource(byteSize: Int64(size), inventory: inventory, isImage: true)
+        }
+        return nil
     }
 }
