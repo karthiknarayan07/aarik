@@ -16,6 +16,7 @@ public enum OutcomeCode: String, Codable, Sendable, CaseIterable {
     case formatCannotKeepDetails
     case lossNotShownBeforeAdding
     case unsupportedVideo
+    case unsupportedImage
     case conversionFailed
     case originalUnavailable
     case outputFolderUnavailable

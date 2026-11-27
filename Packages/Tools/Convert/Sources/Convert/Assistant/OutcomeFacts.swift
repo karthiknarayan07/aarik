@@ -18,6 +18,7 @@ extension OutcomeCode {
         case .lossNotShownBeforeAdding:
             "Converting would lose details that were not known when the video was added to the queue."
         case .unsupportedVideo: "This kind of video cannot be converted yet."
+        case .unsupportedImage: "This kind of image cannot be converted yet."
         case .conversionFailed: "The conversion failed."
         case .originalUnavailable: "The original video or the drive holding it was not available."
         case .outputFolderUnavailable: "The chosen output folder or its drive was not available."

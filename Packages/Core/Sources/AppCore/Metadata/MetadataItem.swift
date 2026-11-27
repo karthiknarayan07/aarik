@@ -1,6 +1,6 @@
 /// Broad grouping used to organise metadata in the UI.
 public enum MetadataCategory: String, Codable, Sendable, CaseIterable {
-    case camera, location, date, video, hdr, audio, timedMetadata, track, fileSystem, other
+    case camera, location, date, video, image, hdr, audio, timedMetadata, track, fileSystem, other
 }
 
 /// One comparable piece of metadata about a media file.
