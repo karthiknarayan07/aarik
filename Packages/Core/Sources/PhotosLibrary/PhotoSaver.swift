@@ -65,52 +65,74 @@ public struct PhotoSaver: Sendable {
         self.store = store
     }
 
-    /// Adds `file` to Photos and returns the new asset's local identifier.
-    ///
-    /// - Parameters:
-    ///   - file: the converted video; it stays where it is.
-    ///   - source: the asset it was made from; its date, location, favorite and hidden flags and caption are copied.
-    ///   - albums: local identifiers of the albums the source is in.
-    ///   - expectedPixelSize: the size the converted video should have, as Photos shows it (turned upright). A
-    ///     width and height swapped around still counts as a match.
-    /// - Throws: `PhotoSaveError` only.
+    /// Adds `file` (video) to Photos and returns the new asset's local identifier.
     public func save(
         file: URL, like source: PhotoAsset, albums: [String], expectedPixelSize: CGSize
     ) async throws -> String {
+        try await save(
+            file: file, mediaKind: .video, pairedVideoFile: nil, like: source, albums: albums,
+            expectedPixelSize: expectedPixelSize)
+    }
+
+    /// Adds an image (or Live Photo, when `pairedVideoFile` is non-nil) to Photos, verifies metadata and size, and
+    /// returns the new asset's local identifier.
+    public func saveImage(
+        file: URL, pairedVideoFile: URL? = nil, like source: PhotoAsset, albums: [String],
+        expectedPixelSize: CGSize
+    ) async throws -> String {
+        try await save(
+            file: file, mediaKind: .image, pairedVideoFile: pairedVideoFile, like: source, albums: albums,
+            expectedPixelSize: expectedPixelSize)
+    }
+
+    private func save(
+        file: URL, mediaKind: MediaKind, pairedVideoFile: URL?, like source: PhotoAsset, albums: [String],
+        expectedPixelSize: CGSize
+    ) async throws -> String {
         if Task.isCancelled { throw PhotoSaveError.cancelled }
         let request = PhotoSaveRequest(
-            file: file, creationDate: source.creationDate, location: source.location,
-            isFavorite: source.isFavorite, isHidden: source.isHidden, caption: source.caption, albums: albums)
+            file: file, mediaKind: mediaKind, pairedVideoFile: pairedVideoFile, creationDate: source.creationDate,
+            location: source.location, isFavorite: source.isFavorite, isHidden: source.isHidden,
+            caption: source.caption, albums: albums)
         let newID: String
         do {
-            newID = try await store.saveVideo(request)
+            newID =
+                if mediaKind == .image {
+                    try await store.saveImage(request)
+                } else {
+                    try await store.saveVideo(request)
+                }
         } catch is CancellationError {
             throw PhotoSaveError.cancelled
         } catch {
             throw PhotoSaveError.saveFailed(error.localizedDescription)
         }
         let problems = await problems(
-            with: newID, source: source, albums: albums, expectedPixelSize: expectedPixelSize)
+            with: newID, source: source, mediaKind: mediaKind, expectedLivePhoto: pairedVideoFile != nil,
+            albums: albums, expectedPixelSize: expectedPixelSize)
         guard problems.isEmpty else {
             throw PhotoSaveError.verifyFailed(reasons: problems, cleanup: await remove(newID))
         }
         return newID
     }
 
-    /// What is wrong with the new asset, in plain words; empty when it checks out. Subtypes are not compared: a
-    /// new asset carries a subtype bit Photos gives no name.
+    /// What is wrong with the new asset, in plain words; empty when it checks out.
     private func problems(
-        with id: String, source: PhotoAsset, albums: [String], expectedPixelSize: CGSize
+        with id: String, source: PhotoAsset, mediaKind: MediaKind, expectedLivePhoto: Bool, albums: [String],
+        expectedPixelSize: CGSize
     ) async -> [String] {
         let stored: PhotoAsset
         do {
             stored = try await store.asset(id: id)
         } catch {
-            return ["the new video can't be found in Photos"]
+            return ["the new item can't be found in Photos"]
         }
         var problems: [String] = []
-        if abs(stored.duration - source.duration) > Self.durationTolerance {
+        if mediaKind == .video, abs(stored.duration - source.duration) > Self.durationTolerance {
             problems.append("its length is \(stored.duration) s, expected \(source.duration) s")
+        }
+        if expectedLivePhoto, !stored.subtypes.contains(.livePhoto) {
+            problems.append("it was not saved as a Live Photo")
         }
         let swapped = CGSize(width: expectedPixelSize.height, height: expectedPixelSize.width)
         if stored.pixelSize != expectedPixelSize && stored.pixelSize != swapped {

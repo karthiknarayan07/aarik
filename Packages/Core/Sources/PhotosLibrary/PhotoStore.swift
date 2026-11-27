@@ -16,7 +16,7 @@ public struct PhotoLocation: Sendable, Hashable {
     }
 }
 
-/// The video kinds Photos records for an asset.
+/// Media subtypes Photos records for an asset.
 public struct PhotoSubtypes: OptionSet, Sendable, Hashable {
     public let rawValue: Int
 
@@ -31,27 +31,34 @@ public struct PhotoSubtypes: OptionSet, Sendable, Hashable {
     public static let spatial = PhotoSubtypes(rawValue: 1 << 2)
     public static let timelapse = PhotoSubtypes(rawValue: 1 << 3)
     public static let streamed = PhotoSubtypes(rawValue: 1 << 4)
+    public static let livePhoto = PhotoSubtypes(rawValue: 1 << 5)
+    public static let depthEffect = PhotoSubtypes(rawValue: 1 << 6)
+    public static let hdrPhoto = PhotoSubtypes(rawValue: 1 << 7)
+    public static let rawPhoto = PhotoSubtypes(rawValue: 1 << 8)
 }
 
-/// One video in the Photos library, read from its metadata only (nothing is downloaded).
+/// One video or image in the Photos library, read from its metadata only (nothing is downloaded).
 public struct PhotoAsset: Sendable, Hashable, Identifiable {
     /// The Photos local identifier.
     public let id: String
+    public let mediaKind: MediaKind
     public let creationDate: Date?
     public let location: PhotoLocation?
     /// Size as displayed.
     public let pixelSize: CGSize
-    /// Seconds.
+    /// Seconds (0 for images).
     public let duration: Double
     public let isFavorite: Bool
     public let isHidden: Bool
-    /// True when the video was edited in Photos.
+    /// True when the asset was edited in Photos.
     public let hasAdjustments: Bool
     public let subtypes: PhotoSubtypes
     public let originalFileName: String
-    /// Size of the original video resource; nil when Photos doesn't say.
+    /// Size of the primary original resource; nil when Photos doesn't say.
     public let originalByteSize: Int64?
-    /// Whether the original is on this Mac (false when only in iCloud); nil when Photos doesn't say.
+    /// Size of a Live Photo's paired `.mov` resource; nil for still images/videos or when unknown.
+    public let pairedVideoByteSize: Int64?
+    /// Whether the original is on this device (false when only in iCloud); nil when Photos doesn't say.
     public let isLocallyAvailable: Bool?
     /// When the asset last changed in Photos (an edit changes it); nil when Photos doesn't say.
     public let modificationDate: Date?
@@ -59,13 +66,17 @@ public struct PhotoAsset: Sendable, Hashable, Identifiable {
     /// only where the OS offers it (version 27); nil in listings and when there is none.
     public let caption: String?
 
+    public var isLivePhoto: Bool { mediaKind == .image && subtypes.contains(.livePhoto) }
+
     public init(
-        id: String, creationDate: Date? = nil, location: PhotoLocation? = nil, pixelSize: CGSize,
-        duration: Double, isFavorite: Bool = false, isHidden: Bool = false, hasAdjustments: Bool = false,
-        subtypes: PhotoSubtypes = [], originalFileName: String, originalByteSize: Int64? = nil,
-        isLocallyAvailable: Bool? = nil, modificationDate: Date? = nil, caption: String? = nil
+        id: String, mediaKind: MediaKind = .video, creationDate: Date? = nil, location: PhotoLocation? = nil,
+        pixelSize: CGSize, duration: Double = 0, isFavorite: Bool = false, isHidden: Bool = false,
+        hasAdjustments: Bool = false, subtypes: PhotoSubtypes = [], originalFileName: String,
+        originalByteSize: Int64? = nil, pairedVideoByteSize: Int64? = nil, isLocallyAvailable: Bool? = nil,
+        modificationDate: Date? = nil, caption: String? = nil
     ) {
         self.id = id
+        self.mediaKind = mediaKind
         self.creationDate = creationDate
         self.location = location
         self.pixelSize = pixelSize
@@ -76,6 +87,7 @@ public struct PhotoAsset: Sendable, Hashable, Identifiable {
         self.subtypes = subtypes
         self.originalFileName = originalFileName
         self.originalByteSize = originalByteSize
+        self.pairedVideoByteSize = pairedVideoByteSize
         self.isLocallyAvailable = isLocallyAvailable
         self.modificationDate = modificationDate
         self.caption = caption
@@ -84,14 +96,16 @@ public struct PhotoAsset: Sendable, Hashable, Identifiable {
     /// The same asset with a caption.
     func withCaption(_ caption: String) -> PhotoAsset {
         PhotoAsset(
-            id: id, creationDate: creationDate, location: location, pixelSize: pixelSize, duration: duration,
-            isFavorite: isFavorite, isHidden: isHidden, hasAdjustments: hasAdjustments, subtypes: subtypes,
-            originalFileName: originalFileName, originalByteSize: originalByteSize,
-            isLocallyAvailable: isLocallyAvailable, modificationDate: modificationDate, caption: caption)
+            id: id, mediaKind: mediaKind, creationDate: creationDate, location: location, pixelSize: pixelSize,
+            duration: duration, isFavorite: isFavorite, isHidden: isHidden, hasAdjustments: hasAdjustments,
+            subtypes: subtypes, originalFileName: originalFileName, originalByteSize: originalByteSize,
+            pairedVideoByteSize: pairedVideoByteSize, isLocallyAvailable: isLocallyAvailable,
+            modificationDate: modificationDate, caption: caption)
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(id)
+        hasher.combine(mediaKind)
         hasher.combine(pixelSize.width)
         hasher.combine(pixelSize.height)
         hasher.combine(duration)
@@ -148,9 +162,12 @@ public enum FetchProgress: Sendable, Equatable {
     }
 }
 
-/// What a new video asset is created with: the file plus the fields copied from the source asset.
+/// What a new Photos asset is created with: the file plus the fields copied from the source asset.
 public struct PhotoSaveRequest: Sendable, Equatable {
     public let file: URL
+    public let mediaKind: MediaKind
+    /// Optional paired `.mov` when saving a preserved Live Photo.
+    public let pairedVideoFile: URL?
     public let creationDate: Date?
     public let location: PhotoLocation?
     public let isFavorite: Bool
@@ -161,10 +178,12 @@ public struct PhotoSaveRequest: Sendable, Equatable {
     public let albums: [String]
 
     public init(
-        file: URL, creationDate: Date?, location: PhotoLocation?, isFavorite: Bool, isHidden: Bool,
-        caption: String? = nil, albums: [String]
+        file: URL, mediaKind: MediaKind = .video, pairedVideoFile: URL? = nil, creationDate: Date?,
+        location: PhotoLocation?, isFavorite: Bool, isHidden: Bool, caption: String? = nil, albums: [String]
     ) {
         self.file = file
+        self.mediaKind = mediaKind
+        self.pairedVideoFile = pairedVideoFile
         self.creationDate = creationDate
         self.location = location
         self.isFavorite = isFavorite
@@ -188,6 +207,8 @@ public protocol PhotoStore: Sendable {
     func requestAuthorization() async -> PhotoAuthorization
     /// Every video in the library, newest first. Never downloads from iCloud.
     func videos() async throws -> [PhotoAsset]
+    /// Every video and image in the library, newest first. Never downloads from iCloud.
+    func mediaAssets() async throws -> [PhotoAsset]
     /// Yields when the library changed; callers refetch (diffing is the caller's job).
     func changes() -> AsyncStream<Void>
     /// Local identifiers of the user albums that contain the asset.
@@ -196,23 +217,40 @@ public protocol PhotoStore: Sendable {
     func thumbnail(for id: String, size: CGSize) async -> CGImage?
     /// The asset's current metadata (including whether it was edited); throws `notInLibrary` when it is gone.
     func asset(id: String) async throws -> PhotoAsset
-    /// Adds a new video asset made from `request.file` in one change (the file is copied, never moved), with the
-    /// request's date, location, favorite and hidden flags, and adds it to each of the request's albums that
-    /// still exists. Returns the new asset's local identifier. Never changes an existing asset. Works with full or
-    /// limited access; otherwise throws `notAuthorized`. When it throws, no asset was added, except after the
-    /// change itself succeeded and Photos gave no identifier (`unavailable`): a video may then have been added.
+    /// Adds a new video asset made from `request.file` in one change (the file is copied, never moved).
     func saveVideo(_ request: PhotoSaveRequest) async throws -> String
+    /// Adds a new image (or Live Photo, when `request.pairedVideoFile` is non-nil) asset in one change.
+    func saveImage(_ request: PhotoSaveRequest) async throws -> String
     /// Deletes assets the app can access (full or limited access). Photos always asks the user to confirm; throws
     /// `CancellationError` when the user declines.
     func deleteAssets(ids: [String]) async throws
-    /// Writes the asset's original video resource to `url`, downloading from iCloud when needed and reporting
+    /// Writes the asset's original resource to `url`, downloading from iCloud when needed and reporting
     /// `.downloading` progress. Cancelling the task stops the transfer.
     func writeOriginal(id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void) async throws
-    /// Writes the current (edited) version to `url` as a passthrough export, downloading from iCloud when needed:
-    /// `.downloading` progress first, then `.exporting`. Cancelling the task stops it.
+    /// Writes the current (edited) version to `url`, downloading from iCloud when needed.
     func exportCurrentVersion(
         id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void
     ) async throws
+    /// Writes a Live Photo's paired `.mov` resource to `url` (fullSizePairedVideo if `isEdited`, else pairedVideo).
+    func writePairedVideo(
+        id: String, to url: URL, isEdited: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws
+}
+
+extension PhotoStore {
+    public func mediaAssets() async throws -> [PhotoAsset] {
+        try await videos()
+    }
+
+    public func saveImage(_ request: PhotoSaveRequest) async throws -> String {
+        try await saveVideo(request)
+    }
+
+    public func writePairedVideo(
+        id: String, to url: URL, isEdited: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws {
+        throw PhotoStoreError.unavailable("it has no Live Photo video resource")
+    }
 }
 
 extension PhotoStoreError: OutcomeCoded {

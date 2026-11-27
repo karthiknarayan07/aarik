@@ -35,16 +35,38 @@ extension PhotoKitStore {
 
     // MARK: - Original resource
 
-    /// Streams the `.video` resource into `url` with `requestData`, not `writeData`: only `requestData` returns a
-    /// request id, which is the only way to stop an iCloud download that the user cancelled.
+    /// Streams the `.video` or `.photo` original resource into `url` with `requestData`, supporting cancellation.
     @concurrent
     public func writeOriginal(
         id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void
     ) async throws {
         let asset = try Self.fetchAsset(id)
-        guard let resource = PHAssetResource.assetResources(for: asset).first(where: { $0.type == .video }) else {
-            throw PhotoStoreError.unavailable("it has no video resource")
+        let targetType: PHAssetResourceType = asset.mediaType == .image ? .photo : .video
+        guard let resource = PHAssetResource.assetResources(for: asset).first(where: { $0.type == targetType }) else {
+            throw PhotoStoreError.unavailable("it has no media resource")
         }
+        try await streamResource(resource, to: url, progress: progress)
+    }
+
+    @concurrent
+    public func writePairedVideo(
+        id: String, to url: URL, isEdited: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws {
+        let asset = try Self.fetchAsset(id)
+        let resources = PHAssetResource.assetResources(for: asset)
+        let resource =
+            (isEdited ? resources.first(where: { $0.type == .fullSizePairedVideo }) : nil)
+            ?? resources.first(where: { $0.type == .pairedVideo })
+        guard let resource else {
+            throw PhotoStoreError.unavailable("it has no Live Photo video resource")
+        }
+        try await streamResource(resource, to: url, progress: progress)
+    }
+
+    @concurrent
+    private func streamResource(
+        _ resource: PHAssetResource, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws {
         guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
             throw PhotoStoreError.unavailable("the work folder isn't writable")
         }
@@ -66,7 +88,7 @@ extension PhotoKitStore {
         } onCancel: {
             if let requestID = transfer.cancel() { manager.cancelDataRequest(requestID) }
         }
-        // A video already on this Mac reports no progress, so end the phase explicitly.
+        // An asset already on this device reports no progress, so end the phase explicitly.
         progress(.downloading(1))
     }
 
@@ -77,6 +99,10 @@ extension PhotoKitStore {
         id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void
     ) async throws {
         let asset = try Self.fetchAsset(id)
+        if asset.mediaType == .image {
+            try await exportCurrentImage(asset, to: url, progress: progress)
+            return
+        }
         let options = PHVideoRequestOptions()
         options.version = .current
         options.deliveryMode = .highQualityFormat
@@ -114,6 +140,34 @@ extension PhotoKitStore {
         } catch {
             throw Self.mapTransferError(error)
         }
+        progress(.exporting(1))
+    }
+
+    @concurrent
+    private func exportCurrentImage(
+        _ asset: PHAsset, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws {
+        let options = PHImageRequestOptions()
+        options.version = .current
+        options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true
+        options.progressHandler = { fraction, _, _, _ in progress(.downloading(min(max(fraction, 0), 1))) }
+        let request = ImageDataRequest()
+        let manager = PHImageManager.default()
+        let data: Data = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, any Error>) in
+                guard request.start(continuation) else { return }
+                let requestID = manager.requestImageDataAndOrientation(for: asset, options: options) {
+                    data, _, _, info in
+                    request.deliver(data, failure: Self.exportFailure(info))
+                }
+                if request.setID(requestID) { manager.cancelImageRequest(requestID) }
+            }
+        } onCancel: {
+            if let requestID = request.cancel() { manager.cancelImageRequest(requestID) }
+        }
+        progress(.downloading(1))
+        try data.write(to: url, options: .atomic)
         progress(.exporting(1))
     }
 
@@ -321,5 +375,54 @@ final class ResourceTransfer: Sendable {
             state.isClosed = true
             try? file.close()
         }
+    }
+}
+
+/// One `requestImageDataAndOrientation` call: resumes its continuation once with the image bytes or error.
+final class ImageDataRequest: Sendable {
+    private struct State {
+        var continuation: CheckedContinuation<Data, any Error>?
+        var requestID: PHImageRequestID?
+        var isDone = false
+    }
+
+    private let state = Mutex(State())
+
+    func start(_ continuation: CheckedContinuation<Data, any Error>) -> Bool {
+        let cancelled = state.withLock { state in
+            if !state.isDone { state.continuation = continuation }
+            return state.isDone
+        }
+        if cancelled { continuation.resume(throwing: CancellationError()) }
+        return !cancelled
+    }
+
+    func setID(_ id: PHImageRequestID) -> Bool {
+        state.withLock { state in
+            state.requestID = id
+            return state.isDone
+        }
+    }
+
+    func deliver(_ data: Data?, failure: @autoclosure () -> any Error) {
+        let continuation: CheckedContinuation<Data, any Error>? = state.withLock { state in
+            guard !state.isDone else { return nil }
+            state.isDone = true
+            defer { state.continuation = nil }
+            return state.continuation
+        }
+        guard let continuation else { return }
+        if let data { continuation.resume(returning: data) } else { continuation.resume(throwing: failure()) }
+    }
+
+    func cancel() -> PHImageRequestID? {
+        let (continuation, id): (CheckedContinuation<Data, any Error>?, PHImageRequestID?) = state.withLock { state in
+            let continuation = state.isDone ? nil : state.continuation
+            state.isDone = true
+            state.continuation = nil
+            return (continuation, state.requestID)
+        }
+        continuation?.resume(throwing: CancellationError())
+        return id
     }
 }

@@ -79,21 +79,30 @@ public actor LibraryScanner {
         await Self.inspectFile(url, inspector: inspector)
     }
 
-    /// Inspects one movie file off the caller's actor; nil if it can't be read as a video.
+    /// Inspects one media file (movie or image) off the caller's actor; nil if unreadable.
     @concurrent
     nonisolated static func inspectFile(_ url: URL, inspector: MediaInspector = MediaInspector()) async
         -> ScannedFile?
     {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let inventory = try? await inspector.inventory(of: url),
-            let stamp = FileStamp.read(url),
+        let isMovie = Self.isMovie(url)
+        let isImage = !isMovie && Self.isImage(url)
+        guard isMovie || isImage, let stamp = FileStamp.read(url) else { return nil }
+
+        let inventory: MetadataInventory?
+        if isMovie {
+            inventory = try? await inspector.inventory(of: url)
+        } else {
+            inventory = try? ImageInspector().inventory(of: url)
+        }
+        guard let inventory,
             let item = LibraryItemBuilder.build(url: url, inventory: inventory, byteSize: stamp.size)
         else { return nil }
         return ScannedFile(item: item, bookmark: BookmarkStore.makeBookmark(for: url), modifiedAt: stamp.modified)
     }
 
-    /// Movie files at or below `urls`, in path order within each folder.
+    /// Movie and image files at or below `urls`, in path order within each folder.
     private nonisolated static func movieFiles(in urls: [URL]) -> [URL] {
         var result: [URL] = []
         let keys: [URLResourceKey] = [.contentTypeKey, .isDirectoryKey, .isPackageKey, .isHiddenKey]
@@ -109,14 +118,18 @@ public actor LibraryScanner {
                 else { continue }
                 var found: [URL] = []
                 while let next = walker.nextObject() as? URL {
-                    if isMovie(next) { found.append(next) }
+                    if isSupportedMedia(next) { found.append(next) }
                 }
                 result += found.sorted { $0.path < $1.path }
-            } else if values.isHidden != true, isMovie(url) {
+            } else if values.isHidden != true, isSupportedMedia(url) {
                 result.append(url)
             }
         }
         return result
+    }
+
+    private nonisolated static func isSupportedMedia(_ url: URL) -> Bool {
+        isMovie(url) || isImage(url)
     }
 
     private nonisolated static func isMovie(_ url: URL) -> Bool {
@@ -124,5 +137,12 @@ public actor LibraryScanner {
             values.isDirectory != true, values.isPackage != true
         else { return false }
         return values.contentType?.conforms(to: .movie) ?? false
+    }
+
+    private nonisolated static func isImage(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.contentTypeKey, .isDirectoryKey, .isPackageKey]),
+            values.isDirectory != true, values.isPackage != true
+        else { return false }
+        return values.contentType?.conforms(to: .image) ?? false
     }
 }

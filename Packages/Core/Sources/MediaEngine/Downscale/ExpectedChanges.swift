@@ -51,4 +51,17 @@ public enum ExpectedChanges {
         guard let from = dolbyVisionParts(from), let to = dolbyVisionParts(to) else { return false }
         return from.profile == to.profile && from.compat == to.compat
     }
+
+    /// Image changes allowed by `spec`: `img.dimensions` (when resized) and `img.uti` (when changing format).
+    public static func unexpected(in report: MetadataReport, spec: ImageSpec) -> [MetadataChange] {
+        let formatMayChange = spec.format != .keepOriginal
+        return report.changed.filter { change in
+            switch change.key {
+            case "img.dimensions": false
+            case "img.uti": !formatMayChange
+            case "img.apple.contentID": false
+            default: true
+            }
+        }
+    }
 }

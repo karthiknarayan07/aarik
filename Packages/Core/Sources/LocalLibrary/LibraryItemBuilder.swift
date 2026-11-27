@@ -6,19 +6,52 @@ import Foundation
 enum LibraryItemBuilder {
     private static let hdrTransferFunctions: Set<String> = ["ITU_R_2100_HLG", "SMPTE_ST_2084_PQ"]
 
-    /// The item for a file, or nil when the inventory has no video dimensions (not a video file).
+    /// The item for a file, or nil when the inventory has neither video nor image dimensions.
     static func build(
         url: URL, inventory: MetadataInventory, byteSize: Int64, id: UUID = UUID(), isAvailable: Bool = true
     ) -> LibraryItem? {
-        guard let stored = size(inventory["video.dimensions"]?.value) else { return nil }
-        let pixelSize = rotatesQuarterTurn(inventory["video.transform"]?.value) ? stored.swapped : stored
-        let frameRate = Double(inventory["video.frameRate"]?.value ?? "") ?? 0
-        let duration = (Double(inventory["video.duration"]?.value ?? "") ?? 0) / 1000
-        return LibraryItem(
-            id: id, url: url, byteSize: byteSize, duration: duration, pixelSize: pixelSize, frameRate: frameRate,
-            captureDate: captureDate(inventory),
-            badges: badges(inventory, pixelSize: pixelSize, frameRate: frameRate, url: url),
-            isAvailable: isAvailable, inventory: inventory)
+        if let stored = size(inventory["video.dimensions"]?.value) {
+            let pixelSize = rotatesQuarterTurn(inventory["video.transform"]?.value) ? stored.swapped : stored
+            let frameRate = Double(inventory["video.frameRate"]?.value ?? "") ?? 0
+            let duration = (Double(inventory["video.duration"]?.value ?? "") ?? 0) / 1000
+            return LibraryItem(
+                id: id, mediaKind: .video, url: url, byteSize: byteSize, duration: duration, pixelSize: pixelSize,
+                frameRate: frameRate, captureDate: captureDate(inventory),
+                badges: badges(inventory, pixelSize: pixelSize, frameRate: frameRate, url: url),
+                isAvailable: isAvailable, inventory: inventory)
+        }
+        if let imageSize = size(inventory["img.dimensions"]?.value) {
+            return LibraryItem(
+                id: id, mediaKind: .image, url: url, byteSize: byteSize, duration: 0, pixelSize: imageSize,
+                frameRate: 0, captureDate: imageCaptureDate(inventory),
+                badges: imageBadges(inventory, url: url),
+                isAvailable: isAvailable, inventory: inventory)
+        }
+        return nil
+    }
+
+    private static func imageBadges(_ inventory: MetadataInventory, url: URL) -> Set<MediaBadge> {
+        var result = Set<MediaBadge>()
+        if inventory["img.raw"] != nil { result.insert(.raw) }
+        if inventory["img.apple.contentID"] != nil { result.insert(.livePhoto) }
+        if inventory["img.depth"] != nil { result.insert(.portrait) }
+        if inventory["img.hdrGainMap"] != nil { result.insert(.hdr) }
+        if inventory["img.alpha"] != nil { result.insert(.transparent) }
+        if inventory["img.animation"] != nil { result.insert(.animated) }
+        if hasEditSidecar(url) { result.insert(.edited) }
+        return result
+    }
+
+    private static func imageCaptureDate(_ inventory: MetadataInventory) -> Date? {
+        if let raw = inventory["img.exif.dateOriginal"]?.value {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            for format in ["yyyy:MM:dd HH:mm:ssXXXXX", "yyyy:MM:dd HH:mm:ss"] {
+                formatter.dateFormat = format
+                if let date = formatter.date(from: raw) { return date }
+            }
+        }
+        return captureDate(inventory)
     }
 
     // MARK: - Badges

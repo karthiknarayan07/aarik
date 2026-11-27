@@ -135,6 +135,11 @@ extension MediaBadge {
         case .cinematic: "Cinematic"
         case .sloMo: "Slo-mo"
         case .spatial: "Spatial"
+        case .livePhoto: "Live Photo"
+        case .portrait: "Portrait"
+        case .raw: "RAW"
+        case .animated: "Animated"
+        case .transparent: "Transparent"
         case .edited: "Edited"
         case .sdr: "SDR"
         }

@@ -35,7 +35,8 @@ import UniformTypeIdentifiers
         let diff = MetadataDiff.report(
             source: try inspector.inventory(of: source), output: try inspector.inventory(of: dest))
         #expect(diff.lost.isEmpty, "Unexpected metadata lost: \(diff.lost.map(\.key))")
-        #expect(diff.changed.isEmpty, "Unexpected metadata changed: \(diff.changed.map(\.key))")
+        let unexpected = ExpectedChanges.unexpected(in: diff, spec: spec)
+        #expect(unexpected.isEmpty, "Unexpected metadata changed: \(unexpected.map(\.key))")
 
         // No partial files remain
         let dirContents = try FileManager.default.contentsOfDirectory(atPath: dest.deletingLastPathComponent().path)

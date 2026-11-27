@@ -39,6 +39,11 @@ enum LibraryInsight {
         case .cinematic: .indigo
         case .sloMo: .teal
         case .spatial: .pink
+        case .livePhoto: .yellow
+        case .portrait: .mint
+        case .raw: .purple
+        case .animated: .cyan
+        case .transparent: .secondary
         case .edited: .gray
         case .k4, .sdr: .blue
         }

@@ -31,11 +31,19 @@
         func authorization() async -> PhotoAuthorization { await inner.authorization() }
         func requestAuthorization() async -> PhotoAuthorization { await inner.requestAuthorization() }
         func videos() async throws -> [PhotoAsset] { try await inner.videos() }
+        func mediaAssets() async throws -> [PhotoAsset] { try await inner.mediaAssets() }
         func changes() -> AsyncStream<Void> { inner.changes() }
         func albums(containing id: String) async throws -> [String] { try await inner.albums(containing: id) }
         func asset(id: String) async throws -> PhotoAsset { try await inner.asset(id: id) }
         func saveVideo(_ request: PhotoSaveRequest) async throws -> String { try await inner.saveVideo(request) }
+        func saveImage(_ request: PhotoSaveRequest) async throws -> String { try await inner.saveImage(request) }
         func deleteAssets(ids: [String]) async throws { try await inner.deleteAssets(ids: ids) }
+
+        func writePairedVideo(
+            id: String, to url: URL, isEdited: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
+        ) async throws {
+            try await inner.writePairedVideo(id: id, to: url, isEdited: isEdited, progress: progress)
+        }
 
         func writeOriginal(id: String, to url: URL, progress: @escaping @Sendable (FetchProgress) -> Void)
             async throws

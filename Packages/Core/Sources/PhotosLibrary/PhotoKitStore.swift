@@ -4,6 +4,7 @@ import CoreLocation
 import Foundation
 import Photos
 import Synchronization
+import UniformTypeIdentifiers
 
 /// The real `PhotoStore`, backed by PhotoKit. Reads metadata only: listing, albums and thumbnails never download
 /// from iCloud.
@@ -55,16 +56,31 @@ public final class PhotoKitStore: PhotoStore {
 
     // MARK: - Listing
 
-    /// One fetch for all user-library videos, newest first. Resources (name, size, local or iCloud) are read in
-    /// batches off the main actor.
+    /// One fetch for all user-library videos, newest first.
     @concurrent
     public func videos() async throws -> [PhotoAsset] {
+        try await fetchAssets(predicate: NSPredicate(format: "mediaType == %d", PHAssetMediaType.video.rawValue))
+    }
+
+    /// One fetch for all user-library videos and images, newest first. Never downloads from iCloud.
+    @concurrent
+    public func mediaAssets() async throws -> [PhotoAsset] {
+        try await fetchAssets(
+            predicate: NSPredicate(
+                format: "mediaType == %d || mediaType == %d",
+                PHAssetMediaType.image.rawValue,
+                PHAssetMediaType.video.rawValue))
+    }
+
+    @concurrent
+    private func fetchAssets(predicate: NSPredicate) async throws -> [PhotoAsset] {
         guard await authorization().allowsReading else { throw PhotoStoreError.notAuthorized }
         let options = PHFetchOptions()
+        options.predicate = predicate
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         options.includeAssetSourceTypes = [.typeUserLibrary]
         options.includeHiddenAssets = includeHidden
-        let result = PHAsset.fetchAssets(with: .video, options: options)
+        let result = PHAsset.fetchAssets(with: options)
         let count = result.count
         let batchSize = Self.batchSize
         listing.state.withLock { $0.result = result }
@@ -93,13 +109,27 @@ public final class PhotoKitStore: PhotoStore {
 
     static func makeAsset(_ asset: PHAsset) -> PhotoAsset {
         let resources = PHAssetResource.assetResources(for: asset)
-        let original = resources.first { $0.type == .video } ?? resources.first
+        let mediaKind: MediaKind = asset.mediaType == .image ? .image : .video
+        let primaryType: PHAssetResourceType = mediaKind == .image ? .photo : .video
+        let original = resources.first { $0.type == primaryType } ?? resources.first
+        let pairedVideo =
+            mediaKind == .image
+            ? (resources.first { $0.type == .fullSizePairedVideo } ?? resources.first { $0.type == .pairedVideo })
+            : nil
+        var subtypes = subtypes(asset.mediaSubtypes)
+        if mediaKind == .image,
+            resources.contains(where: { UTType($0.uniformTypeIdentifier)?.conforms(to: .rawImage) == true })
+        {
+            subtypes.insert(.rawPhoto)
+        }
         return PhotoAsset(
-            id: asset.localIdentifier, creationDate: asset.creationDate, location: location(asset.location),
+            id: asset.localIdentifier, mediaKind: mediaKind, creationDate: asset.creationDate,
+            location: location(asset.location),
             pixelSize: CGSize(width: asset.pixelWidth, height: asset.pixelHeight), duration: asset.duration,
             isFavorite: asset.isFavorite, isHidden: asset.isHidden, hasAdjustments: asset.hasAdjustments,
-            subtypes: subtypes(asset.mediaSubtypes), originalFileName: original.map(fileName) ?? "",
-            originalByteSize: original.flatMap(byteSize), isLocallyAvailable: original.flatMap(isLocallyAvailable),
+            subtypes: subtypes, originalFileName: original.map(fileName) ?? "",
+            originalByteSize: original.flatMap(byteSize), pairedVideoByteSize: pairedVideo.flatMap(byteSize),
+            isLocallyAvailable: original.flatMap(isLocallyAvailable),
             modificationDate: asset.modificationDate)
     }
 
@@ -110,6 +140,9 @@ public final class PhotoKitStore: PhotoStore {
         if subtypes.contains(.spatialMedia) { result.insert(.spatial) }
         if subtypes.contains(.videoTimelapse) { result.insert(.timelapse) }
         if subtypes.contains(.videoStreamed) { result.insert(.streamed) }
+        if subtypes.contains(.photoLive) { result.insert(.livePhoto) }
+        if subtypes.contains(.photoDepthEffect) { result.insert(.depthEffect) }
+        if subtypes.contains(.photoHDR) { result.insert(.hdrPhoto) }
         return result
     }
 

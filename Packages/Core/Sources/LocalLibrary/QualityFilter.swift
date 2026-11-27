@@ -243,6 +243,75 @@ public enum DynamicRange: Int, Sendable, Hashable, CaseIterable, Comparable {
     public static func < (lhs: DynamicRange, rhs: DynamicRange) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
+/// Image resolution tiers by megapixels (for image items).
+public enum MegapixelBucket: Int, Sendable, Hashable, CaseIterable, Comparable {
+    case mp48Plus
+    case mp24Plus
+    case mp12Plus
+    case under12
+    case unknown
+
+    public init(pixelSize: CGSize) {
+        guard pixelSize.width > 0, pixelSize.height > 0 else {
+            self = .unknown
+            return
+        }
+        let mp = (pixelSize.width * pixelSize.height) / 1_000_000.0
+        switch mp {
+        case 44...: self = .mp48Plus
+        case 20...: self = .mp24Plus
+        case 11...: self = .mp12Plus
+        default: self = .under12
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .mp48Plus: "48 MP+"
+        case .mp24Plus: "24 MP+"
+        case .mp12Plus: "12 MP+"
+        case .under12: "Under 12 MP"
+        case .unknown: "Unknown"
+        }
+    }
+
+    public static func < (lhs: MegapixelBucket, rhs: MegapixelBucket) -> Bool { lhs.rawValue < rhs.rawValue }
+}
+
+/// Filterable special image traits.
+public enum ImageTrait: Int, Sendable, Hashable, CaseIterable, Comparable {
+    case livePhoto
+    case raw
+    case hdr
+    case portrait
+    case transparent
+    case animated
+
+    public static func traits(for item: LibraryItem) -> Set<ImageTrait> {
+        var result: Set<ImageTrait> = []
+        if item.badges.contains(.livePhoto) { result.insert(.livePhoto) }
+        if item.badges.contains(.raw) { result.insert(.raw) }
+        if item.badges.contains(.hdr) { result.insert(.hdr) }
+        if item.badges.contains(.portrait) { result.insert(.portrait) }
+        if item.badges.contains(.transparent) { result.insert(.transparent) }
+        if item.badges.contains(.animated) { result.insert(.animated) }
+        return result
+    }
+
+    public var title: String {
+        switch self {
+        case .livePhoto: "Live Photo"
+        case .raw: "RAW"
+        case .hdr: "HDR"
+        case .portrait: "Portrait"
+        case .transparent: "Transparent"
+        case .animated: "Animated"
+        }
+    }
+
+    public static func < (lhs: ImageTrait, rhs: ImageTrait) -> Bool { lhs.rawValue < rhs.rawValue }
+}
+
 // MARK: - Filter
 
 /// Quality filters for the grid. Within a dimension the choices are alternatives (OR); dimensions combine with
@@ -256,26 +325,35 @@ public struct QualityFilter: Sendable, Hashable {
     public var lengths: Set<LengthRange> = []
     public var codecs: Set<CodecFamily> = []
     public var ranges: Set<DynamicRange> = []
+    public var megapixels: Set<MegapixelBucket> = []
+    public var imageTraits: Set<ImageTrait> = []
 
     public init(
         qualities: Set<QualityBucket> = [], minimumSize: SizeThreshold? = nil, lengths: Set<LengthRange> = [],
-        codecs: Set<CodecFamily> = [], ranges: Set<DynamicRange> = []
+        codecs: Set<CodecFamily> = [], ranges: Set<DynamicRange> = [], megapixels: Set<MegapixelBucket> = [],
+        imageTraits: Set<ImageTrait> = []
     ) {
         self.qualities = qualities
         self.minimumSize = minimumSize
         self.lengths = lengths
         self.codecs = codecs
         self.ranges = ranges
+        self.megapixels = megapixels
+        self.imageTraits = imageTraits
     }
 
     public var isActive: Bool {
         !qualities.isEmpty || minimumSize != nil || !lengths.isEmpty || !codecs.isEmpty || !ranges.isEmpty
+            || !megapixels.isEmpty || !imageTraits.isEmpty
     }
 
     /// How many dimensions are narrowed.
     public var activeCount: Int {
-        [!qualities.isEmpty, minimumSize != nil, !lengths.isEmpty, !codecs.isEmpty, !ranges.isEmpty]
-            .filter { $0 }.count
+        [
+            !qualities.isEmpty, minimumSize != nil, !lengths.isEmpty, !codecs.isEmpty, !ranges.isEmpty,
+            !megapixels.isEmpty, !imageTraits.isEmpty,
+        ]
+        .filter { $0 }.count
     }
 
     public func matches(_ item: LibraryItem) -> Bool {
@@ -297,18 +375,24 @@ public struct QualityFilter: Sendable, Hashable {
 
     /// An item's value in each dimension, computed once per pass.
     private struct Traits {
+        let isImage: Bool
         let quality: QualityBucket
+        let megapixel: MegapixelBucket?
+        let imageTraits: Set<ImageTrait>
         let byteSize: Int64
         let length: LengthRange
         let codec: CodecFamily?
         let range: DynamicRange?
 
         init(_ item: LibraryItem) {
+            isImage = item.isImage
             quality = QualityBucket(item: item)
+            megapixel = item.isImage ? MegapixelBucket(pixelSize: item.pixelSize) : nil
+            imageTraits = item.isImage ? ImageTrait.traits(for: item) : []
             byteSize = item.byteSize
             length = LengthRange(seconds: item.duration)
-            codec = CodecFamily.known(for: item)
-            range = DynamicRange.known(for: item.badges)
+            codec = item.isVideo ? CodecFamily.known(for: item) : nil
+            range = item.isVideo ? DynamicRange.known(for: item.badges) : nil
         }
     }
 
@@ -319,16 +403,20 @@ public struct QualityFilter: Sendable, Hashable {
         let length: Bool
         let codec: Bool
         let range: Bool
+        let megapixel: Bool
+        let imageTrait: Bool
 
         init(filter: QualityFilter, traits: Traits) {
-            quality = filter.qualities.isEmpty || filter.qualities.contains(traits.quality)
+            quality = filter.qualities.isEmpty || (!traits.isImage && filter.qualities.contains(traits.quality))
             size = filter.minimumSize.map { traits.byteSize > $0.rawValue } ?? true
-            length = filter.lengths.isEmpty || filter.lengths.contains(traits.length)
+            length = filter.lengths.isEmpty || (!traits.isImage && filter.lengths.contains(traits.length))
             codec = filter.codecs.isEmpty || (traits.codec.map(filter.codecs.contains) ?? false)
             range = filter.ranges.isEmpty || (traits.range.map(filter.ranges.contains) ?? false)
+            megapixel = filter.megapixels.isEmpty || (traits.megapixel.map(filter.megapixels.contains) ?? false)
+            imageTrait = filter.imageTraits.isEmpty || !traits.imageTraits.isDisjoint(with: filter.imageTraits)
         }
 
-        var all: Bool { quality && size && length && codec && range }
+        var all: Bool { quality && size && length && codec && range && megapixel && imageTrait }
     }
 
     /// Faceted counts: each dimension counts the items that pass every other dimension, so an option's count is
@@ -339,31 +427,54 @@ public struct QualityFilter: Sendable, Hashable {
         var lengths: [LengthRange: Tally] = [:]
         var codecs: [CodecFamily: Tally] = [:]
         var ranges: [DynamicRange: Tally] = [:]
+        var megapixels: [MegapixelBucket: Tally] = [:]
+        var imageTraits: [ImageTrait: Tally] = [:]
 
         mutating func add(_ traits: Traits, _ match: Match) {
-            if match.size && match.length && match.codec && match.range {
+            if !traits.isImage && match.size && match.length && match.codec && match.range && match.megapixel
+                && match.imageTrait
+            {
                 qualities[traits.quality, default: .zero].add(traits.byteSize)
             }
-            if match.quality && match.length && match.codec && match.range {
+            if match.quality && match.length && match.codec && match.range && match.megapixel && match.imageTrait {
                 for threshold in SizeThreshold.allCases where traits.byteSize > threshold.rawValue {
                     sizes[threshold, default: .zero].add(traits.byteSize)
                 }
             }
-            if match.quality && match.size && match.codec && match.range {
+            if !traits.isImage && match.quality && match.size && match.codec && match.range && match.megapixel
+                && match.imageTrait
+            {
                 lengths[traits.length, default: .zero].add(traits.byteSize)
             }
-            if let codec = traits.codec, match.quality && match.size && match.length && match.range {
+            if let codec = traits.codec,
+                match.quality && match.size && match.length && match.range && match.megapixel && match.imageTrait
+            {
                 codecs[codec, default: .zero].add(traits.byteSize)
             }
-            if let range = traits.range, match.quality && match.size && match.length && match.codec {
+            if let range = traits.range,
+                match.quality && match.size && match.length && match.codec && match.megapixel && match.imageTrait
+            {
                 ranges[range, default: .zero].add(traits.byteSize)
+            }
+            if let megapixel = traits.megapixel,
+                match.quality && match.size && match.length && match.codec && match.range && match.imageTrait
+            {
+                megapixels[megapixel, default: .zero].add(traits.byteSize)
+            }
+            if traits.isImage && match.quality && match.size && match.length && match.codec && match.range
+                && match.megapixel
+            {
+                for trait in traits.imageTraits {
+                    imageTraits[trait, default: .zero].add(traits.byteSize)
+                }
             }
         }
 
         var facets: QualityFacets {
             QualityFacets(
                 qualities: Self.options(qualities), sizes: Self.options(sizes), lengths: Self.options(lengths),
-                codecs: Self.options(codecs), ranges: Self.options(ranges))
+                codecs: Self.options(codecs), ranges: Self.options(ranges), megapixels: Self.options(megapixels),
+                imageTraits: Self.options(imageTraits))
         }
 
         private static func options<Value: Comparable>(_ counts: [Value: Tally]) -> [QualityFacets.Option<Value>] {
@@ -406,6 +517,8 @@ public struct QualityFacets: Sendable, Equatable {
     public var lengths: [Option<LengthRange>] = []
     public var codecs: [Option<CodecFamily>] = []
     public var ranges: [Option<DynamicRange>] = []
+    public var megapixels: [Option<MegapixelBucket>] = []
+    public var imageTraits: [Option<ImageTrait>] = []
 
     public static let empty = QualityFacets()
 }

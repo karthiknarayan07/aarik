@@ -40,10 +40,11 @@ public final class ICloudOnlyPhotoStore: PhotoStore {
     private func reported(_ asset: PhotoAsset) -> PhotoAsset {
         let local = state.withLock { $0.downloaded.contains(asset.id) }
         return PhotoAsset(
-            id: asset.id, creationDate: asset.creationDate, location: asset.location, pixelSize: asset.pixelSize,
-            duration: asset.duration, isFavorite: asset.isFavorite, isHidden: asset.isHidden,
-            hasAdjustments: asset.hasAdjustments, subtypes: asset.subtypes, originalFileName: asset.originalFileName,
-            originalByteSize: asset.originalByteSize, isLocallyAvailable: local,
+            id: asset.id, mediaKind: asset.mediaKind, creationDate: asset.creationDate, location: asset.location,
+            pixelSize: asset.pixelSize, duration: asset.duration, isFavorite: asset.isFavorite,
+            isHidden: asset.isHidden, hasAdjustments: asset.hasAdjustments, subtypes: asset.subtypes,
+            originalFileName: asset.originalFileName, originalByteSize: asset.originalByteSize,
+            pairedVideoByteSize: asset.pairedVideoByteSize, isLocallyAvailable: local,
             modificationDate: asset.modificationDate, caption: asset.caption)
     }
 
@@ -52,11 +53,13 @@ public final class ICloudOnlyPhotoStore: PhotoStore {
     public func authorization() async -> PhotoAuthorization { await base.authorization() }
     public func requestAuthorization() async -> PhotoAuthorization { await base.requestAuthorization() }
     public func videos() async throws -> [PhotoAsset] { try await base.videos().map(reported) }
+    public func mediaAssets() async throws -> [PhotoAsset] { try await base.mediaAssets().map(reported) }
     public func changes() -> AsyncStream<Void> { base.changes() }
     public func albums(containing id: String) async throws -> [String] { try await base.albums(containing: id) }
     public func thumbnail(for id: String, size: CGSize) async -> CGImage? { await base.thumbnail(for: id, size: size) }
     public func asset(id: String) async throws -> PhotoAsset { reported(try await base.asset(id: id)) }
     public func saveVideo(_ request: PhotoSaveRequest) async throws -> String { try await base.saveVideo(request) }
+    public func saveImage(_ request: PhotoSaveRequest) async throws -> String { try await base.saveImage(request) }
     public func deleteAssets(ids: [String]) async throws { try await base.deleteAssets(ids: ids) }
 
     public func writeOriginal(
@@ -72,6 +75,14 @@ public final class ICloudOnlyPhotoStore: PhotoStore {
     ) async throws {
         try await download(id: id, to: url, progress: progress) {
             try await self.base.exportCurrentVersion(id: id, to: url, progress: progress)
+        }
+    }
+
+    public func writePairedVideo(
+        id: String, to url: URL, isEdited: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws {
+        try await download(id: id, to: url, progress: progress) {
+            try await self.base.writePairedVideo(id: id, to: url, isEdited: isEdited, progress: progress)
         }
     }
 

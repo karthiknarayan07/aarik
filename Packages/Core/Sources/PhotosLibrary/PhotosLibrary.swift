@@ -156,10 +156,10 @@ public final class PhotosLibrary: MediaCollection {
         defer { if fetchGeneration == generation { isScanning = false } }
         fetchedAuthorization = authorization
         do {
-            let videos = try await store.videos()
+            let fetched = try await store.mediaAssets()
             guard !Task.isCancelled else { return }
-            assets = videos
-            if shouldReadIndex(for: videos) {
+            assets = fetched
+            if shouldReadIndex(for: fetched) {
                 await readIndex()
                 guard !Task.isCancelled else { return }
             }
@@ -174,10 +174,10 @@ public final class PhotosLibrary: MediaCollection {
 
     /// The index is read once, then again only when it was readable and a video appeared that it may not know yet.
     /// A failed read is not retried on every change (it copies a database); `reloadIndex()` retries it.
-    private func shouldReadIndex(for videos: [PhotoAsset]) -> Bool {
+    private func shouldReadIndex(for fetched: [PhotoAsset]) -> Bool {
         switch indexStatus {
         case nil: true
-        case .loaded: videos.contains { !indexedIDs.contains($0.id) }
+        case .loaded: fetched.contains { $0.mediaKind == .video && !indexedIDs.contains($0.id) }
         default: false
         }
     }

@@ -197,6 +197,12 @@ public struct ImageInspector: Sendable {
             }
         }
 
+        add("img.uti", .image, "File format", inspection.sourceUTI)
+        if inspection.pixelSize.width > 0, inspection.pixelSize.height > 0 {
+            add(
+                "img.dimensions", .image, "Dimensions",
+                "\(Int(inspection.pixelSize.width.rounded()))x\(Int(inspection.pixelSize.height.rounded()))")
+        }
         add("img.colorProfile", .image, "Color profile", inspection.colorSpaceName)
         if inspection.hasAlpha {
             add("img.alpha", .image, "Transparency", "present")

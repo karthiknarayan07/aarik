@@ -15,6 +15,16 @@ extension PhotoKitStore {
     /// location, favorite, hidden and the caption (where the OS has it), and adds it to the albums that still exist, through its placeholder.
     @concurrent
     public func saveVideo(_ request: PhotoSaveRequest) async throws -> String {
+        try await saveAsset(request, isImage: false)
+    }
+
+    @concurrent
+    public func saveImage(_ request: PhotoSaveRequest) async throws -> String {
+        try await saveAsset(request, isImage: true)
+    }
+
+    @concurrent
+    private func saveAsset(_ request: PhotoSaveRequest, isImage: Bool) async throws -> String {
         guard await authorization().allowsReading else { throw PhotoStoreError.notAuthorized }
         let albums = PHAssetCollection.fetchAssetCollections(
             withLocalIdentifiers: request.albums, options: nil)
@@ -31,7 +41,16 @@ extension PhotoKitStore {
                 let creation = PHAssetCreationRequest.forAsset()
                 let options = PHAssetResourceCreationOptions()
                 options.shouldMoveFile = false
-                creation.addResource(with: .video, fileURL: request.file, options: options)
+                if isImage {
+                    creation.addResource(with: .photo, fileURL: request.file, options: options)
+                    if let paired = request.pairedVideoFile {
+                        let pairedOptions = PHAssetResourceCreationOptions()
+                        pairedOptions.shouldMoveFile = false
+                        creation.addResource(with: .pairedVideo, fileURL: paired, options: pairedOptions)
+                    }
+                } else {
+                    creation.addResource(with: .video, fileURL: request.file, options: options)
+                }
                 creation.creationDate = request.creationDate
                 if let location = request.location {
                     creation.location = location.clLocation(timestamp: request.creationDate ?? Date())
@@ -51,7 +70,7 @@ extension PhotoKitStore {
             throw Self.mapTransferError(error)
         }
         guard let id = placeholder.id else {
-            throw PhotoStoreError.unavailable("Photos gave no identifier; a video may have been added")
+            throw PhotoStoreError.unavailable("Photos gave no identifier; an asset may have been added")
         }
         return id
     }

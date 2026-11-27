@@ -19,15 +19,23 @@ public enum PhotoItemBuilder {
     /// inventory, which the codec filter reads) and an HDR or SDR badge.
     public static func build(_ asset: PhotoAsset, index entry: PhotoIndexEntry?) -> LibraryItem {
         var inventory = MetadataInventory()
-        if let codec = entry?.codec {
-            inventory.items.append(
-                MetadataItem(key: "video.codec", category: .video, displayName: "Codec", value: codec))
+        if asset.mediaKind == .video {
+            if let codec = entry?.codec {
+                inventory.items.append(
+                    MetadataItem(key: "video.codec", category: .video, displayName: "Codec", value: codec))
+            }
         }
+        let allBadges =
+            asset.mediaKind == .image
+            ? badges(asset)
+            : badges(asset).union(rangeBadges(entry?.hdrType))
         return LibraryItem(
-            id: itemID(for: asset.id), source: .photos(asset.id), name: asset.originalFileName,
-            byteSize: asset.originalByteSize ?? 0,
-            duration: asset.duration, pixelSize: asset.pixelSize, frameRate: entry?.fps ?? 0,
-            captureDate: asset.creationDate, badges: badges(asset).union(rangeBadges(entry?.hdrType)),
+            id: itemID(for: asset.id), mediaKind: asset.mediaKind, source: .photos(asset.id),
+            name: asset.originalFileName, byteSize: asset.originalByteSize ?? 0,
+            duration: asset.mediaKind == .video ? asset.duration : 0,
+            pixelSize: asset.pixelSize,
+            frameRate: asset.mediaKind == .video ? (entry?.fps ?? 0) : 0,
+            captureDate: asset.creationDate, badges: allBadges,
             isAvailable: true, inventory: inventory, modifiedDate: asset.modificationDate)
     }
 
@@ -55,12 +63,19 @@ public enum PhotoItemBuilder {
     /// Badges known from Photos' own metadata.
     public static func badges(_ asset: PhotoAsset) -> Set<MediaBadge> {
         var result = Set<MediaBadge>()
-        if asset.subtypes.contains(.cinematic) { result.insert(.cinematic) }
-        if asset.subtypes.contains(.highFrameRate) { result.insert(.sloMo) }
-        if asset.subtypes.contains(.spatial) { result.insert(.spatial) }
         if asset.hasAdjustments { result.insert(.edited) }
-        // Same rule as local files: the short side decides.
-        if min(asset.pixelSize.width, asset.pixelSize.height) >= 2160 { result.insert(.k4) }
+        if asset.mediaKind == .image {
+            if asset.subtypes.contains(.livePhoto) { result.insert(.livePhoto) }
+            if asset.subtypes.contains(.depthEffect) { result.insert(.portrait) }
+            if asset.subtypes.contains(.hdrPhoto) { result.insert(.hdr) }
+            if asset.subtypes.contains(.rawPhoto) { result.insert(.raw) }
+        } else {
+            if asset.subtypes.contains(.cinematic) { result.insert(.cinematic) }
+            if asset.subtypes.contains(.highFrameRate) { result.insert(.sloMo) }
+            if asset.subtypes.contains(.spatial) { result.insert(.spatial) }
+            // Same rule as local files: the short side decides.
+            if min(asset.pixelSize.width, asset.pixelSize.height) >= 2160 { result.insert(.k4) }
+        }
         return result
     }
 

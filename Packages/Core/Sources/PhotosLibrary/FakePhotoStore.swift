@@ -21,6 +21,7 @@ public final class FakePhotoStore: PhotoStore {
         var inputError: PhotoStoreError?
         var originalFiles: [String: URL] = [:]
         var currentVersionFiles: [String: URL] = [:]
+        var pairedVideoFiles: [String: URL] = [:]
         var beforeInputStep: (@Sendable (Int) async -> Void)?
         var inputRequests: [InputRequest] = []
         var existingAlbums: Set<String> = []
@@ -60,6 +61,8 @@ public final class FakePhotoStore: PhotoStore {
             case original
             /// `exportCurrentVersion`: the edited version's export.
             case currentVersion
+            /// `writePairedVideo`: a Live Photo's paired video resource.
+            case pairedVideo
         }
 
         public let id: String
@@ -145,6 +148,12 @@ public final class FakePhotoStore: PhotoStore {
     public var currentVersionFiles: [String: URL] {
         get { state.withLock { $0.currentVersionFiles } }
         set { state.withLock { $0.currentVersionFiles = newValue } }
+    }
+
+    /// Files returned for Live Photo paired video resources, by asset identifier.
+    public var pairedVideoFiles: [String: URL] {
+        get { state.withLock { $0.pairedVideoFiles } }
+        set { state.withLock { $0.pairedVideoFiles = newValue } }
     }
 
     /// When set, a fetch writes its first chunk and then throws it, like a download that broke off.
@@ -249,6 +258,10 @@ public final class FakePhotoStore: PhotoStore {
     }
 
     public func videos() async throws -> [PhotoAsset] {
+        try await mediaAssets().filter { $0.mediaKind == .video }
+    }
+
+    public func mediaAssets() async throws -> [PhotoAsset] {
         let hook = state.withLock { state in
             state.videosCalls += 1
             return state.beforeVideos
@@ -295,6 +308,13 @@ public final class FakePhotoStore: PhotoStore {
         return id
     }
 
+    public func saveImage(_ request: PhotoSaveRequest) async throws -> String {
+        let size = (try? request.file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+        let id = try addSavedAsset(request, size: size)
+        afterSave?()
+        return id
+    }
+
     private func addSavedAsset(_ request: PhotoSaveRequest, size: Int64?) throws -> String {
         try state.withLock { state in
             state.operations.append(.save)
@@ -303,14 +323,22 @@ public final class FakePhotoStore: PhotoStore {
             state.savedCount += 1
             let id = "new-\(state.savedCount)"
             let added = request.albumsToAdd(existing: state.existingAlbums)
+            // Photos marks a new asset with a subtype bit that has no name.
+            var subtypes = PhotoSubtypes(rawValue: 1 << 20)
+            if request.mediaKind == .image, request.pairedVideoFile != nil {
+                subtypes.insert(.livePhoto)
+            }
+            let pairedSize = request.pairedVideoFile.flatMap {
+                (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+            }
             var asset = PhotoAsset(
-                id: id, creationDate: request.creationDate, location: request.location,
-                pixelSize: state.savedPixelSize, duration: state.savedDuration ?? 10,
+                id: id, mediaKind: request.mediaKind, creationDate: request.creationDate, location: request.location,
+                pixelSize: state.savedPixelSize,
+                duration: request.mediaKind == .video ? (state.savedDuration ?? 10) : 0,
                 isFavorite: request.isFavorite, isHidden: request.isHidden,
-                // Photos marks a new asset with a subtype bit that has no name.
-                subtypes: PhotoSubtypes(rawValue: 1 << 20), originalFileName: request.file.lastPathComponent,
-                originalByteSize: state.savedByteSize ?? size ?? 1, isLocallyAvailable: true,
-                modificationDate: request.creationDate, caption: request.caption)
+                subtypes: subtypes, originalFileName: request.file.lastPathComponent,
+                originalByteSize: state.savedByteSize ?? size ?? 1, pairedVideoByteSize: pairedSize,
+                isLocallyAvailable: true, modificationDate: request.creationDate, caption: request.caption)
             if let adjust = state.adjustSaved { asset = adjust(asset) }
             state.assets.append(asset)
             state.albums[id] = added
@@ -347,6 +375,12 @@ public final class FakePhotoStore: PhotoStore {
         try await simulate(id: id, kind: .currentVersion, url: url, progress: progress)
     }
 
+    public func writePairedVideo(
+        id: String, to url: URL, isEdited: Bool, progress: @escaping @Sendable (FetchProgress) -> Void
+    ) async throws {
+        try await simulate(id: id, kind: .pairedVideo, url: url, progress: progress)
+    }
+
     /// Writes `inputBytes` in `inputSteps` chunks, reporting download progress, then (for an export) export
     /// progress. The file exists from the first chunk on, so a failed or cancelled fetch leaves a partial one.
     private func simulate(
@@ -354,7 +388,12 @@ public final class FakePhotoStore: PhotoStore {
     ) async throws {
         let (known, bytes, steps, error, hook, given) = state.withLock { state in
             state.inputRequests.append(InputRequest(id: id, kind: kind, url: url))
-            let files = kind == .original ? state.originalFiles : state.currentVersionFiles
+            let files: [String: URL] =
+                switch kind {
+                case .original: state.originalFiles
+                case .currentVersion: state.currentVersionFiles
+                case .pairedVideo: state.pairedVideoFiles
+                }
             return (
                 state.assets.contains { $0.id == id }, state.inputBytes, state.inputSteps, state.inputError,
                 state.beforeInputStep, files[id].flatMap { try? Data(contentsOf: $0) }

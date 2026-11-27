@@ -1,7 +1,30 @@
 import Foundation
 import Observation
 
-/// What the grid shows: the library filtered by media type, name and quality, grouped and sorted, plus the
+/// Which kind of media items are visible in the browser.
+public enum MediaKindFilter: String, CaseIterable, Sendable, Hashable, Identifiable {
+    case all, videos, images
+
+    public var id: Self { self }
+
+    public var title: String {
+        switch self {
+        case .all: "All"
+        case .videos: "Videos"
+        case .images: "Images"
+        }
+    }
+
+    public func matches(_ item: LibraryItem) -> Bool {
+        switch self {
+        case .all: true
+        case .videos: item.isVideo
+        case .images: item.isImage
+        }
+    }
+}
+
+/// What the grid shows: the library filtered by media kind, badge, name and quality, grouped and sorted, plus the
 /// selection.
 ///
 /// The snapshot and anything derived from it (`cached`) are rebuilt only when the items or the query change; the
@@ -28,6 +51,7 @@ public final class LibraryBrowser {
         }
     }
 
+    public var mediaFilter: MediaKindFilter = .all
     public var grouping: Grouping = .month
     public var sort: Sort = .biggestFirst
     public var filter: MediaBadge?
@@ -49,6 +73,7 @@ public final class LibraryBrowser {
 
     private struct Query: Equatable {
         let revision: Int
+        let mediaFilter: MediaKindFilter
         let grouping: Grouping
         let sort: Sort
         let filter: MediaBadge?
@@ -68,7 +93,7 @@ public final class LibraryBrowser {
 
     public var snapshot: Snapshot {
         let next = Query(
-            revision: collection.revision, grouping: grouping, sort: sort, filter: filter,
+            revision: collection.revision, mediaFilter: mediaFilter, grouping: grouping, sort: sort, filter: filter,
             search: search.trimmingCharacters(in: .whitespacesAndNewlines), quality: quality,
             captureRange: captureRange, excluded: excluded)
         if next != query {
@@ -100,7 +125,8 @@ public final class LibraryBrowser {
     /// there, so the bar offers only what the current collection has.
     private static func snapshot(_ items: [LibraryItem], query: Query) -> Snapshot {
         let collection = items.filter { item in
-            (query.filter.map(item.badges.contains) ?? true)
+            query.mediaFilter.matches(item)
+                && (query.filter.map(item.badges.contains) ?? true)
                 && (query.search.isEmpty || item.name.localizedStandardContains(query.search))
                 && !query.excluded.contains(item.id)
                 && (query.captureRange.map { range in item.captureDate.map(range.contains) ?? false } ?? true)

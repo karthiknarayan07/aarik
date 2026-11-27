@@ -120,14 +120,39 @@ public struct PhotoInputFetcher: Sendable {
         }
     }
 
-    /// The original's own name (its last path component only), or the same stem with `-edited.mov` for the
+    /// Fetches a Live Photo's paired `.mov` resource into `workFolder`.
+    public func fetchPairedVideo(
+        id: String, into workFolder: URL, asset: PhotoAsset, originalOnly: Bool = false,
+        progress: @escaping @Sendable (FetchProgress) -> Void = { _ in }
+    ) async throws -> URL {
+        let isEdited = asset.hasAdjustments && !originalOnly
+        let stem = (Self.fileName(for: asset, isEdited: false) as NSString).deletingPathExtension
+        let url = workFolder.appending(path: "\(stem)-paired.mov", directoryHint: .notDirectory)
+        let jobFolder = WorkFolder(root: workFolder)
+        jobFolder.remove(url)
+        do {
+            try await store.writePairedVideo(id: id, to: url, isEdited: isEdited, progress: progress)
+            try Task.checkCancellation()
+            let bytes = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            guard bytes > 0 else { throw PhotoFetchError.failed("Photos wrote an empty paired video.") }
+            return url
+        } catch {
+            jobFolder.remove(url)
+            throw Self.map(error)
+        }
+    }
+
+    /// The original's own name (its last path component only), or the same stem with `-edited.<ext>` for the
     /// export, so a second fetch of the original into the same folder keeps its own file.
     public static func fileName(for asset: PhotoAsset, isEdited: Bool) -> String {
         var name = asset.originalFileName.split(separator: "/").last.map(String.init) ?? ""
         // A name that is empty or points at the folder itself or its parent is never used as a file name.
-        if ["", ".", "..", "/"].contains(name) { name = "video.mov" }
+        if ["", ".", "..", "/"].contains(name) {
+            name = asset.mediaKind == .image ? "image.heic" : "video.mov"
+        }
         guard isEdited else { return name }
-        return (name as NSString).deletingPathExtension + "-edited.mov"
+        let ext = asset.mediaKind == .image ? "jpg" : "mov"
+        return (name as NSString).deletingPathExtension + "-edited.\(ext)"
     }
 
     static func map(_ error: any Error) -> PhotoFetchError {

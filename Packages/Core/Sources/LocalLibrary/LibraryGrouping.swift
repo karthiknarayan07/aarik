@@ -33,7 +33,12 @@ enum LibraryGrouper {
             )
         }
         if kept.isEmpty { return [] }
-        if grouping == .none { return [ItemGroup(id: "all", title: "All videos", items: kept)] }
+        if grouping == .none {
+            let hasVideos = kept.contains(where: \.isVideo)
+            let hasImages = kept.contains(where: \.isImage)
+            let title = hasVideos && !hasImages ? "All videos" : (!hasVideos && hasImages ? "All images" : "All media")
+            return [ItemGroup(id: "all", title: title, items: kept)]
+        }
         // One style for the whole pass; Foundation caches the formatter behind it.
         let monthStyle = Date.FormatStyle(
             locale: Locale(identifier: "en_US"), calendar: calendar, timeZone: calendar.timeZone

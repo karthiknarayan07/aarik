@@ -8,13 +8,25 @@ extension MediaBadge {
         case .cinematic: "Cinematic"
         case .sloMo: "Slo-mo"
         case .spatial: "Spatial"
+        case .livePhoto: "Live Photo"
+        case .portrait: "Portrait"
+        case .raw: "RAW"
+        case .animated: "Animated"
+        case .transparent: "Transparent"
         case .edited: "Edited"
         case .sdr: "SDR"
         }
     }
 
     /// The short label on a tile.
-    public var tileLabel: String { self == .dolbyVision ? "DV" : displayName }
+    public var tileLabel: String {
+        switch self {
+        case .dolbyVision: "DV"
+        case .livePhoto: "Live"
+        case .transparent: "Alpha"
+        default: displayName
+        }
+    }
 
     public var systemImage: String {
         switch self {
@@ -24,6 +36,11 @@ extension MediaBadge {
         case .cinematic: "camera.aperture"
         case .sloMo: "slowmo"
         case .spatial: "visionpro"
+        case .livePhoto: "livephoto"
+        case .portrait: "person.crop.rectangle"
+        case .raw: "camera.metering.spot"
+        case .animated: "square.stack.3d.down.right"
+        case .transparent: "checkerboard.rectangle"
         case .edited: "slider.horizontal.3"
         case .sdr: "tv"
         }
