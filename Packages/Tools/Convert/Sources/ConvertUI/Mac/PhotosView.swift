@@ -142,6 +142,13 @@
                         // The header and the notes sit in the system's bar, so the grid scrolls under them.
                         .safeAreaBar(edge: .top) {
                             VStack(spacing: 0) {
+                                HStack {
+                                    MediaKindPicker(selection: $browser.mediaFilter)
+                                        .frame(maxWidth: 260)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
                                 PhotosHeader(
                                     totalBytes: browser.snapshot.totalBytes, count: browser.snapshot.items.count)
                                 StorageBarLoader(
@@ -184,7 +191,8 @@
                 ) { item, state in
                     LibraryTile(
                         item: item, state: state, thumbnails: model.thumbnailSource,
-                        savingsBadge: LibraryInsight.savingsBadge(for: item, preset: model.effectivePreset(for: item))
+                        savingsBadge: LibraryInsight.savingsBadge(
+                            for: item, preset: model.effectivePreset(for: item), imageSpec: model.imageAdvanced.spec)
                     ).equatable()
                         .contextMenu { PhotoTileMenu(model: model, item: item) }
                 }
@@ -232,11 +240,11 @@
 
         var body: some View {
             VStack(alignment: .leading, spacing: 4) {
-                Text(totalBytes > 0 ? "\(ByteFormat.string(totalBytes)) in videos" : "Your Photos videos")
+                Text(totalBytes > 0 ? ByteFormat.string(totalBytes) : "Your Photos library")
                     .font(.title3)
                     .accessibilityAddTraits(.isHeader)
                 Text(
-                    "\(count == 1 ? "1 video" : "\(count) videos") · Nothing in Photos changes until you convert a video"
+                    "\(count == 1 ? "1 item" : "\(count) items") · Nothing in Photos changes until you convert it"
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -334,10 +342,12 @@
 
         var body: some View {
             let items = model.selectedPhotoItems
+            let images = items.filter(\.isImage)
+            let videos = items.filter(\.isVideo)
             if items.isEmpty {
                 EmptyState(
                     "No Selection", systemImage: "rectangle.dashed",
-                    message: "Select videos to see their details.")
+                    message: "Select videos or images to see their details.")
             } else {
                 Form {
                     if items.count == 1 {
@@ -345,27 +355,37 @@
                     } else {
                         Section {
                             Text(
-                                "\(items.count) videos · \(ByteFormat.string(items.reduce(0) { $0 + $1.byteSize }))"
+                                "\(items.count) items · \(ByteFormat.string(items.reduce(0) { $0 + $1.byteSize }))"
                             )
                             .font(.headline)
                         }
                     }
-                    if let prediction = LibraryInsight.prediction(for: items, preset: model.effectivePreset(for:)) {
+                    if let prediction = LibraryInsight.prediction(
+                        for: items, preset: model.effectivePreset(for:), imageSpec: model.imageAdvanced.spec)
+                    {
                         Section {
                             PredictedSavingsGauge(
                                 prediction: prediction, presetName: model.photoSelectionPreset?.displayName)
                         }
                     }
-                    Section {
-                        Picker("Quality preset for the selected videos", selection: preset) {
-                            if preset.wrappedValue == nil { Text("Mixed").tag(Preset?.none) }
-                            ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag(Preset?.some($0)) }
+                    if !images.isEmpty {
+                        ImageInspectorSection(
+                            options: $model.imageAdvanced,
+                            singleItem: items.count == 1 ? items[0] : nil,
+                            items: images)
+                    }
+                    if !videos.isEmpty {
+                        Section {
+                            Picker("Quality preset for the selected videos", selection: preset) {
+                                if preset.wrappedValue == nil { Text("Mixed").tag(Preset?.none) }
+                                ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag(Preset?.some($0)) }
+                            }
+                            .labelsHidden()
+                        } header: {
+                            Text(images.isEmpty ? "Quality" : "Video Quality")
+                        } footer: {
+                            Text("Details are checked when each video is converted.")
                         }
-                        .labelsHidden()
-                    } header: {
-                        Text("Quality")
-                    } footer: {
-                        Text("Details are checked when each video is converted.")
                     }
                     Section {
                         Picker("Save To", selection: choice) {

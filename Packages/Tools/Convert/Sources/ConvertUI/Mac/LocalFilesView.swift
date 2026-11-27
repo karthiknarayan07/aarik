@@ -16,7 +16,7 @@
             Group {
                 if model.library.items.isEmpty {
                     if model.library.isScanning {
-                        ProgressView("Adding videos…")
+                        ProgressView("Adding files…")
                     } else {
                         LocalFilesWelcome(error: model.library.persistenceError) { model.isImporterPresented = true }
                     }
@@ -59,7 +59,8 @@
                             presetOverride: model.presetOverrides.shownOverride(
                                 for: item.id, default: model.preset)?.displayName,
                             savingsBadge: LibraryInsight.savingsBadge(
-                                for: item, preset: model.effectivePreset(for: item))
+                                for: item, preset: model.effectivePreset(for: item),
+                                imageSpec: model.imageAdvanced.spec)
                         ).equatable()
                             .contextMenu { TileMenu(model: model, item: item) }
                     }
@@ -69,6 +70,13 @@
             // The header and a problem note sit in the system's bars, so the grid scrolls under them.
             .safeAreaBar(edge: .top) {
                 VStack(spacing: 0) {
+                    HStack {
+                        MediaKindPicker(selection: $browser.mediaFilter)
+                            .frame(maxWidth: 260)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                     SavingsHeader(
                         couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
                         availableCount: browser.snapshot.items.count(where: \.isAvailable)

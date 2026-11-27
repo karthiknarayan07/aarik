@@ -10,7 +10,7 @@
         let id: UUID
 
         private var name: String {
-            model.photos.items.first { $0.id == id }?.name ?? model.library.items.first { $0.id == id }?.name ?? "Video"
+            model.photos.items.first { $0.id == id }?.name ?? model.library.items.first { $0.id == id }?.name ?? "Item"
         }
 
         var body: some View {

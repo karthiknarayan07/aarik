@@ -1,6 +1,8 @@
 import AVFoundation
 import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Where the compare slider's divider is, from 0 (all converted) to 1 (all original), and what moves it. A value
 /// type so the drag and the keyboard are tested without a view.
@@ -39,18 +41,41 @@ extension Double {
     }
 }
 
-/// Reads one frame of a video file for the compare view. The files are only read, never changed.
+/// Reads one frame of a video or image file for the compare view. The files are only read, never changed.
 enum CompareFrames {
-    /// The frame from the middle of the clip, at most `maxPixel` on its longer side; nil when the file can't be
-    /// read.
+    /// The upright image (for image files) or middle frame (for video files), at most `maxPixel` on its longer side;
+    /// nil when the file can't be read.
     static func frame(of url: URL, maxPixel: Int = 1600) async -> CGImage? {
         guard url.isFileURL else { return nil }
+        if isImageURL(url) {
+            return imageThumbnail(at: url, maxPixel: maxPixel)
+        }
         let asset = AVURLAsset(url: url)
-        guard let duration = try? await asset.load(.duration).seconds, duration.isFinite else { return nil }
+        guard let duration = try? await asset.load(.duration).seconds, duration.isFinite else {
+            return imageThumbnail(at: url, maxPixel: maxPixel)
+        }
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: maxPixel, height: maxPixel)
         let time = CMTime(seconds: CompareSplit.frameTime(duration: duration), preferredTimescale: 600)
         return try? await generator.image(at: time).image
+    }
+
+    private static func isImageURL(_ url: URL) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.contentTypeKey])
+        let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension)
+        guard let type else { return false }
+        return type.conforms(to: .image) && !type.conforms(to: .movie)
+    }
+
+    private static func imageThumbnail(at url: URL, maxPixel: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 }

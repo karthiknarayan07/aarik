@@ -22,6 +22,7 @@
             let preset: Preset
             let overrides: PresetOverrides<UUID>
             let custom: DownscaleSpec?
+            let imageSpec: ImageSpec
             let completed: Int
             let saved: Int64
         }
@@ -29,8 +30,8 @@
         private var inputs: Inputs {
             Inputs(
                 photosRevision: model.photos.revision, filesRevision: model.library.revision, preset: model.preset,
-                overrides: model.presetOverrides, custom: model.advanced.spec, completed: model.activity.completed,
-                saved: model.activity.savedBytes)
+                overrides: model.presetOverrides, custom: model.advanced.spec, imageSpec: model.imageAdvanced.spec,
+                completed: model.activity.completed, saved: model.activity.savedBytes)
         }
 
         private struct PicksTrigger: Hashable {
@@ -138,6 +139,7 @@
             let preset = model.preset
             let overrides = model.presetOverrides
             let custom = model.advanced.spec
+            let imageSpec = model.imageAdvanced.spec
             let key = inputs
             let model = model
             // The first read of the page isn't held back: the live groups wait for it.
@@ -145,7 +147,7 @@
             await cache.refresh(after: delay) { [finished] in
                 let analysis = await Self.analyze(
                     photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
-                    completed: finished.map(\.outcome), shrunk: shrunk)
+                    imageSpec: imageSpec, completed: finished.map(\.outcome), shrunk: shrunk)
                 await MainActor.run {
                     // Same inputs as last time keep the picks; changed libraries or job outcomes ask again.
                     model.assistant.smartPicks.update(
@@ -158,20 +160,21 @@
 
         @concurrent private static func analyze(
             photos: [VideoItem], files: [VideoItem], preset: Preset, overrides: PresetOverrides<UUID>,
-            custom: DownscaleSpec?, completed: [JobOutcome], shrunk: Set<UUID>
+            custom: DownscaleSpec?, imageSpec: ImageSpec, completed: [JobOutcome], shrunk: Set<UUID>
         ) async -> (summary: OverviewSummary, buckets: [SavingsBucket], undated: Int) {
             let estimates = OverviewSummary.estimates(
-                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom)
+                photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
+                imageSpec: imageSpec)
             return (
                 OverviewSummary(
                     photos: photos, files: files, preset: preset, overrides: overrides, custom: custom,
-                    completed: completed, estimates: estimates),
+                    completed: completed, estimates: estimates, imageSpec: imageSpec),
                 SavingsAnalyzer.buckets(
                     photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk,
-                    estimates: estimates),
+                    estimates: estimates, imageSpec: imageSpec),
                 SavingsAnalyzer.undatedCount(
                     photos: photos, files: files, preset: preset, overrides: overrides, custom: custom, shrunk: shrunk,
-                    estimates: estimates)
+                    estimates: estimates, imageSpec: imageSpec)
             )
         }
     }
@@ -182,7 +185,7 @@
         let summary: OverviewSummary
 
         var body: some View {
-            Section("Videos in Photos") {
+            Section("Photos") {
                 switch model.photos.isAuthorizationKnown ? model.photos.authorization : nil {
                 case nil:
                     HStack {
@@ -229,7 +232,7 @@
         let totals: OverviewSummary.Totals
 
         var body: some View {
-            LabeledContent("Videos", value: totals.count.formatted())
+            LabeledContent("Items", value: totals.count.formatted())
             LabeledContent("Size", value: ByteFormat.string(totals.bytes))
             LabeledContent("Could Free") {
                 if totals.couldFree > 0 {

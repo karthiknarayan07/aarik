@@ -1,6 +1,7 @@
 #if os(macOS)
     import AppCore
     import AppUI
+    import Convert
     import SwiftUI
 
     /// A finished conversion to compare.
@@ -58,8 +59,9 @@
                         .padding(16)
                     } else {
                         ContentUnavailableView(
-                            "Can't Compare", systemImage: "film",
-                            description: Text("The converted video couldn't be read."))
+                            "Can't Compare",
+                            systemImage: ConvertTool.isImageJob(target.job.toolID) ? "photo.on.rectangle" : "film",
+                            description: Text("The converted item couldn't be read."))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

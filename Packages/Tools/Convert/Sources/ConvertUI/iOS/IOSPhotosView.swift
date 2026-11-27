@@ -187,7 +187,12 @@
                     opensOnTap: !isSelecting
                 ) {
                     VStack(spacing: 0) {
-                        IOSPhotosHeader(totalBytes: browser.snapshot.totalBytes)
+                        MediaKindPicker(selection: $browser.mediaFilter)
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                        IOSPhotosHeader(
+                            totalBytes: browser.snapshot.totalBytes,
+                            mediaFilter: browser.mediaFilter)
                         if model.photos.authorization == .limited {
                             IOSLimitedPhotosNote(openSettings: model.openPhotosAccessSettings)
                         }
@@ -245,13 +250,31 @@
 
     private struct IOSPhotosHeader: View {
         let totalBytes: Int64
+        var mediaFilter: MediaKindFilter = .all
+
+        private var heading: String {
+            guard totalBytes > 0 else {
+                return switch mediaFilter {
+                case .all: "Your Photos library"
+                case .videos: "Your Photos videos"
+                case .images: "Your Photos images"
+                }
+            }
+            let suffix =
+                switch mediaFilter {
+                case .all: "total"
+                case .videos: "in videos"
+                case .images: "in images"
+                }
+            return "\(ByteFormat.string(totalBytes)) \(suffix)"
+        }
 
         var body: some View {
             VStack(alignment: .leading, spacing: 4) {
-                Text(totalBytes > 0 ? "\(ByteFormat.string(totalBytes)) in videos" : "Your Photos videos")
+                Text(heading)
                     .font(.title3)
                     .accessibilityAddTraits(.isHeader)
-                Text("Nothing in Photos changes until you convert a video")
+                Text("Nothing in Photos changes until you convert it")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

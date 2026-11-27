@@ -100,41 +100,94 @@
             if items.isEmpty {
                 EmptyState(
                     "No Selection", systemImage: "rectangle.dashed",
-                    message: "Select videos to choose quality and see estimated savings.")
+                    message: "Select videos or images to choose quality and see estimated savings.")
             } else {
-                let sources = items.map(model.inspectorSource(for:))
+                let images = items.filter(\.isImage)
+                let videos = items.filter(\.isVideo)
                 let single = items.count == 1 ? items[0] : nil
-                let decision = single.map { item in
-                    let source = item.savingsSource
-                    return SavingsCalculator.decision(
-                        byteSize: source.byteSize, inventory: source.inventory,
-                        preset: model.effectivePreset(for: item), custom: optionsBinding.wrappedValue.spec)
-                }
+                let isMixed = !images.isEmpty && !videos.isEmpty
+
+                let videoDecision: PlanDecision? =
+                    if let single, single.isVideo {
+                        SavingsCalculator.decision(
+                            byteSize: single.savingsSource.byteSize,
+                            inventory: single.savingsSource.inventory,
+                            preset: model.effectivePreset(for: single),
+                            custom: optionsBinding.wrappedValue.spec)
+                    } else {
+                        nil
+                    }
+                let imageDecision: ImagePlanDecision? =
+                    if let single, single.isImage {
+                        ImagePlanner.decide(
+                            byteSize: single.byteSize,
+                            pixelSize: single.pixelSize,
+                            sourceUTI: single.imageSourceUTI,
+                            inventory: single.inventory,
+                            spec: model.imageAdvanced.spec,
+                            isLivePhoto: single.badges.contains(.livePhoto))
+                    } else {
+                        nil
+                    }
+                let videoSources = videos.map(model.inspectorSource(for:))
                 let locksFrameRate =
-                    items.contains { $0.badges.contains(.sloMo) }
-                    || sources.contains { ConvertPlanner.locksFrameRate($0.inventory) }
+                    videos.contains { $0.badges.contains(.sloMo) }
+                    || videoSources.contains { ConvertPlanner.locksFrameRate($0.inventory) }
 
                 Form {
                     Section {
                         if let single {
                             IOSItemSummaryHeader(item: single, thumbnails: model.thumbnailSource)
-                            if let decision {
-                                IOSSingleEstimateCard(decision: decision, originalBytes: single.byteSize)
+                            if let videoDecision {
+                                IOSSingleEstimateCard(decision: videoDecision, originalBytes: single.byteSize)
+                            } else if let imageDecision {
+                                IOSImageEstimateCard(decision: imageDecision, originalBytes: single.byteSize)
                             }
                         } else {
-                            IOSBulkSummaryCard(sources: sources, custom: optionsBinding.wrappedValue.spec)
+                            IOSBulkSummaryCard(
+                                videoSources: videoSources,
+                                imageItems: images,
+                                customVideo: optionsBinding.wrappedValue.spec,
+                                imageSpec: model.imageAdvanced.spec)
                         }
                     }
 
-                    IOSQualitySections(
-                        resolution: optionsBinding.resolution,
-                        bitRateMbps: optionsBinding.bitRateMbps,
-                        keepOriginalBitRate: optionsBinding.keepOriginalBitRate,
-                        frameRate: optionsBinding.frameRate,
-                        codec: optionsBinding.codec,
-                        locksFrameRate: locksFrameRate)
+                    if !images.isEmpty {
+                        let singleImage = (single?.isImage == true) ? single : nil
+                        let estimates = singleImage.flatMap { img in
+                            img.pixelSize.width > 0 && img.pixelSize.height > 0
+                                ? ImageLossCheck.resolutionEstimates(
+                                    sourcePixelSize: img.pixelSize,
+                                    sourceBytes: img.byteSize,
+                                    sourceUTI: img.imageSourceUTI,
+                                    baseSpec: model.imageAdvanced.spec,
+                                    isLivePhoto: img.badges.contains(.livePhoto))
+                                : nil
+                        }
+                        IOSImageQualitySections(
+                            options: $model.imageAdvanced,
+                            estimates: estimates,
+                            sourceUTI: singleImage?.imageSourceUTI ?? images[0].imageSourceUTI,
+                            showsLivePhotoOption: images.contains { $0.badges.contains(.livePhoto) },
+                            sectionTitle: isMixed ? "Image Resolution" : "Resolution")
+                    }
 
-                    if case .convert(_, _, let predicted) = decision {
+                    if !videos.isEmpty {
+                        IOSQualitySections(
+                            resolution: optionsBinding.resolution,
+                            bitRateMbps: optionsBinding.bitRateMbps,
+                            keepOriginalBitRate: optionsBinding.keepOriginalBitRate,
+                            frameRate: optionsBinding.frameRate,
+                            codec: optionsBinding.codec,
+                            locksFrameRate: locksFrameRate,
+                            resolutionSectionTitle: isMixed ? "Video Resolution" : "Resolution")
+                    }
+
+                    if case .convert(_, _, let predicted) = videoDecision {
+                        Section("What Happens to Metadata") {
+                            MetadataSummary(report: predicted)
+                        }
+                    } else if case .convert(_, _, _, _, let predicted) = imageDecision {
                         Section("What Happens to Metadata") {
                             MetadataSummary(report: predicted)
                         }
@@ -194,29 +247,59 @@
         }
     }
 
-    /// Summary card for multiple selected videos with live before/after gauge and loss/missing warnings.
+    /// Summary card for multiple selected items (videos, images, or mixed) with live gauge and warnings.
     private struct IOSBulkSummaryCard: View {
-        let sources: [InspectorSource]
-        let custom: DownscaleSpec?
+        let videoSources: [InspectorSource]
+        let imageItems: [VideoItem]
+        let customVideo: DownscaleSpec?
+        let imageSpec: ImageSpec
 
         var body: some View {
-            let available = sources.filter(\.isAvailable)
-            let total = available.reduce(Int64(0)) { $0 + $1.byteSize }
-            let freed = SavingsCalculator.couldFreeBytes(
-                for: available.map { (source: $0.savings, preset: $0.preset) }, custom: custom)
+            let availableVideos = videoSources.filter(\.isAvailable)
+            let availableImages = imageItems.filter(\.isAvailable)
+            let availableCount = availableVideos.count + availableImages.count
+            let totalCount = videoSources.count + imageItems.count
+            let total =
+                availableVideos.reduce(Int64(0)) { $0 + $1.byteSize }
+                + availableImages.reduce(Int64(0)) { $0 + $1.byteSize }
+            let videoFreed = SavingsCalculator.couldFreeBytes(
+                for: availableVideos.map { (source: $0.savings, preset: $0.preset) }, custom: customVideo)
+            let imageFreed = availableImages.reduce(Int64(0)) { acc, img in
+                guard let after = img.estimatedBytes(imageSpec: imageSpec) else { return acc }
+                return acc + max(0, img.byteSize - after)
+            }
+            let freed = videoFreed + imageFreed
             let after = max(0, total - freed)
             let afterFraction = total > 0 ? min(max(Double(after) / Double(total), 0), 1) : 1
-            let losing = LossCheck.losses(
-                for: available.enumerated().map {
+            let losingVideos = LossCheck.losses(
+                for: availableVideos.enumerated().map {
                     (id: $0.offset, source: $0.element.savings, preset: $0.element.preset)
                 },
-                custom: custom
+                custom: customVideo
             ).count
-            let missing = sources.count - available.count
+            let losingImages = ImageLossCheck.losses(
+                for: availableImages.map {
+                    (
+                        id: $0.id, sourceUTI: $0.imageSourceUTI, byteSize: $0.byteSize, pixelSize: $0.pixelSize,
+                        inventory: $0.inventory, isLivePhoto: $0.badges.contains(.livePhoto)
+                    )
+                },
+                spec: imageSpec
+            ).count
+            let losing = losingVideos + losingImages
+            let missing = totalCount - availableCount
+            let noun =
+                if availableVideos.isEmpty {
+                    availableCount == 1 ? "1 Image" : "\(availableCount) Images"
+                } else if availableImages.isEmpty {
+                    availableCount == 1 ? "1 Video" : "\(availableCount) Videos"
+                } else {
+                    availableCount == 1 ? "1 Item" : "\(availableCount) Items"
+                }
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(available.count == 1 ? "1 Video" : "\(available.count) Videos")
+                    Text(noun)
                         .font(.headline)
                     Spacer()
                     Text(freed > 0 ? "Could free ~\(ByteFormat.string(freed))" : "No space saved")
@@ -241,7 +324,7 @@
             .padding(.vertical, 2)
             if losing > 0 {
                 StatusLabel(
-                    losing == 1 ? "1 video will lose metadata" : "\(losing) videos will lose metadata",
+                    losing == 1 ? "1 item will lose metadata" : "\(losing) items will lose metadata",
                     systemImage: "exclamationmark.triangle", tint: .orange)
             }
             if missing > 0 {

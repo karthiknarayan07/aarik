@@ -130,8 +130,8 @@
         }
 
         private static func detail(_ totals: OverviewSummary.Totals) -> String {
-            let videos = totals.count == 1 ? "1 video" : "\(totals.count.formatted()) videos"
-            return "\(videos) · \(ByteFormat.string(totals.bytes))"
+            let items = totals.count == 1 ? "1 item" : "\(totals.count.formatted()) items"
+            return "\(items) · \(ByteFormat.string(totals.bytes))"
         }
     }
 

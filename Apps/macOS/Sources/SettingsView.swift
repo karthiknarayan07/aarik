@@ -2,6 +2,7 @@ import AppCore
 import AppKit
 import AppUI
 import Convert
+import MediaEngine
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -23,6 +24,12 @@ private struct GeneralSettings: View {
     let shell: MacShell
     @Bindable var updater: Updater
     @AppStorage(AppSettings.Keys.preset) private var preset = Preset.balanced
+    @AppStorage(AppSettings.Keys.defaultImageResolution) private var imageResolution =
+        ImageAdvancedOptions.Resolution.keepOriginal
+    @AppStorage(AppSettings.Keys.defaultImageFormat) private var imageFormat = ImageOutputFormat.keepOriginal
+    @AppStorage(AppSettings.Keys.defaultImageQualityPercent) private var imageQualityPercent =
+        ImageAdvancedOptions.defaultQualityPercent
+    @AppStorage(AppSettings.Keys.defaultLivePhotoMode) private var livePhotoMode = LivePhotoMode.preserve
     @AppStorage(AppSettings.Keys.autoStartQueue) private var autoStart = true
     @AppStorage(AppSettings.Keys.speed) private var speed = SpeedSetting.default
 
@@ -30,6 +37,39 @@ private struct GeneralSettings: View {
         Form {
             Picker("Default Preset", selection: $preset) {
                 ForEach(Preset.allCases, id: \.self) { Text($0.displayName).tag($0) }
+            }
+            Section("Default Image Settings") {
+                Picker("Image Resolution", selection: $imageResolution) {
+                    ForEach(ImageAdvancedOptions.Resolution.primaryCases) { res in
+                        Text(res.title).tag(res)
+                    }
+                }
+                Picker("Image Format", selection: $imageFormat) {
+                    ForEach(ImageOutputFormat.allCases.filter(\.isEncodingSupported)) { fmt in
+                        Text(fmt.title).tag(fmt)
+                    }
+                }
+                if imageFormat != .png && imageFormat != .tiff {
+                    HStack {
+                        Text("Image Quality")
+                        Slider(
+                            value: $imageQualityPercent,
+                            in: ImageAdvancedOptions
+                                .minimumQualityPercent...ImageAdvancedOptions
+                                .maximumQualityPercent,
+                            step: 5
+                        )
+                        Text("\(Int(imageQualityPercent.rounded()))%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+                Picker("Live Photos", selection: $livePhotoMode) {
+                    ForEach(LivePhotoMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
             }
             Toggle(isOn: $autoStart) {
                 Text("Start the Queue Automatically")
@@ -68,6 +108,10 @@ private struct GeneralSettings: View {
         .onChange(of: preset) { _, newValue in
             if shell.convert.preset != newValue { shell.convert.preset = newValue }
         }
+        .onChange(of: imageResolution) { shell.convert.applyDefaultAdvancedOptions() }
+        .onChange(of: imageFormat) { shell.convert.applyDefaultAdvancedOptions() }
+        .onChange(of: imageQualityPercent) { shell.convert.applyDefaultAdvancedOptions() }
+        .onChange(of: livePhotoMode) { shell.convert.applyDefaultAdvancedOptions() }
         .onChange(of: speed) { _, newValue in
             if shell.services.speed != newValue { shell.services.speed = newValue }
         }

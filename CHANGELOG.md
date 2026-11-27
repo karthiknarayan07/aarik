@@ -9,6 +9,13 @@ First public release.
 
 ### Added
 
+- **Image & Live Photo conversion in Convert (Mac & iPhone):** Browse `All` / `Videos` / `Images` in Photos and
+  Local Files, filter images by megapixels or traits (`Live Photo`, `Portrait`, `RAW`, `Animated`, `Transparent`),
+  choose pixel/megapixel (`24 MP`, `12 MP`, `5 MP`, `2 MP`, `75%`, `50%`, `25%`, `Keep Original`, custom `W × H`) or
+  target file-size limits with live dimension and savings estimates, convert across `HEIC`/`HEICS`, `JPEG`, `PNG`,
+  `AVIF`, `TIFF`, and `GIF` (including decoding `WebP` and `RAW`/`ProRAW`), carry forward EXIF/TIFF/MakerNote/GPS/IPTC/XMP/ICC/HDR
+  Gain Map/Depth metadata, preserve Live Photos end to end in Photos, compare converted images before and after, and
+  hand off images via Share Sheet, Shortcuts, Dock/Menu Bar Drag & Drop, and Finder Services.
 - **Mac sidebar:** Home (the savings summary), Ask and a Tools section, where Convert is a collapsible group holding Photos, Local Files, Queue, Completed, Kept as Is and Failed. The Go menu follows that order (Home ⌘1, Ask ⌘2) and the window reopens on the page you left.
 - **Ask on the Mac:** with Apple Intelligence available, an Ask item in the sidebar (⌘2) holds the on-device assistant, with chat history in the inspector, File → New Chat (⌘N), Return to send, Shift-Return for a new line, Esc to stop, and Ask About This… on videos.
 - **iPhone navigation:** the app opens on a Tools list, and each tool owns its interface. Convert has a floating tab

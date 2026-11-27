@@ -20,7 +20,7 @@
             Group {
                 if model.library.items.isEmpty {
                     if model.library.isScanning {
-                        ProgressView("Adding videos…")
+                        ProgressView("Adding files…")
                     } else {
                         IOSLocalFilesWelcome(error: model.library.persistenceError) {
                             model.isImporterPresented = true
@@ -92,18 +92,23 @@
                         actions: MediaGridActions(open: { opened = $0.first }, quickLook: model.toggleQuickLook),
                         opensOnTap: !isSelecting
                     ) {
-                        SavingsHeader(
-                            couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
-                            availableCount: browser.snapshot.items.count(where: \.isAvailable)
-                        ) {
-                            Menu {
-                                Picker("Resolution", selection: $model.advanced.resolution) {
-                                    ForEach(AdvancedOptions.Resolution.allCases, id: \.self) {
-                                        Text($0.title).tag($0)
+                        VStack(spacing: 0) {
+                            MediaKindPicker(selection: $browser.mediaFilter)
+                                .padding(.horizontal)
+                                .padding(.top, 8)
+                            SavingsHeader(
+                                couldFree: model.couldFreeShown, totalBytes: browser.snapshot.totalBytes,
+                                availableCount: browser.snapshot.items.count(where: \.isAvailable)
+                            ) {
+                                Menu {
+                                    Picker("Resolution", selection: $model.advanced.resolution) {
+                                        ForEach(AdvancedOptions.Resolution.allCases, id: \.self) {
+                                            Text($0.title).tag($0)
+                                        }
                                     }
+                                } label: {
+                                    Label(model.advanced.resolution.title, systemImage: "slider.horizontal.3")
                                 }
-                            } label: {
-                                Label(model.advanced.resolution.title, systemImage: "slider.horizontal.3")
                             }
                         }
                     } tile: { item, state in
@@ -199,11 +204,11 @@
         var body: some View {
             VStack {
                 WelcomeState(
-                    "Add Videos from Files", systemImage: "film.stack",
+                    "Add Media from Files", systemImage: "photo.on.rectangle.angled",
                     lines: [
-                        "Nothing changes until you add videos to the queue.",
+                        "Nothing changes until you add items to the queue.",
                         "Converted copies keep the date, location and camera details.",
-                        "Converted Files videos are saved to \(DeviceCopy.filesAppLocation).",
+                        "Converted Files items are saved to \(DeviceCopy.filesAppLocation).",
                     ]
                 ) {
                     Button("Add Files…", action: addFiles)

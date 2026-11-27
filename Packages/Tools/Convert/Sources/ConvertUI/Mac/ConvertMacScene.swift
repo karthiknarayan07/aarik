@@ -197,7 +197,7 @@
         public func body(content: Content) -> some View {
             content
                 .fileImporter(
-                    isPresented: $model.isImporterPresented, allowedContentTypes: [.movie, .folder],
+                    isPresented: $model.isImporterPresented, allowedContentTypes: [.movie, .image, .folder],
                     allowsMultipleSelection: true
                 ) { result in
                     if case .success(let urls) = result { model.addFiles(urls) }

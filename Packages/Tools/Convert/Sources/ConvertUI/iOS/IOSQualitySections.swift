@@ -292,7 +292,7 @@
                     if let image {
                         Image(decorative: image, scale: 1).resizable().scaledToFill()
                     } else {
-                        Image(systemName: "film").font(.largeTitle).foregroundStyle(.secondary)
+                        Image(systemName: item.isImage ? "photo" : "film").font(.largeTitle).foregroundStyle(.secondary)
                     }
                 }
                 .contentShape(.rect)

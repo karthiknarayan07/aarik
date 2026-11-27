@@ -18,6 +18,13 @@
         @AppStorage(AppSettings.Keys.defaultKeepOriginalBitRate) private var keepOriginalBitRate = false
         @AppStorage(AppSettings.Keys.defaultFrameRate) private var frameRate = AdvancedOptions.FrameRate.keep
         @AppStorage(AppSettings.Keys.defaultCodec) private var codec = VideoCodec.hevcKeepHDR
+        @AppStorage(AppSettings.Keys.defaultImageResolution) private var imageResolution =
+            ImageAdvancedOptions.Resolution.keepOriginal
+        @AppStorage(AppSettings.Keys.defaultImageFormat) private var imageFormat = ImageOutputFormat.keepOriginal
+        @AppStorage(AppSettings.Keys.defaultImageQualityPercent) private var imageQualityPercent =
+            ImageAdvancedOptions.defaultQualityPercent
+        @AppStorage(AppSettings.Keys.defaultImageLossless) private var imageLossless = false
+        @AppStorage(AppSettings.Keys.defaultLivePhotoMode) private var livePhotoMode = LivePhotoMode.preserve
         @AppStorage(AppSettings.Keys.speed) private var speed = SpeedSetting.default
         @AppStorage(AppSettings.Keys.defaultSaveTo) private var saveTo = SaveLocation.defaultChoice(for: .iOS)
         @AppStorage(AppSettings.Keys.defaultSaveFolder) private var saveFolder: Data?
@@ -48,7 +55,41 @@
                         keepOriginalBitRate: $keepOriginalBitRate,
                         frameRate: $frameRate,
                         codec: $codec,
-                        resolutionSectionTitle: "Default Resolution")
+                        resolutionSectionTitle: "Default Video Resolution")
+                    Section("Default Image Settings") {
+                        Picker("Resolution", selection: $imageResolution) {
+                            ForEach(ImageAdvancedOptions.Resolution.primaryCases) { res in
+                                Text(res.title).tag(res)
+                            }
+                        }
+                        Picker("Output Format", selection: $imageFormat) {
+                            ForEach(ImageOutputFormat.allCases.filter(\.isEncodingSupported)) { fmt in
+                                Text(fmt.title).tag(fmt)
+                            }
+                        }
+                        Toggle("Lossless Compression", isOn: $imageLossless)
+                        if !imageLossless && imageFormat != .png && imageFormat != .tiff {
+                            HStack {
+                                Text("Quality")
+                                Spacer()
+                                Text("\(Int(imageQualityPercent.rounded()))%")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                            Slider(
+                                value: $imageQualityPercent,
+                                in: ImageAdvancedOptions
+                                    .minimumQualityPercent...ImageAdvancedOptions
+                                    .maximumQualityPercent,
+                                step: 5
+                            )
+                        }
+                        Picker("Live Photos", selection: $livePhotoMode) {
+                            ForEach(LivePhotoMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                    }
                     Section {
                         Picker("Conversion Speed", selection: $speed) {
                             ForEach(SpeedSetting.allCases) { option in
@@ -122,6 +163,11 @@
                 .onChange(of: bitRateMbps) { model.applyDefaultAdvancedOptions() }
                 .onChange(of: keepOriginalBitRate) { model.applyDefaultAdvancedOptions() }
                 .onChange(of: frameRate) { model.applyDefaultAdvancedOptions() }
+                .onChange(of: imageResolution) { model.applyDefaultAdvancedOptions() }
+                .onChange(of: imageFormat) { model.applyDefaultAdvancedOptions() }
+                .onChange(of: imageQualityPercent) { model.applyDefaultAdvancedOptions() }
+                .onChange(of: imageLossless) { model.applyDefaultAdvancedOptions() }
+                .onChange(of: livePhotoMode) { model.applyDefaultAdvancedOptions() }
                 .onChange(of: speed) { _, newValue in
                     if model.services.speed != newValue { model.services.speed = newValue }
                 }

@@ -17,6 +17,7 @@
         @Environment(\.dismiss) private var dismiss
 
         @State private var options: AdvancedOptions
+        @State private var imageOptions: ImageAdvancedOptions
         @State private var photosSaveLocation: PhotosSaveLocation
         @State private var fileSaveLocation: SaveLocation
         @State private var replacement: VideoItem?
@@ -30,24 +31,50 @@
                 ?? ConvertJobSettings(saveTo: SaveLocation(platform: .iOS).destination ?? .documents)
             self.existing = decoded
             _options = State(initialValue: AdvancedOptions(from: decoded.custom, preset: decoded.preset))
+            _imageOptions = State(
+                initialValue: decoded.imageSpec.map(ImageAdvancedOptions.init(from:)) ?? ImageAdvancedOptions())
             _photosSaveLocation = State(initialValue: PhotosSaveLocation(destination: decoded.photosDestination))
             _fileSaveLocation = State(initialValue: SaveLocation(destination: decoded.saveTo, platform: .iOS))
         }
 
         private var activeItem: VideoItem? { replacement ?? model.libraryItem(for: job) }
 
+        private var isImage: Bool {
+            if let replacement { return replacement.isImage }
+            return existing.isImage || ConvertTool.isImageJob(job.toolID)
+        }
+
         private var isPhotos: Bool {
             if let replacement { return replacement.photosIdentifier != nil }
-            return job.toolID == ConvertTool.photosToolID
+            return ConvertTool.isPhotosJob(job.toolID)
         }
 
         private var decision: PlanDecision? {
-            activeItem.map { item in
+            guard !isImage else { return nil }
+            return activeItem.map { item in
                 let source = item.savingsSource
                 return SavingsCalculator.decision(
                     byteSize: source.byteSize, inventory: source.inventory, preset: existing.preset,
                     custom: options.spec)
             }
+        }
+
+        private var imageDecision: ImagePlanDecision? {
+            guard isImage else { return nil }
+            return activeItem.map { item in
+                ImagePlanner.decide(
+                    byteSize: item.byteSize, pixelSize: item.pixelSize, sourceUTI: item.imageSourceUTI,
+                    inventory: item.inventory, spec: imageOptions.spec, isLivePhoto: item.badges.contains(.livePhoto))
+            }
+        }
+
+        private var imageResolutionEstimates: [ImageResolutionEstimate]? {
+            guard isImage, let item = activeItem, item.pixelSize.width > 0, item.pixelSize.height > 0 else {
+                return nil
+            }
+            return ImageLossCheck.resolutionEstimates(
+                sourcePixelSize: item.pixelSize, sourceBytes: item.byteSize, sourceUTI: item.imageSourceUTI,
+                baseSpec: imageOptions.spec, isLivePhoto: item.badges.contains(.livePhoto))
         }
 
         private var locksFrameRate: Bool {
@@ -63,11 +90,13 @@
         var body: some View {
             NavigationStack {
                 Form {
-                    Section("Selected Video") {
+                    Section(isImage ? "Selected Image" : "Selected Video") {
                         if let item = activeItem {
                             IOSItemSummaryHeader(item: item, thumbnails: model.thumbnailSource)
                             if let decision {
                                 IOSSingleEstimateCard(decision: decision, originalBytes: item.byteSize)
+                            } else if let imageDecision {
+                                IOSImageEstimateCard(decision: imageDecision, originalBytes: item.byteSize)
                             }
                         } else {
                             HStack(spacing: 12) {
@@ -87,21 +116,33 @@
                             }
                         }
                         if !model.photos.items.isEmpty || !model.library.items.isEmpty {
-                            Button("Change Selected Video…", systemImage: "arrow.triangle.2.circlepath") {
+                            Button("Change Selected Item…", systemImage: "arrow.triangle.2.circlepath") {
                                 isPickingVideo = true
                             }
                         }
                     }
 
-                    IOSQualitySections(
-                        resolution: $options.resolution,
-                        bitRateMbps: $options.bitRateMbps,
-                        keepOriginalBitRate: $options.keepOriginalBitRate,
-                        frameRate: $options.frameRate,
-                        codec: $options.codec,
-                        locksFrameRate: locksFrameRate)
+                    if isImage {
+                        IOSImageQualitySections(
+                            options: $imageOptions,
+                            estimates: imageResolutionEstimates,
+                            sourceUTI: activeItem?.imageSourceUTI ?? "public.heic",
+                            showsLivePhotoOption: activeItem?.badges.contains(.livePhoto) ?? true)
+                    } else {
+                        IOSQualitySections(
+                            resolution: $options.resolution,
+                            bitRateMbps: $options.bitRateMbps,
+                            keepOriginalBitRate: $options.keepOriginalBitRate,
+                            frameRate: $options.frameRate,
+                            codec: $options.codec,
+                            locksFrameRate: locksFrameRate)
+                    }
 
                     if case .convert(_, _, let predicted) = decision {
+                        Section("What Happens to Metadata") {
+                            MetadataSummary(report: predicted)
+                        }
+                    } else if case .convert(_, _, _, _, let predicted) = imageDecision {
                         Section("What Happens to Metadata") {
                             MetadataSummary(report: predicted)
                         }
@@ -122,7 +163,7 @@
                         }
                     }
                 }
-                .navigationTitle("Edit Queued Video")
+                .navigationTitle(isImage ? "Edit Queued Image" : "Edit Queued Video")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -130,11 +171,19 @@
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            model.updateQueuedJob(
-                                job, existing: existing, options: options,
-                                photosSaveLocation: photosSaveLocation,
-                                fileSaveLocation: fileSaveLocation,
-                                replacement: replacement)
+                            if isImage {
+                                model.updateQueuedImageJob(
+                                    job, existing: existing, options: imageOptions,
+                                    photosSaveLocation: photosSaveLocation,
+                                    fileSaveLocation: fileSaveLocation,
+                                    replacement: replacement)
+                            } else {
+                                model.updateQueuedJob(
+                                    job, existing: existing, options: options,
+                                    photosSaveLocation: photosSaveLocation,
+                                    fileSaveLocation: fileSaveLocation,
+                                    replacement: replacement)
+                            }
                             dismiss()
                         }
                         .disabled(!canSave)

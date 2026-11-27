@@ -2,6 +2,7 @@ import AppCore
 import AppUI
 import Convert
 import LocalLibrary
+import MediaEngine
 import SwiftUI
 
 /// One metadata chip in the inspector: "Dolby Vision", "4K60", "Location".
@@ -19,9 +20,24 @@ enum LibraryInsight {
     /// Edited), then "Location" when the file has one.
     static func chips(for item: VideoItem) -> [LibraryChip] {
         var chips: [LibraryChip] = []
-        let quality = QualityBucket(item: item)
-        if quality != .unknown, quality != .other {
-            chips.append(LibraryChip(title: quality.title, systemImage: "film", tint: .blue))
+        if item.isImage {
+            if item.pixelSize.width > 0, item.pixelSize.height > 0 {
+                let mp = item.megapixels
+                let label =
+                    mp >= 1
+                    ? "\(mp.formatted(.number.precision(.fractionLength(0...1)))) MP"
+                    : "\(Int(item.pixelSize.width))×\(Int(item.pixelSize.height))"
+                chips.append(LibraryChip(title: label, systemImage: "photo", tint: .blue))
+            }
+            if let uti = item.inventory["img.uti"]?.value {
+                let fmt = ImageOutputFormat.keepOriginal.resolvedFormat(sourceUTI: uti)
+                chips.append(LibraryChip(title: fmt.title, systemImage: "doc", tint: .secondary))
+            }
+        } else {
+            let quality = QualityBucket(item: item)
+            if quality != .unknown, quality != .other {
+                chips.append(LibraryChip(title: quality.title, systemImage: "film", tint: .blue))
+            }
         }
         for badge in MediaBadge.ordered(item.badges) where badge != .k4 && badge != .sdr {
             chips.append(LibraryChip(title: badge.displayName, systemImage: badge.systemImage, tint: tint(of: badge)))
@@ -49,11 +65,11 @@ enum LibraryInsight {
         }
     }
 
-    /// "−58%" for a tile whose video would get smaller at `preset`; nil when it wouldn't, or the file is gone.
-    static func savingsBadge(for item: VideoItem, preset: Preset) -> String? {
-        guard item.isAvailable, item.byteSize > 0, let after = item.estimatedBytes(preset: preset),
-            after < item.byteSize
-        else { return nil }
+    /// "−58%" for a tile whose video or image would get smaller; nil when it wouldn't, or the file is gone.
+    static func savingsBadge(for item: VideoItem, preset: Preset, imageSpec: ImageSpec = ImageSpec()) -> String? {
+        guard item.isAvailable, item.byteSize > 0 else { return nil }
+        let after = item.isImage ? item.estimatedBytes(imageSpec: imageSpec) : item.estimatedBytes(preset: preset)
+        guard let after, after < item.byteSize else { return nil }
         return ByteFormat.savedPercent(before: item.byteSize, after: after)
     }
 
@@ -69,13 +85,17 @@ enum LibraryInsight {
         var fraction: Double { before > 0 ? Double(saved) / Double(before) : 0 }
     }
 
-    static func prediction(for items: [VideoItem], preset: (VideoItem) -> Preset) -> Prediction? {
+    static func prediction(
+        for items: [VideoItem], preset: (VideoItem) -> Preset, imageSpec: ImageSpec = ImageSpec()
+    ) -> Prediction? {
         let available = items.filter { $0.isAvailable && $0.byteSize > 0 }
         guard !available.isEmpty else { return nil }
         var result = Prediction(before: 0, after: 0, keptCount: 0, count: available.count)
         for item in available {
             result.before += item.byteSize
-            if let after = item.estimatedBytes(preset: preset(item)), after < item.byteSize {
+            let estimate =
+                item.isImage ? item.estimatedBytes(imageSpec: imageSpec) : item.estimatedBytes(preset: preset(item))
+            if let after = estimate, after < item.byteSize {
                 result.after += after
             } else {
                 result.after += item.byteSize

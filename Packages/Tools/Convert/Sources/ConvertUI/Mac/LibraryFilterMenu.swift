@@ -27,6 +27,12 @@ struct LibraryFilterMenu: View {
             FilterSubmenu(
                 title: "Range", systemImage: "sun.max", options: facets.ranges, selection: $browser.quality.ranges,
                 name: \.title)
+            FilterSubmenu(
+                title: "Image Resolution", systemImage: "photo", options: facets.megapixels,
+                selection: $browser.quality.megapixels, name: \.title)
+            FilterSubmenu(
+                title: "Image Features", systemImage: "sparkles", options: facets.imageTraits,
+                selection: $browser.quality.imageTraits, name: \.title)
             if isActive {
                 Divider()
                 Button("Clear Filters", systemImage: "xmark.circle") { browser.quality = QualityFilter() }

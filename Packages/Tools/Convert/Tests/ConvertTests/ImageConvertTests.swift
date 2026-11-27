@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 @testable import Convert
 @testable import QuickRunService
 
-@Suite struct ImageConvertTests {
+@Suite(.serialized) struct ImageConvertTests {
     @Test func plannerAppliesTenPercentRuleForSameFormatAndPermitsExplicitFormatChange() throws {
         let inventory = MetadataInventory(items: [
             MetadataItem(key: "img.dimensions", category: .image, displayName: "Dimensions", value: "2400x1800"),

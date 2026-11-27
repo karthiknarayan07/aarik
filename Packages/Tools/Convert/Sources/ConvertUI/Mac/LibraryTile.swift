@@ -78,9 +78,16 @@ enum ItemDescription {
         return Duration.seconds(item.duration.rounded()).formatted(.time(pattern: pattern))
     }
 
-    /// "17 Aug 2026 · 3840×2160 · 30 fps · 0:42"
+    /// "17 Aug 2026 · 12 MP · 4032×3024" for images, or "17 Aug 2026 · 3840×2160 · 30 fps · 0:42" for videos.
     static func details(_ item: VideoItem) -> String {
-        [date(item), resolution(item), frameRate(item), duration(item)].compactMap { $0 }.joined(separator: " · ")
+        if item.isImage {
+            let mp =
+                item.pixelSize.width > 0 && item.pixelSize.height > 0
+                ? "\(item.megapixels.formatted(.number.precision(.fractionLength(0...1)))) MP" : nil
+            return [date(item), mp, resolution(item)].compactMap { $0 }.joined(separator: " · ")
+        }
+        return [date(item), resolution(item), frameRate(item), duration(item)].compactMap { $0 }.joined(
+            separator: " · ")
     }
 
     static func accessibilityLabel(for item: VideoItem) -> String {

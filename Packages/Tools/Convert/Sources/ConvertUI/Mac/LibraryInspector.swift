@@ -19,10 +19,12 @@
 
         @ViewBuilder private var localInspector: some View {
             let items = model.selection?.showsLibrary == true ? model.selectedItems : []
+            let images = items.filter(\.isImage)
+            let videos = items.filter(\.isVideo)
             if items.isEmpty {
                 EmptyState(
                     "No Selection", systemImage: "rectangle.dashed",
-                    message: "Select videos to see what converting them would save.")
+                    message: "Select videos or images to see what converting them would save.")
             } else {
                 Form {
                     if items.count == 1 {
@@ -30,16 +32,30 @@
                             ItemSummaryHeader(item: items[0], thumbnails: model.thumbnailSource)
                         }
                     }
-                    if let prediction = LibraryInsight.prediction(for: items, preset: model.effectivePreset(for:)) {
+                    if let prediction = LibraryInsight.prediction(
+                        for: items, preset: model.effectivePreset(for:), imageSpec: model.imageAdvanced.spec)
+                    {
                         Section {
                             PredictedSavingsGauge(
                                 prediction: prediction, presetName: model.selectionPreset?.displayName)
                         }
                     }
-                    ConvertInspector(
-                        sources: items.map(model.inspectorSource(for:)), preset: $model.selectionPreset,
-                        advanced: $model.advanced,
-                        saveLocation: $model.saveLocation)
+                    if !images.isEmpty {
+                        ImageInspectorSection(
+                            options: $model.imageAdvanced,
+                            singleItem: items.count == 1 ? items[0] : nil,
+                            items: images)
+                    }
+                    if !videos.isEmpty {
+                        ConvertInspector(
+                            sources: videos.map(model.inspectorSource(for:)), preset: $model.selectionPreset,
+                            advanced: $model.advanced,
+                            saveLocation: $model.saveLocation)
+                    } else {
+                        Section("Save To") {
+                            SaveDestinationPicker(location: $model.saveLocation)
+                        }
+                    }
                     // Add to Queue is in the toolbar; what it would skip is said here.
                     if !model.queueableItems.isEmpty, model.queueableItems.count < model.selectedItems.count {
                         Section {
@@ -93,7 +109,7 @@
                     if let image {
                         Image(decorative: image, scale: 1).resizable().scaledToFill()
                     } else {
-                        Image(systemName: "film").font(.largeTitle).foregroundStyle(.secondary)
+                        Image(systemName: item.isImage ? "photo" : "film").font(.largeTitle).foregroundStyle(.secondary)
                     }
                 }
                 .clipShape(.rect(cornerRadius: 6))
